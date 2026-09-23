@@ -19,6 +19,32 @@ class DocumentController extends Controller
         ]);
     }
 
+    public function incoming()
+    {
+        $documents = Document::with(['documentType', 'office', 'creator'])
+            ->where('status', 'pending')
+            ->latest()
+            ->get();
+
+        return Inertia::render('Documents/Index', [
+            'documents' => $documents,
+            'title' => 'Incoming Documents',
+        ]);
+    }
+
+    public function outgoing()
+    {
+        $documents = Document::with(['documentType', 'office', 'creator'])
+            ->where('status', 'processed')
+            ->latest()
+            ->get();
+
+        return Inertia::render('Documents/Index', [
+            'documents' => $documents,
+            'title' => 'Outgoing Documents',
+        ]);
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([

@@ -18,4 +18,12 @@ class ArchiveController extends Controller
             'documents' => $documents,
         ]);
     }
+
+    public function categories()
+    {
+        return Inertia::render('Archives/Index', [
+            'documents' => [],
+            'title' => 'Archive Categories',
+        ]);
+    }
 }

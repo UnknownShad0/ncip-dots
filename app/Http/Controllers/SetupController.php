@@ -19,4 +19,39 @@ class SetupController extends Controller
             'purposeTypes' => PurposeType::latest()->take(10)->get(),
         ]);
     }
+
+    public function libraries()
+    {
+        return $this->index();
+    }
+
+    public function agencies()
+    {
+        return $this->index();
+    }
+
+    public function offices()
+    {
+        return $this->index();
+    }
+
+    public function documentTypes()
+    {
+        return $this->index();
+    }
+
+    public function categories()
+    {
+        return $this->index();
+    }
+
+    public function actionTypes()
+    {
+        return $this->index();
+    }
+
+    public function purposeTypes()
+    {
+        return $this->index();
+    }
 }

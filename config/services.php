@@ -35,4 +35,25 @@ return [
         ],
     ],
 
+    'drip' => [
+        'url' => env('DRIP_API_URL'),
+        'key' => env('DRIP_API_KEY'),
+        'app_name' => env('DRIP_APP_NAME', 'DRIP'),
+        'auth_header' => 'x-api-key',
+    ],
+
+    'pdmis' => [
+        'url' => env('PDMIS_API_URL'),
+        'key' => env('PDMIS_API_TOKEN'),
+        'app_name' => env('PDMIS_APP_NAME', 'PDMIS'),
+        'auth_header' => 'Authorization',
+    ],
+
+    'ipluma' => [
+        'url' => env('IPLUMA_API_URL'),
+        'key' => env('IPLUMA_API_KEY'),
+        'app_name' => env('IPLUMA_APP_NAME', 'IPluma'),
+        'auth_header' => 'x-api-key',
+    ],
+
 ];
