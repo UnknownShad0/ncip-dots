@@ -91,14 +91,14 @@ const navigation: NavigationItem[] = [
                 current: 'libraries.document-types',
             },
             {
+                name: 'Purpose Type',
+                href: 'purpose-types.index',
+                current: 'purpose-types.index',
+            },
+            {
                 name: 'Action Type',
                 href: 'libraries.action-types',
                 current: 'libraries.action-types',
-            },
-            {
-                name: 'Purpose Type',
-                href: 'libraries.purpose-types',
-                current: 'libraries.purpose-types',
             },
         ],
     },

@@ -7,6 +7,7 @@ use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\IplumaController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PurposeTypeController;
 use App\Http\Controllers\SetupController;
 use App\Http\Controllers\UserAccountController;
 use Illuminate\Foundation\Application;
@@ -50,7 +51,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/libraries/offices', [SetupController::class, 'offices'])->name('libraries.offices');
     Route::get('/libraries/document-types', [SetupController::class, 'documentTypes'])->name('libraries.document-types');
     Route::get('/libraries/action-types', [SetupController::class, 'actionTypes'])->name('libraries.action-types');
-    Route::get('/libraries/purpose-types', [SetupController::class, 'purposeTypes'])->name('libraries.purpose-types');
+    // Route::get('/libraries/purpose-types', [SetupController::class, 'purposeTypes'])->name('libraries.purpose-types');
+
+    Route::get('/purpose-types', [PurposeTypeController::class, 'purposeTypes'])->name('purpose-types.index');
+
+
+    Route::post('/purpose-types', [PurposeTypeController::class, 'storePurposeType'])->name('purpose-types.store');
+    Route::put('/purpose-types/{id}', [PurposeTypeController::class, 'updatePurposeType'])->name('purpose-types.update');
     Route::get('/libraries/categories', [SetupController::class, 'categories'])->name('libraries.categories');
 
     Route::get('/drip', [IntegrationController::class, 'drip'])->name('drip.index');
