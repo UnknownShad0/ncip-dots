@@ -10,9 +10,20 @@ class DocumentController extends Controller
 {
     public function index()
     {
-        $documents = Document::with(['documentType', 'office', 'creator'])
+        $documents = Document::with('office')
             ->latest()
-            ->get();
+            ->get()
+            ->map(function ($doc) {
+                return [
+                    'id' => $doc->id,
+                    'tracking_number' => $doc->tracking_number,
+                    'title' => $doc->title,
+                    'status' => $doc->status,
+                    'office' => [
+                        'name' => $doc->office?->name,
+                    ],
+                ];
+            });
 
         return Inertia::render('Documents/Index', [
             'documents' => $documents,
