@@ -77,18 +77,18 @@ const navigation: NavigationItem[] = [
         children: [
             {
                 name: 'Office',
-                href: 'libraries.agencies',
-                current: 'libraries.agencies',
+                href: 'offices.index',
+                current: 'offices.index',
             },
             {
                 name: 'Range',
-                href: 'libraries.offices',
-                current: 'libraries.offices',
+                href: 'ranges.index',
+                current: 'ranges.index',
             },
             {
                 name: 'Document Type',
-                href: 'libraries.document-types',
-                current: 'libraries.document-types',
+                href: 'document-types.index',
+                current: 'document-types.index',
             },
             {
                 name: 'Purpose Type',
@@ -97,8 +97,8 @@ const navigation: NavigationItem[] = [
             },
             {
                 name: 'Action Type',
-                href: 'libraries.action-types',
-                current: 'libraries.action-types',
+                href: 'action-types.index',
+                current: 'action-types.index',
             },
         ],
     },

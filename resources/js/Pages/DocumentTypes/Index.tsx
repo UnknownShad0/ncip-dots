@@ -2,22 +2,23 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import { useEffect, useMemo, useState } from 'react';
 
-type PurposeTypeRow = {
+type DocumentTypeRow = {
     id: number | string | null;
     name: string;
-    description: string;
+    code?: string;
+    description?: string;
     is_active: number;
     source?: string;
 };
 
-type SortKey = 'name' | 'description' | 'is_active';
+type SortKey = 'name' | 'code' | 'description' | 'is_active';
 
-export default function PurposeTypesIndex({
-    purposeTypes = [],
+export default function DocumentTypesIndex({
+    documentTypes = [],
 }: {
-    purposeTypes?: PurposeTypeRow[];
+    documentTypes?: DocumentTypeRow[];
 }) {
-    const [editingRow, setEditingRow] = useState<PurposeTypeRow | null>(null);
+    const [editingRow, setEditingRow] = useState<DocumentTypeRow | null>(null);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [sortKey, setSortKey] = useState<SortKey>('name');
@@ -26,11 +27,23 @@ export default function PurposeTypesIndex({
     const [perPage, setPerPage] = useState(10);
     const [form, setForm] = useState({
         name: '',
+        code: '',
         description: '',
         is_active: true,
     });
 
-    const openEdit = (row: PurposeTypeRow) => {
+    const closeModal = () => {
+        setEditingRow(null);
+        setIsCreateOpen(false);
+        setForm({
+            name: '',
+            code: '',
+            description: '',
+            is_active: true,
+        });
+    };
+
+    const openEdit = (row: DocumentTypeRow) => {
         if (row.source === 'Old DB') {
             return;
         }
@@ -38,6 +51,7 @@ export default function PurposeTypesIndex({
         setEditingRow(row);
         setForm({
             name: row.name ?? '',
+            code: row.code ?? '',
             description: row.description ?? '',
             is_active: Number(row.is_active) === 1,
         });
@@ -48,16 +62,7 @@ export default function PurposeTypesIndex({
         setIsCreateOpen(true);
         setForm({
             name: '',
-            description: '',
-            is_active: true,
-        });
-    };
-
-    const closeModal = () => {
-        setEditingRow(null);
-        setIsCreateOpen(false);
-        setForm({
-            name: '',
+            code: '',
             description: '',
             is_active: true,
         });
@@ -66,7 +71,7 @@ export default function PurposeTypesIndex({
     const handleCreate = (e: React.FormEvent) => {
         e.preventDefault();
 
-        router.post('/purpose-types', {
+        router.post('/document-types', {
             ...form,
             is_active: form.is_active ? 1 : 0,
         }, {
@@ -81,7 +86,7 @@ export default function PurposeTypesIndex({
             return;
         }
 
-        router.put(`/purpose-types/${editingRow.id}`, {
+        router.put(`/document-types/${editingRow.id}`, {
             ...form,
             is_active: form.is_active ? 1 : 0,
         }, {
@@ -103,9 +108,9 @@ export default function PurposeTypesIndex({
         setSortDirection('asc');
     };
 
-    const sortedPurposeTypes = useMemo(() => {
-        const filtered = purposeTypes.filter((row) => {
-            const haystack = [row.name, row.description ?? '']
+    const sortedDocumentTypes = useMemo(() => {
+        const filtered = documentTypes.filter((row) => {
+            const haystack = [row.name, row.code ?? '', row.description ?? '']
                 .join(' ')
                 .toLowerCase();
 
@@ -126,9 +131,9 @@ export default function PurposeTypesIndex({
 
             return 0;
         });
-    }, [purposeTypes, search, sortKey, sortDirection]);
+    }, [documentTypes, search, sortKey, sortDirection]);
 
-    const totalPages = Math.max(1, Math.ceil(sortedPurposeTypes.length / perPage));
+    const totalPages = Math.max(1, Math.ceil(sortedDocumentTypes.length / perPage));
 
     useEffect(() => {
         setPage(1);
@@ -140,13 +145,11 @@ export default function PurposeTypesIndex({
         }
     }, [page, totalPages]);
 
-    const paginatedPurposeTypes = sortedPurposeTypes.slice((page - 1) * perPage, page * perPage);
+    const paginatedDocumentTypes = sortedDocumentTypes.slice((page - 1) * perPage, page * perPage);
 
     return (
-        <AuthenticatedLayout
-            header={<h2 className="text-xl font-semibold text-slate-800">Purpose Types</h2>}
-        >
-            <Head title="Purpose Types" />
+        <AuthenticatedLayout header={<h2 className="text-xl font-semibold text-slate-800">Document Types</h2>}>
+            <Head title="Document Types" />
 
             <style>{`
                 @media print {
@@ -161,14 +164,14 @@ export default function PurposeTypesIndex({
 
             <div className="rounded-xl border border-slate-200 bg-white shadow-sm print-table-only">
                 <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-4 md:flex-row md:items-center md:justify-between no-print">
-                    <h3 className="text-lg font-semibold text-slate-800">Purpose Type List</h3>
+                    <h3 className="text-lg font-semibold text-slate-800">Document Type List</h3>
 
                     <div className="flex flex-col gap-2 sm:flex-row">
                         <input
                             type="text"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search by name or description"
+                            placeholder="Search by name, code, or description"
                             className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500"
                         />
 
@@ -185,7 +188,7 @@ export default function PurposeTypesIndex({
                             onClick={openCreate}
                             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white"
                         >
-                            New Purpose Type
+                            New Document Type
                         </button>
                     </div>
                 </div>
@@ -197,6 +200,11 @@ export default function PurposeTypesIndex({
                                 <th className="px-4 py-3 font-semibold">
                                     <button type="button" onClick={() => handleSort('name')} className="flex items-center gap-1">
                                         Name {sortKey === 'name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                                    </button>
+                                </th>
+                                <th className="px-4 py-3 font-semibold">
+                                    <button type="button" onClick={() => handleSort('code')} className="flex items-center gap-1">
+                                        Code {sortKey === 'code' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
                                     </button>
                                 </th>
                                 <th className="px-4 py-3 font-semibold">
@@ -214,35 +222,23 @@ export default function PurposeTypesIndex({
                         </thead>
 
                         <tbody>
-                            {paginatedPurposeTypes.length === 0 ? (
+                            {paginatedDocumentTypes.length === 0 ? (
                                 <tr>
-                                    <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
-                                        No purpose types found.
+                                    <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                                        No document types found.
                                     </td>
                                 </tr>
                             ) : (
-                                paginatedPurposeTypes.map((row, index) => {
+                                paginatedDocumentTypes.map((row, index) => {
                                     const isLegacy = row.source === 'Old DB';
 
                                     return (
-                                        <tr
-                                            key={`${row.id ?? 'row'}-${index}`}
-                                            className="border-t border-slate-200"
-                                        >
-                                            <td className="px-4 py-3 font-medium text-slate-800">
-                                                {row.name}
-                                            </td>
-                                            <td className="px-4 py-3 text-slate-600">
-                                                {row.description || '—'}
-                                            </td>
+                                        <tr key={`${row.id ?? 'row'}-${index}`} className="border-t border-slate-200">
+                                            <td className="px-4 py-3 font-medium text-slate-800">{row.name}</td>
+                                            <td className="px-4 py-3 text-slate-600">{row.code || '—'}</td>
+                                            <td className="px-4 py-3 text-slate-600">{row.description || '—'}</td>
                                             <td className="px-4 py-3">
-                                                <span
-                                                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
-                                                        Number(row.is_active) === 1
-                                                            ? 'bg-emerald-100 text-emerald-700'
-                                                            : 'bg-rose-100 text-rose-700'
-                                                    }`}
-                                                >
+                                                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${Number(row.is_active) === 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
                                                     {Number(row.is_active) === 1 ? 'Active' : 'Inactive'}
                                                 </span>
                                             </td>
@@ -251,11 +247,7 @@ export default function PurposeTypesIndex({
                                                     type="button"
                                                     onClick={() => openEdit(row)}
                                                     disabled={isLegacy}
-                                                    className={`rounded-md px-3 py-1.5 text-xs font-medium ${
-                                                        isLegacy
-                                                            ? 'cursor-not-allowed bg-slate-300 text-slate-500'
-                                                            : 'bg-sky-600 text-white hover:bg-sky-700'
-                                                    }`}
+                                                    className={`rounded-md px-3 py-1.5 text-xs font-medium ${isLegacy ? 'cursor-not-allowed bg-slate-300 text-slate-500' : 'bg-sky-600 text-white hover:bg-sky-700'}`}
                                                 >
                                                     Edit
                                                 </button>
@@ -314,26 +306,17 @@ export default function PurposeTypesIndex({
                     <div className="w-full max-w-xl rounded-xl bg-white p-6 shadow-xl">
                         <div className="mb-4 flex items-center justify-between">
                             <h3 className="text-lg font-semibold text-slate-800">
-                                {editingRow ? 'Update Purpose Type' : 'Add Purpose Type'}
+                                {editingRow ? 'Update Document Type' : 'Add Document Type'}
                             </h3>
 
-                            <button
-                                type="button"
-                                onClick={closeModal}
-                                className="text-sm text-slate-500 hover:text-slate-700"
-                            >
+                            <button type="button" onClick={closeModal} className="text-sm text-slate-500 hover:text-slate-700">
                                 Close
                             </button>
                         </div>
 
-                        <form
-                            onSubmit={editingRow ? handleUpdate : handleCreate}
-                            className="space-y-4"
-                        >
+                        <form onSubmit={editingRow ? handleUpdate : handleCreate} className="space-y-4">
                             <div>
-                                <label className="mb-1 block text-sm font-medium text-slate-700">
-                                    Name
-                                </label>
+                                <label className="mb-1 block text-sm font-medium text-slate-700">Name</label>
                                 <input
                                     value={form.name}
                                     onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -342,14 +325,19 @@ export default function PurposeTypesIndex({
                             </div>
 
                             <div>
-                                <label className="mb-1 block text-sm font-medium text-slate-700">
-                                    Description
-                                </label>
+                                <label className="mb-1 block text-sm font-medium text-slate-700">Code</label>
+                                <input
+                                    value={form.code}
+                                    onChange={(e) => setForm({ ...form, code: e.target.value })}
+                                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="mb-1 block text-sm font-medium text-slate-700">Description</label>
                                 <textarea
                                     value={form.description}
-                                    onChange={(e) =>
-                                        setForm({ ...form, description: e.target.value })
-                                    }
+                                    onChange={(e) => setForm({ ...form, description: e.target.value })}
                                     className="w-full rounded-lg border border-slate-300 px-3 py-2"
                                     rows={4}
                                 />
@@ -360,14 +348,10 @@ export default function PurposeTypesIndex({
                                     id="is_active"
                                     type="checkbox"
                                     checked={form.is_active}
-                                    onChange={(e) =>
-                                        setForm({ ...form, is_active: e.target.checked })
-                                    }
+                                    onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
                                     className="h-4 w-4 rounded border-slate-300 text-sky-600"
                                 />
-                                <label htmlFor="is_active" className="text-sm text-slate-700">
-                                    Active
-                                </label>
+                                <label htmlFor="is_active" className="text-sm text-slate-700">Active</label>
                             </div>
 
                             <div className="flex justify-end gap-2">
@@ -383,7 +367,7 @@ export default function PurposeTypesIndex({
                                     type="submit"
                                     className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700"
                                 >
-                                    {editingRow ? 'Save Changes' : 'Add Purpose Type'}
+                                    {editingRow ? 'Save Changes' : 'Add Document Type'}
                                 </button>
                             </div>
                         </form>
