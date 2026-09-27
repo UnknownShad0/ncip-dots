@@ -1,5 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
+import { ArrowDownUp, ChevronLeft, ChevronRight, FilePlus2, Printer, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 type DocumentItem = {
@@ -40,6 +41,8 @@ const getStatusClasses = (status?: string) => {
         case 'approved':
         case 'completed':
         case 'released':
+        case 'processed':
+        case 'available':
         case 'done':
             return 'bg-emerald-100 text-emerald-700';
         case 'pending':
@@ -48,6 +51,7 @@ const getStatusClasses = (status?: string) => {
         case 'cancelled':
             return 'bg-rose-100 text-rose-700';
         case 'archived':
+        case 'terminal':
             return 'bg-violet-100 text-violet-700';
         default:
             return 'bg-slate-100 text-slate-700';
@@ -56,12 +60,14 @@ const getStatusClasses = (status?: string) => {
 
 export default function DocumentsIndex({
     documents = [],
+    title = 'All Documents',
     documentTypes = [],
     actionTypes = [],
     purposeTypes = [],
     offices = [],
 }: {
     documents?: DocumentItem[];
+    title?: string;
     documentTypes?: LibraryOption[];
     actionTypes?: LibraryOption[];
     purposeTypes?: LibraryOption[];
@@ -196,9 +202,11 @@ export default function DocumentsIndex({
                 .toLowerCase();
 
             const matchesSearch = haystack.includes(search.toLowerCase());
-            const matchesStatus =
-                statusFilter === 'all' ||
-                (row.status ?? '').toLowerCase() === statusFilter.toLowerCase();
+            const normalizedStatus = (row.status ?? '').toLowerCase();
+            const matchesStatus = statusFilter === 'all' ||
+                normalizedStatus === statusFilter.toLowerCase() ||
+                (statusFilter === 'released' && ['processed', 'available'].includes(normalizedStatus)) ||
+                (statusFilter === 'archived' && normalizedStatus === 'terminal');
 
             return matchesSearch && matchesStatus;
         });
@@ -235,9 +243,9 @@ export default function DocumentsIndex({
 
     return (
         <AuthenticatedLayout
-            header={<h2 className="text-xl font-semibold text-slate-800">Documents</h2>}
+            header={<div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Document management</p><h1 className="text-2xl font-bold tracking-tight text-[#171717] sm:text-3xl">{title}</h1></div>}
         >
-            <Head title="Documents" />
+            <Head title={title} />
 
             <style>{`
                 @media print {
@@ -250,23 +258,31 @@ export default function DocumentsIndex({
                 }
             `}</style>
 
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm print-table-only">
-                <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-4 md:flex-row md:items-center md:justify-between no-print">
-                    <h3 className="text-lg font-semibold text-slate-800">Document Register</h3>
+            <div className="mx-auto max-w-[1440px] print-table-only">
+                <div className="mb-5 flex flex-col gap-5 rounded-2xl border border-[#e2e2df] bg-white p-5 shadow-sm no-print sm:p-6">
+                    <div>
+                        <h2 className="text-xl font-semibold tracking-tight text-[#171717]">Document register</h2>
+                        <p className="mt-1 text-sm text-[#73736e]">Search, review, and manage your documents in one place.</p>
+                    </div>
 
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search tracking no., title, office"
-                            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500"
-                        />
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+                        <label className="col-span-2 flex h-11 min-w-0 items-center gap-2 rounded-xl border border-[#deded9] bg-[#fafaf8] px-3 text-[#898984] focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 sm:col-span-1">
+                            <Search size={18} />
+                            <input
+                                type="text"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                placeholder="Search documents"
+                                aria-label="Search documents"
+                                className="w-full border-0 bg-transparent px-0 py-2.5 text-sm text-[#171717] placeholder:text-[#898984] focus:ring-0"
+                            />
+                        </label>
 
                         <select
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value)}
-                            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500"
+                            aria-label="Filter documents by status"
+                            className="col-span-2 h-11 min-w-0 rounded-xl border border-[#deded9] bg-[#fafaf8] pl-3 pr-8 text-sm text-[#333] outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:col-span-1"
                         >
                             <option value="all">All Status</option>
                             <option value="pending">Pending</option>
@@ -279,58 +295,60 @@ export default function DocumentsIndex({
                         <button
                             type="button"
                             onClick={handlePrint}
-                            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+                            className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-[#deded9] bg-white px-3 text-sm font-semibold text-[#444] transition hover:bg-[#f6f6f3] sm:px-4"
                         >
+                            <Printer size={17} />
                             Print
                         </button>
 
                         <button
                             type="button"
                             onClick={openCreate}
-                            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+                            className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 sm:px-4"
                         >
+                            <FilePlus2 size={17} />
                             New Document
                         </button>
                     </div>
                 </div>
 
+                <div className="overflow-hidden rounded-2xl border border-[#e2e2df] bg-white shadow-sm">
+                    <div className="flex flex-col gap-1 border-b border-[#e8e8e4] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                        <h3 className="font-semibold text-[#171717]">Documents</h3>
+                        <p className="text-sm text-[#73736e]">{sortedDocuments.length === 0 ? 'No results' : `Showing ${((page - 1) * perPage) + 1}–${Math.min(page * perPage, sortedDocuments.length)} of ${sortedDocuments.length} documents`}</p>
+                    </div>
                 <div className="overflow-x-auto">
                     <table className="min-w-full text-left text-sm">
-                        <thead className="bg-slate-100 text-slate-700">
+                        <thead className="bg-[#f7f8fa] text-[#555752]">
                             <tr>
-                                <th className="px-4 py-3 font-semibold">
-                                    <button type="button" onClick={() => handleSort('tracking_number')} className="flex items-center gap-1">
-                                        Tracking No. {sortKey === 'tracking_number' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                                <th className="whitespace-nowrap px-4 py-3.5 font-semibold">
+                                    <button type="button" onClick={() => handleSort('tracking_number')} className="flex items-center gap-1.5 hover:text-blue-700">
+                                        Tracking No. <ArrowDownUp size={14} />
                                     </button>
                                 </th>
-                                <th className="px-4 py-3 font-semibold">
-                                    <button type="button" onClick={() => handleSort('title')} className="flex items-center gap-1">
-                                        Title {sortKey === 'title' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                                <th className="px-4 py-3.5 font-semibold">
+                                    <button type="button" onClick={() => handleSort('title')} className="flex items-center gap-1.5 hover:text-blue-700">
+                                        Title <ArrowDownUp size={14} />
                                     </button>
                                 </th>
-                                <th className="px-4 py-3 font-semibold">
-                                    <button type="button" onClick={() => handleSort('document_type')} className="flex items-center gap-1">
-                                        Document Type {sortKey === 'document_type' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                                <th className="whitespace-nowrap px-4 py-3.5 font-semibold">
+                                    <button type="button" onClick={() => handleSort('document_type')} className="flex items-center gap-1.5 hover:text-blue-700">
+                                        Document Type <ArrowDownUp size={14} />
                                     </button>
                                 </th>
-                                <th className="px-4 py-3 font-semibold">
-                                    <button type="button" onClick={() => handleSort('origin_type')} className="flex items-center gap-1">
-                                        Origin Type {sortKey === 'origin_type' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                                <th className="whitespace-nowrap px-4 py-3.5 font-semibold">
+                                    <button type="button" onClick={() => handleSort('origin_type')} className="flex items-center gap-1.5 hover:text-blue-700">
+                                        Origin Type <ArrowDownUp size={14} />
                                     </button>
                                 </th>
-                                <th className="px-4 py-3 font-semibold">
-                                    <button type="button" onClick={() => handleSort('status')} className="flex items-center gap-1">
-                                        Status {sortKey === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                                <th className="px-4 py-3.5 font-semibold">
+                                    <button type="button" onClick={() => handleSort('status')} className="flex items-center gap-1.5 hover:text-blue-700">
+                                        Status <ArrowDownUp size={14} />
                                     </button>
                                 </th>
-                                <th className="px-4 py-3 font-semibold">
-                                    <button type="button" onClick={() => handleSort('office_name')} className="flex items-center gap-1">
-                                        Office {sortKey === 'office_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
-                                    </button>
-                                </th>
-                                <th className="px-4 py-3 font-semibold">
-                                    <button type="button" onClick={() => handleSort('last_transaction')} className="flex items-center gap-1">
-                                        Last Transaction {sortKey === 'last_transaction' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                                <th className="whitespace-nowrap px-4 py-3.5 font-semibold">
+                                    <button type="button" onClick={() => handleSort('last_transaction')} className="flex items-center gap-1.5 hover:text-blue-700">
+                                        Last Transaction <ArrowDownUp size={14} />
                                     </button>
                                 </th>
                                 <th className="px-4 py-3 font-semibold no-print">Actions</th>
@@ -340,7 +358,7 @@ export default function DocumentsIndex({
                         <tbody>
                             {paginatedDocuments.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                                    <td colSpan={7} className="px-4 py-12 text-center text-[#73736e]">
                                         No documents found.
                                     </td>
                                 </tr>
@@ -351,21 +369,22 @@ export default function DocumentsIndex({
                                     return (
                                         <tr
                                             key={document.id ?? `${document.tracking_number ?? 'doc'}-${index}`}
-                                            className="border-t border-slate-200"
+                                            className="border-t border-[#eeeeeb] transition-colors hover:bg-[#fafaf8]"
                                         >
-                                            <td className="px-4 py-3 text-slate-700">
-                                                {document.tracking_number || 'N/A'}
+                                            <td className="whitespace-nowrap px-4 py-4 text-xs font-semibold text-blue-800">
+                                                <span className="font-mono">{document.tracking_number || 'N/A'}</span>
+                                                {isLegacy && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 font-sans text-[10px] font-medium text-slate-600">Legacy</span>}
                                             </td>
-                                            <td className="px-4 py-3 font-medium text-slate-800">
+                                            <td className="min-w-[190px] px-4 py-4 font-medium text-[#242424]">
                                                 {document.title || 'Untitled'}
                                             </td>
-                                            <td className="px-4 py-3 text-slate-600">
+                                            <td className="whitespace-nowrap px-4 py-4 text-[#666660]">
                                                 {getDocumentTypeName(document) || '—'}
                                             </td>
-                                            <td className="px-4 py-3 text-slate-600">
+                                            <td className="px-4 py-4 text-[#666660]">
                                                 {document.origin_type || '—'}
                                             </td>
-                                            <td className="px-4 py-3">
+                                            <td className="whitespace-nowrap px-4 py-4">
                                                 <span
                                                     className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${getStatusClasses(
                                                         document.status
@@ -374,21 +393,18 @@ export default function DocumentsIndex({
                                                     {document.status || 'pending'}
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-3 text-slate-600">
-                                                {document.office_name || document.office?.name || '—'}
-                                            </td>
-                                            <td className="px-4 py-3 text-slate-600">
+                                            <td className="min-w-[220px] px-4 py-4 text-[#666660]">
                                                 {document.last_transaction || '—'}
                                             </td>
-                                            <td className="px-4 py-3 no-print">
+                                            <td className="whitespace-nowrap px-4 py-4 no-print">
                                                 <button
                                                     type="button"
                                                     onClick={() => openEdit(document)}
                                                     disabled={isLegacy}
                                                     className={`rounded-md px-3 py-1.5 text-xs font-medium ${
                                                         isLegacy
-                                                            ? 'cursor-not-allowed bg-slate-300 text-slate-500'
-                                                            : 'bg-sky-600 text-white hover:bg-sky-700'
+                                                            ? 'cursor-not-allowed bg-slate-100 text-slate-400'
+                                                            : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
                                                     }`}
                                                 >
                                                     Edit
@@ -402,13 +418,13 @@ export default function DocumentsIndex({
                     </table>
                 </div>
 
-                <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between no-print">
-                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                <div className="flex flex-col gap-3 border-t border-[#e8e8e4] bg-[#fafaf8] px-5 py-4 sm:flex-row sm:items-center sm:justify-between no-print">
+                    <div className="flex items-center gap-2 text-sm text-[#666660]">
                         <span>Rows per page:</span>
                         <select
                             value={perPage}
                             onChange={(e) => setPerPage(Number(e.target.value))}
-                            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+                            className="rounded-lg border border-[#deded9] bg-white py-1.5 pl-2 pr-8 text-sm"
                         >
                             <option value={5}>5</option>
                             <option value={10}>10</option>
@@ -422,12 +438,12 @@ export default function DocumentsIndex({
                             type="button"
                             disabled={page === 1}
                             onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
-                            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="inline-flex items-center gap-1 rounded-lg border border-[#deded9] bg-white px-3 py-1.5 text-sm text-[#444] transition hover:bg-[#f3f4f5] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            Previous
+                            <ChevronLeft size={16} /> Previous
                         </button>
 
-                        <span className="text-sm text-slate-600">
+                        <span className="px-1 text-sm text-[#666660]">
                             Page {page} of {totalPages}
                         </span>
 
@@ -435,19 +451,20 @@ export default function DocumentsIndex({
                             type="button"
                             disabled={page >= totalPages}
                             onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
-                            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="inline-flex items-center gap-1 rounded-lg border border-[#deded9] bg-white px-3 py-1.5 text-sm text-[#444] transition hover:bg-[#f3f4f5] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            Next
+                            Next <ChevronRight size={16} />
                         </button>
                     </div>
                 </div>
             </div>
+            </div>
 
             {(isCreateOpen || editingRow) && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-                    <div className="w-full max-w-xl rounded-xl bg-white p-6 shadow-xl">
+                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4">
+                    <div role="dialog" aria-modal="true" aria-labelledby="document-modal-title" className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[#e2e2df] bg-white p-5 shadow-2xl sm:p-6">
                         <div className="mb-4 flex items-center justify-between">
-                            <h3 className="text-lg font-semibold text-slate-800">
+                            <h3 id="document-modal-title" className="text-lg font-semibold text-slate-800">
                                 {editingRow ? 'Update Document' : 'Add Document'}
                             </h3>
 
@@ -564,7 +581,7 @@ function LibrarySelect({
             <label className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
             <select value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
                 <option value="">Select {label.toLowerCase()}</option>
-                {options.map((option) => <option key={`${option.source ?? 'new'}-${option.id}`} value={option.id}>{option.name}{option.source === 'Old DB' ? ' (Legacy)' : ''}</option>)}
+                {options.map((option) => <option key={`${option.source ?? 'new'}-${option.id}`} value={option.id}>{option.name}</option>)}
             </select>
         </div>
     );
