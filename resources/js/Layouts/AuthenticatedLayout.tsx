@@ -31,14 +31,9 @@ const navigation: NavigationItem[] = [
         name: 'Documents',
         children: [
             {
-                name: 'Incoming Documents',
-                href: 'documents.incoming',
-                current: 'documents.incoming',
-            },
-            {
-                name: 'Outgoing Documents',
-                href: 'documents.outgoing',
-                current: 'documents.outgoing',
+                name: 'Latest Documents',
+                href: 'documents.latest',
+                current: 'documents.latest',
             },
             {
                 name: 'All Documents',

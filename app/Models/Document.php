@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Document extends Model
@@ -18,6 +20,7 @@ class Document extends Model
         'document_type_id',
         'action_type_id',
         'purpose_type_id',
+        'origin_type',
         'office_id',
         'division_id',
         'created_by',
@@ -66,6 +69,22 @@ class Document extends Model
     public function trails(): HasMany
     {
         return $this->hasMany(DocumentTrail::class);
+    }
+
+    public function latestTrail(): HasOne
+    {
+        return $this->hasOne(DocumentTrail::class)->latestOfMany();
+    }
+
+    public function scopeArchived(Builder $query, ?int $year = null): Builder
+    {
+        $query->where('is_archived', true);
+
+        if ($year !== null) {
+            $query->whereYear('created_at', $year);
+        }
+
+        return $query;
     }
 
     public function files(): HasMany

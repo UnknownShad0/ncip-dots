@@ -15,7 +15,9 @@ class DocumentTrail extends Model
         'from_office_id',
         'to_office_id',
         'assigned_to_user_id',
+        'created_by',
         'status',
+        'action',
         'remarks',
     ];
 
@@ -37,5 +39,10 @@ class DocumentTrail extends Model
     public function assignedUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_to_user_id');
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 }
