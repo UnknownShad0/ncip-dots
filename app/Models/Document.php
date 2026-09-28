@@ -26,6 +26,9 @@ class Document extends Model
         'created_by',
         'status',
         'received_from',
+        'urgent',
+        'notify_by_email',
+        'is_finalized',
         'received_at',
         'is_archived',
         'remarks',
@@ -34,6 +37,9 @@ class Document extends Model
     protected $casts = [
         'received_at' => 'datetime',
         'is_archived' => 'boolean',
+        'urgent' => 'boolean',
+        'notify_by_email' => 'boolean',
+        'is_finalized' => 'boolean',
     ];
 
     public function documentType(): BelongsTo

@@ -24,6 +24,9 @@ class DocumentController extends Controller
 {
     public function index()
     {
+        $legacyDocuments = collect();
+
+        try {
         $legacyDocuments = DocumentLegacy::query()
             ->select([
                 'docId', 'trackingNo', 'dtId', 'otherDtype', 'originType', 'title', 'remarks',
@@ -53,6 +56,12 @@ class DocumentController extends Controller
 
                 return [$user->userUuid => $name ?: ($user->username ?? '')];
             });
+        } catch (\Throwable $exception) {
+            // The current Documents module must remain usable while the optional
+            // legacy database is offline or its credentials are unavailable.
+            report($exception);
+            $legacyDocuments = collect();
+        }
 
         $legacyDocumentTypes = DocumentTypeLegacy::query()
             ->whereIn('dtId', $legacyDocuments->pluck('dtId')->filter()->unique())
@@ -94,7 +103,7 @@ class DocumentController extends Controller
 
         $newDocuments = Document::query()
             ->with(['office', 'documentType', 'latestTrail.creator'])
-            ->select(['id', 'tracking_number', 'title', 'status', 'office_id', 'remarks', 'document_type_id', 'action_type_id', 'purpose_type_id', 'origin_type', 'received_from'])
+            ->select(['id', 'tracking_number', 'title', 'status', 'office_id', 'remarks', 'document_type_id', 'action_type_id', 'purpose_type_id', 'origin_type', 'received_from', 'urgent', 'notify_by_email'])
             ->orderBy('created_at', 'desc')
             ->limit(200)
             ->get()
@@ -119,6 +128,8 @@ class DocumentController extends Controller
                     'purpose_type_id' => $document->purpose_type_id,
                     'office_id' => $document->office_id,
                     'received_from' => $document->received_from,
+                    'urgent' => $document->urgent,
+                    'notify_by_email' => $document->notify_by_email,
                     'source' => 'New DB',
                 ];
             });
@@ -181,19 +192,20 @@ class DocumentController extends Controller
         $this->resolveLegacySelections($request);
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
-            'status' => ['nullable', 'string'],
             'remarks' => ['nullable', 'string'],
             'document_type_id' => ['nullable', 'integer', 'exists:document_types,id'],
-            'action_type_id' => ['nullable', 'integer', 'exists:action_types,id'],
             'purpose_type_id' => ['nullable', 'integer', 'exists:purpose_types,id'],
             'origin_type' => ['nullable', 'string', 'max:100'],
-            'office_id' => ['nullable', 'integer', 'exists:offices,id'],
-            'received_from' => ['nullable', 'string', 'max:255'],
+            'urgent' => ['boolean'],
+            'notify_by_email' => ['boolean'],
+            'is_finalized' => ['required', 'boolean'],
+            'file' => ['nullable', 'file', 'max:10240'],
         ]);
 
-        DB::transaction(function () use ($validated) {
+        $document = null;
+        DB::transaction(function () use ($validated, &$document) {
             $userOffice = auth()->user()?->office;
-            $officeId = $validated['office_id'] ?? $userOffice?->id;
+            $officeId = $userOffice?->id;
             $date = now();
             $officeName = $userOffice?->name ?: 'DOTS';
             $bureauPrefix = preg_replace('/\s+/', '-', trim($officeName));
@@ -201,21 +213,33 @@ class DocumentController extends Controller
             $document = Document::create([
                 'title' => $validated['title'],
                 'tracking_number' => 'draft-'.Str::uuid(),
-                'status' => $validated['status'] ?? 'pending',
+                'status' => $validated['is_finalized'] ? 'pending' : 'draft',
                 'remarks' => $validated['remarks'] ?? null,
                 'document_type_id' => $validated['document_type_id'] ?? null,
-                'action_type_id' => $validated['action_type_id'] ?? null,
                 'purpose_type_id' => $validated['purpose_type_id'] ?? null,
                 'origin_type' => $validated['origin_type'] ?? null,
                 'office_id' => $officeId,
-                'received_from' => $validated['received_from'] ?? null,
+                'urgent' => $validated['urgent'] ?? false,
+                'notify_by_email' => $validated['notify_by_email'] ?? false,
+                'is_finalized' => $validated['is_finalized'],
                 'created_by' => auth()->id(),
             ]);
 
             $document->update([
                 'tracking_number' => $bureauPrefix.'-'.$date->format('y-m-d').'-'.str_pad((string) $document->id, 4, '0', STR_PAD_LEFT),
             ]);
+
         });
+
+        if ($request->hasFile('file')) {
+            $file = $request->file('file');
+            $path = $file->store('documents', 'public');
+            $document->files()->create([
+                'file_name' => basename($path), 'original_name' => $file->getClientOriginalName(),
+                'file_path' => $path, 'mime_type' => $file->getMimeType(), 'size_bytes' => $file->getSize(),
+                'uploaded_by' => auth()->id(),
+            ]);
+        }
 
         return redirect()->route('documents.index')->with('success', 'Document created successfully.');
     }
@@ -225,29 +249,38 @@ class DocumentController extends Controller
         $this->resolveLegacySelections($request);
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
-            'status' => ['required', 'string'],
             'remarks' => ['nullable', 'string'],
             'document_type_id' => ['nullable', 'integer', 'exists:document_types,id'],
-            'action_type_id' => ['nullable', 'integer', 'exists:action_types,id'],
             'purpose_type_id' => ['nullable', 'integer', 'exists:purpose_types,id'],
             'origin_type' => ['nullable', 'string', 'max:100'],
-            'office_id' => ['nullable', 'integer', 'exists:offices,id'],
-            'received_from' => ['nullable', 'string', 'max:255'],
+            'urgent' => ['boolean'],
+            'notify_by_email' => ['boolean'],
+            'is_finalized' => ['required', 'boolean'],
+            'file' => ['nullable', 'file', 'max:10240'],
         ]);
 
         $document = Document::findOrFail($id);
 
         $document->update([
             'title' => $validated['title'],
-            'status' => $validated['status'],
+            'status' => $validated['is_finalized'] ? 'pending' : 'draft',
             'remarks' => $validated['remarks'] ?? null,
             'document_type_id' => $validated['document_type_id'] ?? null,
-            'action_type_id' => $validated['action_type_id'] ?? null,
             'purpose_type_id' => $validated['purpose_type_id'] ?? null,
             'origin_type' => $validated['origin_type'] ?? null,
-            'office_id' => $validated['office_id'] ?? null,
-            'received_from' => $validated['received_from'] ?? null,
+            'urgent' => $validated['urgent'] ?? false,
+            'notify_by_email' => $validated['notify_by_email'] ?? false,
+            'is_finalized' => $validated['is_finalized'],
         ]);
+
+        if ($file = $request->file('file')) {
+            $path = $file->store('documents', 'public');
+            $document->files()->create([
+                'file_name' => basename($path), 'original_name' => $file->getClientOriginalName(),
+                'file_path' => $path, 'mime_type' => $file->getMimeType(), 'size_bytes' => $file->getSize(),
+                'uploaded_by' => auth()->id(),
+            ]);
+        }
 
         return redirect()->route('documents.index')->with('success', 'Document updated successfully.');
     }
@@ -257,21 +290,32 @@ class DocumentController extends Controller
         return [
             'documentTypes' => $this->mergeLibraryOptions(
                 DocumentType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
-                DocumentTypeLegacy::query()->whereIn('status', ['active', 'Active', 'enabled', 'Enabled', '1', 'Y'])->orderBy('name')->get(['name'])
+                $this->legacyRows(fn () => DocumentTypeLegacy::query()->whereIn('status', ['active', 'Active', 'enabled', 'Enabled', '1', 'Y'])->orderBy('name')->get(['name']))
             ),
             'actionTypes' => $this->mergeLibraryOptions(
                 ActionType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
-                ActionTypeLegacy::query()->whereIn('status', ['active', 'Active', 'enabled', 'Enabled', '1', 'Y'])->orderBy('name')->get(['name'])
+                $this->legacyRows(fn () => ActionTypeLegacy::query()->whereIn('status', ['active', 'Active', 'enabled', 'Enabled', '1', 'Y'])->orderBy('name')->get(['name']))
             ),
             'purposeTypes' => $this->mergeLibraryOptions(
                 PurposeType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
-                PurposeTypeLegacy::query()->whereIn('status', ['active', 'Active', 'enabled', 'Enabled', '1', 'Y'])->orderBy('name')->get(['name'])
+                $this->legacyRows(fn () => PurposeTypeLegacy::query()->whereIn('status', ['active', 'Active', 'enabled', 'Enabled', '1', 'Y'])->orderBy('name')->get(['name']))
             ),
             'offices' => $this->mergeLibraryOptions(
                 Office::query()->orderBy('name')->get(['id', 'name']),
-                BureauLegacy::query()->whereIn('status', ['active', 'Active', 'enabled', 'Enabled', '1', 'Y'])->orderBy('longName')->get(['longName'])
+                $this->legacyRows(fn () => BureauLegacy::query()->whereIn('status', ['active', 'Active', 'enabled', 'Enabled', '1', 'Y'])->orderBy('longName')->get(['longName']))
             ),
         ];
+    }
+
+    private function legacyRows(callable $query)
+    {
+        try {
+            return $query();
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return collect();
+        }
     }
 
     private function formatLastTransaction(?string $action, ?string $status, ?string $userName, ?string $date): string

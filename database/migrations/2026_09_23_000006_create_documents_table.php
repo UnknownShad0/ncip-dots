@@ -15,10 +15,14 @@ return new class extends Migration
             $table->foreignId('document_type_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('action_type_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('purpose_type_id')->nullable()->constrained()->nullOnDelete();
+            $table->string('origin_type')->nullable();
             $table->foreignId('office_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('division_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->string('status')->default('pending');
+            $table->boolean('urgent')->default(false);
+            $table->boolean('notify_by_email')->default(false);
+            $table->boolean('is_finalized')->default(false);
             $table->string('received_from')->nullable();
             $table->dateTime('received_at')->nullable();
             $table->boolean('is_archived')->default(false);

@@ -19,10 +19,9 @@ type DocumentItem = {
     remarks?: string;
     source?: string;
     document_type_id?: number | null;
-    action_type_id?: number | null;
     purpose_type_id?: number | null;
-    office_id?: number | null;
-    received_from?: string | null;
+    urgent?: boolean;
+    notify_by_email?: boolean;
 };
 
 type LibraryOption = { id: number | string; name: string; source?: string };
@@ -62,16 +61,12 @@ export default function DocumentsIndex({
     documents = [],
     title = 'All Documents',
     documentTypes = [],
-    actionTypes = [],
     purposeTypes = [],
-    offices = [],
 }: {
     documents?: DocumentItem[];
     title?: string;
     documentTypes?: LibraryOption[];
-    actionTypes?: LibraryOption[];
     purposeTypes?: LibraryOption[];
-    offices?: LibraryOption[];
 }) {
     const [editingRow, setEditingRow] = useState<DocumentItem | null>(null);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -84,14 +79,13 @@ export default function DocumentsIndex({
     const [form, setForm] = useState({
         title: '',
         tracking_number: '',
-        status: 'pending',
         origin_type: '',
         remarks: '',
         document_type_id: '',
-        action_type_id: '',
         purpose_type_id: '',
-        office_id: '',
-        received_from: '',
+        urgent: false,
+        notify_by_email: false,
+        file: null as File | null,
     });
 
     const closeModal = () => {
@@ -100,14 +94,13 @@ export default function DocumentsIndex({
         setForm({
             title: '',
             tracking_number: '',
-            status: 'pending',
             origin_type: '',
             remarks: '',
             document_type_id: '',
-            action_type_id: '',
             purpose_type_id: '',
-            office_id: '',
-            received_from: '',
+            urgent: false,
+            notify_by_email: false,
+            file: null,
         });
     };
 
@@ -120,14 +113,13 @@ export default function DocumentsIndex({
         setForm({
             title: row.title ?? '',
             tracking_number: row.tracking_number ?? '',
-            status: row.status ?? 'pending',
             origin_type: row.origin_type ?? '',
             remarks: row.remarks ?? '',
             document_type_id: row.document_type_id ? String(row.document_type_id) : '',
-            action_type_id: row.action_type_id ? String(row.action_type_id) : '',
             purpose_type_id: row.purpose_type_id ? String(row.purpose_type_id) : '',
-            office_id: row.office_id ? String(row.office_id) : '',
-            received_from: row.received_from ?? '',
+            urgent: Boolean(row.urgent),
+            notify_by_email: Boolean(row.notify_by_email),
+            file: null,
         });
     };
 
@@ -137,37 +129,40 @@ export default function DocumentsIndex({
         setForm({
             title: '',
             tracking_number: '',
-            status: 'pending',
             origin_type: '',
             remarks: '',
             document_type_id: '',
-            action_type_id: '',
             purpose_type_id: '',
-            office_id: '',
-            received_from: '',
+            urgent: false,
+            notify_by_email: false,
+            file: null,
         });
     };
 
-    const handleCreate = (e: React.FormEvent) => {
+    const handleCreate = (e: React.FormEvent, finalize: boolean) => {
         e.preventDefault();
 
-        router.post('/documents', {
-            ...form,
-        }, {
+        const data = new FormData();
+        Object.entries({ ...form, is_finalized: finalize ? '1' : '0' }).forEach(([key, value]) => {
+            if (value !== null && value !== undefined) data.append(key, value instanceof File ? value : typeof value === 'boolean' ? (value ? '1' : '0') : String(value));
+        });
+        router.post('/documents', data, {
             onSuccess: closeModal,
         });
     };
 
-    const handleUpdate = (e: React.FormEvent) => {
+    const handleUpdate = (e: React.FormEvent, finalize: boolean) => {
         e.preventDefault();
 
         if (!editingRow || editingRow.id == null) {
             return;
         }
 
-        router.put(`/documents/${editingRow.id}`, {
-            ...form,
-        }, {
+        const data = new FormData();
+        Object.entries({ ...form, is_finalized: finalize ? '1' : '0', _method: 'put' }).forEach(([key, value]) => {
+            if (value !== null && value !== undefined) data.append(key, value instanceof File ? value : typeof value === 'boolean' ? (value ? '1' : '0') : String(value));
+        });
+        router.post(`/documents/${editingRow.id}`, data, {
             onSuccess: closeModal,
         });
     };
@@ -473,7 +468,7 @@ export default function DocumentsIndex({
                             </button>
                         </div>
 
-                        <form onSubmit={editingRow ? handleUpdate : handleCreate} className="space-y-4">
+                        <form onSubmit={(event) => { const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null; (editingRow ? handleUpdate : handleCreate)(event, submitter?.value === '1'); }} className="space-y-4">
                             {editingRow ? (
                                 <div>
                                     <label className="mb-1 block text-sm font-medium text-slate-700">Tracking Number</label>
@@ -488,6 +483,7 @@ export default function DocumentsIndex({
                                 <input
                                     value={form.title}
                                     onChange={(e) => setForm({ ...form, title: e.target.value })}
+                                    required
                                     className="w-full rounded-lg border border-slate-300 px-3 py-2"
                                 />
                             </div>
@@ -503,32 +499,6 @@ export default function DocumentsIndex({
                                     </select>
                                 </div>
                                 <LibrarySelect label="Purpose" value={form.purpose_type_id} options={purposeTypes} onChange={(value) => setForm({ ...form, purpose_type_id: value })} />
-                                <LibrarySelect label="Action Type" value={form.action_type_id} options={actionTypes} onChange={(value) => setForm({ ...form, action_type_id: value })} />
-                                <LibrarySelect label="Office" value={form.office_id} options={offices} onChange={(value) => setForm({ ...form, office_id: value })} />
-                            </div>
-
-                            <div>
-                                <label className="mb-1 block text-sm font-medium text-slate-700">Received From</label>
-                                <input
-                                    value={form.received_from}
-                                    onChange={(e) => setForm({ ...form, received_from: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
-                                <select
-                                    value={form.status}
-                                    onChange={(e) => setForm({ ...form, status: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                                >
-                                    <option value="pending">Pending</option>
-                                    <option value="approved">Approved</option>
-                                    <option value="released">Released</option>
-                                    <option value="archived">Archived</option>
-                                    <option value="rejected">Rejected</option>
-                                </select>
                             </div>
 
                             <div>
@@ -541,6 +511,15 @@ export default function DocumentsIndex({
                                 />
                             </div>
 
+                            <div>
+                                <label className="mb-1 block text-sm font-medium text-slate-700">File (optional)</label>
+                                <input type="file" onChange={(e) => setForm({ ...form, file: e.target.files?.[0] ?? null })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                            </div>
+                            <div className="flex flex-wrap gap-5">
+                                <label className="inline-flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={form.urgent} onChange={(e) => setForm({ ...form, urgent: e.target.checked })} /> Mark as urgent</label>
+                                <label className="inline-flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={form.notify_by_email} onChange={(e) => setForm({ ...form, notify_by_email: e.target.checked })} /> Email me</label>
+                            </div>
+
                             <div className="flex justify-end gap-2">
                                 <button
                                     type="button"
@@ -550,12 +529,8 @@ export default function DocumentsIndex({
                                     Cancel
                                 </button>
 
-                                <button
-                                    type="submit"
-                                    className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700"
-                                >
-                                    {editingRow ? 'Save Changes' : 'Add Document'}
-                                </button>
+                                <button type="submit" name="is_finalized" value="0" className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">Save Draft</button>
+                                <button type="submit" name="is_finalized" value="1" className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700">Finalize</button>
                             </div>
                         </form>
                     </div>
