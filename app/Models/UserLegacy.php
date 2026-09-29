@@ -13,6 +13,12 @@ class UserLegacy extends Model
     protected $keyType = 'string';
     public $timestamps = false;
 
+    protected $fillable = [
+        'userUuid', 'username', 'password', 'firstname', 'lastname', 'middlename',
+        'extensionname', 'role', 'emailAddress', 'status', 'isLocked', 'loggedInStatus',
+        'loginTries', 'lastLoggedInTime', 'bureauId', 'divisionId', 'officeCode', 'dateCreated',
+    ];
+
     protected $casts = [
         'bureauId' => 'integer',
         'divisionId' => 'integer',

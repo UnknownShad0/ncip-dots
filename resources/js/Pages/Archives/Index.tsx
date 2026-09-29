@@ -4,12 +4,12 @@ import { Head } from '@inertiajs/react';
 export default function ArchivesIndex({ documents = [] }: { documents?: any[] }) {
     return (
         <AuthenticatedLayout
-            header={<h2 className="text-xl font-semibold text-slate-800">Archives</h2>}
+            header={<div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Document management</p><h1 className="text-2xl font-bold tracking-tight text-[#171717] sm:text-3xl">Archives</h1></div>}
         >
             <Head title="Archives" />
 
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="mb-4 text-lg font-semibold text-slate-800">Archived Documents</h3>
+            <div className="mx-auto max-w-[1440px] rounded-2xl border border-[#e2e2df] bg-white p-5 shadow-sm sm:p-6">
+                <div className="mb-5"><h2 className="text-xl font-semibold tracking-tight text-[#171717]">Archived documents</h2><p className="mt-1 text-sm text-[#73736e]">Browse documents moved to archive.</p></div>
 
                 {documents.length === 0 ? (
                     <p className="text-slate-500">No archived documents yet.</p>

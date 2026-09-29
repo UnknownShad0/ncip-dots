@@ -9,16 +9,27 @@ type OfficeRow = {
     code?: string;
     email?: string;
     location?: string;
-    parent_id?: number | null;
+    parentOfficeId?: number | null;
+    parent_name?: string | null;
+    range_id?: number | null;
+    range_name?: string | null;
+    range_is_active?: boolean | number | null;
     source?: string;
 };
+
+type OfficeOption = { id: number; name: string };
+type RangeOption = { id: number; name: string; is_active: boolean | number };
 
 type SortKey = 'name' | 'short_name' | 'code' | 'email' | 'location';
 
 export default function OfficesIndex({
     offices = [],
+    parentOffices = [],
+    ranges = [],
 }: {
     offices?: OfficeRow[];
+    parentOffices?: OfficeOption[];
+    ranges?: RangeOption[];
 }) {
     const [editingRow, setEditingRow] = useState<OfficeRow | null>(null);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -32,7 +43,8 @@ export default function OfficesIndex({
         short_name: '',
         code: '',
         email: '',
-        location: '',
+        parentOfficeId: '',
+        range_id: '',
     });
 
     const closeModal = () => {
@@ -43,12 +55,13 @@ export default function OfficesIndex({
             short_name: '',
             code: '',
             email: '',
-            location: '',
+            parentOfficeId: '',
+            range_id: '',
         });
     };
 
     const openEdit = (row: OfficeRow) => {
-        if (row.source === 'Old DB') {
+        if (row.source !== 'Old DB') {
             return;
         }
 
@@ -58,7 +71,8 @@ export default function OfficesIndex({
             short_name: row.short_name ?? '',
             code: row.code ?? '',
             email: row.email ?? '',
-            location: row.location ?? '',
+            parentOfficeId: row.parentOfficeId == null ? '' : String(row.parentOfficeId),
+            range_id: row.range_id == null ? '' : String(row.range_id),
         });
     };
 
@@ -70,7 +84,8 @@ export default function OfficesIndex({
             short_name: '',
             code: '',
             email: '',
-            location: '',
+            parentOfficeId: '',
+            range_id: '',
         });
     };
 
@@ -79,6 +94,7 @@ export default function OfficesIndex({
 
         router.post('/offices', {
             ...form,
+            operation: 'create',
         }, {
             onSuccess: closeModal,
         });
@@ -93,6 +109,7 @@ export default function OfficesIndex({
 
         router.put(`/offices/${editingRow.id}`, {
             ...form,
+            operation: 'update',
         }, {
             onSuccess: closeModal,
         });
@@ -156,9 +173,15 @@ export default function OfficesIndex({
     }, [page, totalPages]);
 
     const paginatedOffices = sortedOffices.slice((page - 1) * perPage, page * perPage);
+    const parentOfficeOptions = editingRow?.parentOfficeId != null && !parentOffices.some((office) => String(office.id) === String(editingRow.parentOfficeId))
+        ? [...parentOffices, { id: Number(editingRow.parentOfficeId), name: `${editingRow.parent_name || `Office ${editingRow.parentOfficeId}`} (Inactive)` }]
+        : parentOffices;
+    const rangeOptions = editingRow?.range_id != null && !ranges.some((range) => String(range.id) === String(editingRow.range_id))
+        ? [...ranges, { id: Number(editingRow.range_id), name: `${editingRow.range_name || 'Current range'} (Inactive)`, is_active: false }]
+        : ranges;
 
     return (
-        <AuthenticatedLayout header={<h2 className="text-xl font-semibold text-slate-800">Offices</h2>}>
+        <AuthenticatedLayout header={<div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Library management</p><h1 className="text-2xl font-bold tracking-tight text-[#171717] sm:text-3xl">Offices</h1></div>}>
             <Head title="Offices" />
 
             <style>{`
@@ -172,9 +195,9 @@ export default function OfficesIndex({
                 }
             `}</style>
 
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm print-table-only">
-                <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-4 md:flex-row md:items-center md:justify-between no-print">
-                    <h3 className="text-lg font-semibold text-slate-800">Office List</h3>
+            <div className="mx-auto max-w-[1440px] overflow-hidden rounded-2xl border border-[#e2e2df] bg-white shadow-sm print-table-only">
+                <div className="flex flex-col gap-4 border-b border-[#e2e2df] bg-white px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 no-print">
+                    <div><h2 className="text-xl font-semibold tracking-tight text-[#171717]">Office register</h2><p className="mt-1 text-sm text-[#73736e]">Manage offices and their organizational relationships.</p></div>
 
                     <div className="flex flex-col gap-2 sm:flex-row">
                         <input
@@ -182,13 +205,13 @@ export default function OfficesIndex({
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             placeholder="Search by name, code, email, or location"
-                            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500"
+                            className="h-11 rounded-xl border border-[#deded9] bg-[#fafaf8] px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                         />
 
                         <button
                             type="button"
                             onClick={handlePrint}
-                            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+                            className="h-11 rounded-xl border border-[#deded9] bg-white px-4 text-sm font-semibold text-[#444] transition hover:bg-[#f6f6f3]"
                         >
                             Print
                         </button>
@@ -196,7 +219,7 @@ export default function OfficesIndex({
                         <button
                             type="button"
                             onClick={openCreate}
-                            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+                            className="h-11 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700"
                         >
                             New Office
                         </button>
@@ -205,7 +228,7 @@ export default function OfficesIndex({
 
                 <div className="overflow-x-auto">
                     <table className="min-w-full text-left text-sm">
-                        <thead className="bg-slate-100 text-slate-700">
+                        <thead className="bg-[#f7f8fa] text-[#555752]">
                             <tr>
                                 <th className="px-4 py-3 font-semibold">
                                     <button type="button" onClick={() => handleSort('name')} className="flex items-center gap-1">
@@ -248,7 +271,7 @@ export default function OfficesIndex({
                                     const isLegacy = row.source === 'Old DB';
 
                                     return (
-                                        <tr key={`${row.id ?? 'row'}-${index}`} className="border-t border-slate-200">
+                                        <tr key={`${row.id ?? 'row'}-${index}`} className="border-t border-[#eeeeeb] transition-colors hover:bg-[#fafaf8]">
                                             <td className="px-4 py-3 font-medium text-slate-800">{row.name}</td>
                                             <td className="px-4 py-3 text-slate-600">{row.short_name || '—'}</td>
                                             <td className="px-4 py-3 text-slate-600">{row.code || '—'}</td>
@@ -258,8 +281,8 @@ export default function OfficesIndex({
                                                 <button
                                                     type="button"
                                                     onClick={() => openEdit(row)}
-                                                    disabled={isLegacy}
-                                                    className={`rounded-md px-3 py-1.5 text-xs font-medium ${isLegacy ? 'cursor-not-allowed bg-slate-300 text-slate-500' : 'bg-sky-600 text-white hover:bg-sky-700'}`}
+                                                    disabled={!isLegacy}
+                                                    className={`rounded-md px-3 py-1.5 text-xs font-medium ${!isLegacy ? 'cursor-not-allowed bg-slate-300 text-slate-500' : 'bg-sky-600 text-white hover:bg-sky-700'}`}
                                                 >
                                                     Edit
                                                 </button>
@@ -272,7 +295,7 @@ export default function OfficesIndex({
                     </table>
                 </div>
 
-                <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between no-print">
+                <div className="flex flex-col gap-3 border-t border-[#e8e8e4] bg-[#fafaf8] px-5 py-4 sm:flex-row sm:items-center sm:justify-between no-print">
                     <div className="flex items-center gap-2 text-sm text-slate-600">
                         <span>Rows per page:</span>
                         <select
@@ -315,9 +338,9 @@ export default function OfficesIndex({
 
             {(isCreateOpen || editingRow) && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-                    <div className="w-full max-w-xl rounded-xl bg-white p-6 shadow-xl">
+                    <div role="dialog" aria-modal="true" aria-labelledby="office-modal-title" className="max-h-[calc(100vh-2rem)] w-full max-w-xl overflow-y-auto rounded-2xl border border-[#e2e2df] bg-white p-6 shadow-2xl">
                         <div className="mb-4 flex items-center justify-between">
-                            <h3 className="text-lg font-semibold text-slate-800">
+                            <h3 id="office-modal-title" className="text-lg font-semibold text-slate-800">
                                 {editingRow ? 'Update Office' : 'Add Office'}
                             </h3>
 
@@ -332,8 +355,26 @@ export default function OfficesIndex({
                                 <input
                                     value={form.name}
                                     onChange={(e) => setForm({ ...form, name: e.target.value })}
+                                    required
                                     className="w-full rounded-lg border border-slate-300 px-3 py-2"
                                 />
+                            </div>
+
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <div>
+                                    <label htmlFor="parentOfficeId" className="mb-1 block text-sm font-medium text-slate-700">Under</label>
+                                    <select id="parentOfficeId" value={form.parentOfficeId} onChange={(e) => setForm({ ...form, parentOfficeId: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                                        <option value="">Select parent office</option>
+                                        {parentOfficeOptions.filter((office) => String(office.id) !== String(editingRow?.id ?? '')).map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label htmlFor="range_id" className="mb-1 block text-sm font-medium text-slate-700">Range</label>
+                                    <select id="range_id" value={form.range_id} onChange={(e) => setForm({ ...form, range_id: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                                        <option value="">Select range</option>
+                                        {rangeOptions.filter((range) => Boolean(Number(range.is_active)) || String(range.id) === form.range_id).map((range) => <option key={range.id} value={range.id}>{range.name}{!Boolean(Number(range.is_active)) && !range.name.includes('(Inactive)') ? ' (Inactive, current)' : ''}</option>)}
+                                    </select>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
@@ -362,15 +403,6 @@ export default function OfficesIndex({
                                     type="email"
                                     value={form.email}
                                     onChange={(e) => setForm({ ...form, email: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="mb-1 block text-sm font-medium text-slate-700">Location</label>
-                                <input
-                                    value={form.location}
-                                    onChange={(e) => setForm({ ...form, location: e.target.value })}
                                     className="w-full rounded-lg border border-slate-300 px-3 py-2"
                                 />
                             </div>

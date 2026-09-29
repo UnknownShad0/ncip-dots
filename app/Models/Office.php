@@ -13,6 +13,7 @@ class Office extends Model
 
     protected $fillable = [
         'parent_id',
+        'range_id',
         'name',
         'short_name',
         'code',
@@ -23,6 +24,11 @@ class Office extends Model
     public function parent(): BelongsTo
     {
         return $this->belongsTo(self::class, 'parent_id');
+    }
+
+    public function range(): BelongsTo
+    {
+        return $this->belongsTo(Range::class);
     }
 
     public function children(): HasMany

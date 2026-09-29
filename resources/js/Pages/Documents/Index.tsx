@@ -1,7 +1,8 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
-import { ArrowDownUp, ChevronLeft, ChevronRight, FilePlus2, Printer, Search } from 'lucide-react';
+import { Archive, ArrowDownUp, ChevronLeft, ChevronRight, Eye, FilePlus2, Inbox, Pencil, Printer, Search, Send, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
 
 type DocumentItem = {
     id?: number | string | null;
@@ -10,9 +11,21 @@ type DocumentItem = {
     status?: string;
     office_name?: string;
     document_type?: string | { name?: string } | null;
+    purpose_type?: string;
     documentType?: { name?: string } | null;
     origin_type?: string;
     last_transaction?: string;
+    created_at?: string;
+    transactions?: Array<{
+        action?: string | null;
+        status?: string | null;
+        remarks?: string | null;
+        from_office?: string | null;
+        to_office?: string | null;
+        holder?: string | null;
+        created_by?: string | null;
+        created_at?: string | null;
+    }>;
     office?: {
         name?: string;
     } | null;
@@ -22,6 +35,12 @@ type DocumentItem = {
     purpose_type_id?: number | null;
     urgent?: boolean;
     notify_by_email?: boolean;
+    is_finalized?: boolean;
+    can_update?: boolean;
+    can_release?: boolean;
+    can_terminal?: boolean;
+    can_receive?: boolean;
+    can_delete?: boolean;
 };
 
 type LibraryOption = { id: number | string; name: string; source?: string };
@@ -45,6 +64,7 @@ const getStatusClasses = (status?: string) => {
         case 'done':
             return 'bg-emerald-100 text-emerald-700';
         case 'pending':
+        case 'ongoing':
             return 'bg-amber-100 text-amber-700';
         case 'rejected':
         case 'cancelled':
@@ -62,13 +82,18 @@ export default function DocumentsIndex({
     title = 'All Documents',
     documentTypes = [],
     purposeTypes = [],
+    offices = [],
 }: {
     documents?: DocumentItem[];
     title?: string;
     documentTypes?: LibraryOption[];
     purposeTypes?: LibraryOption[];
+    offices?: LibraryOption[];
 }) {
     const [editingRow, setEditingRow] = useState<DocumentItem | null>(null);
+    const [viewingRow, setViewingRow] = useState<DocumentItem | null>(null);
+    const [releasingRow, setReleasingRow] = useState<DocumentItem | null>(null);
+    const [destinationOfficeId, setDestinationOfficeId] = useState('');
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
@@ -151,6 +176,452 @@ export default function DocumentsIndex({
         });
     };
 
+    const handleRelease = (event: FormEvent) => {
+        event.preventDefault();
+        if (!releasingRow?.id || !destinationOfficeId) return;
+        router.post(`/documents/${releasingRow.id}/release`, { to_office_id: destinationOfficeId }, {
+            onSuccess: () => { setReleasingRow(null); setDestinationOfficeId(''); },
+        });
+    };
+
+    const printDisposition = (document: DocumentItem) => {
+        const safe = (value?: string | null) => (value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character));
+        const popup = window.open('', '_blank', 'width=900,height=700');
+        if (!popup) return;
+        const image = (name: string) => `${window.location.origin}/images/${name}`;
+        const transactions = document.transactions ?? [];
+        const latest = transactions[0];
+        const transactionLines = transactions.map((entry) => {
+            const action = safe(entry.action || entry.status || 'Processed');
+            const actor = safe(entry.created_by || 'Unknown user');
+            const actionType = (entry.action || entry.status || '').toLowerCase();
+            const officeName = actionType.includes('releas')
+                ? entry.from_office || entry.holder || entry.to_office
+                : actionType.includes('receiv')
+                    ? entry.to_office || entry.holder || entry.from_office
+                    : entry.holder || entry.from_office || entry.to_office;
+            const office = safe(officeName || 'Unknown office');
+            const date = safe(entry.created_at || '');
+            const remarks = entry.remarks ? `<div class="trail-remarks">Remarks: '${safe(entry.remarks)}'</div>` : '';
+
+            return `${remarks}<div class="trail-action">&#10004; ${action} by ${actor} of ${office}${date ? ` at ${date}` : ''}</div>`;
+        }).join('');
+         popup.document.write(`<!doctype html>
+            <html>
+            <head>
+            <meta charset="utf-8">
+            <title>Disposition Form - ${safe(document.tracking_number)}</title>
+
+            <style>
+                @page {
+                    size: letter portrait;
+                    margin: 0.4in 0.45in;
+                }
+
+                * {
+                    box-sizing: border-box;
+                }
+
+                html, body {
+                    margin: 0;
+                    padding: 0;
+                    color: #111;
+                    font-family: Arial, Helvetica, sans-serif;
+                    font-size: 9pt;
+                }
+
+                .sheet {
+                    width: 100%;
+                    min-height: 10.2in;
+                    display: flex;
+                    flex-direction: column;
+                }
+
+                /* HEADER */
+                .header {
+                    display: block;
+                    width: 100%;
+                    height: auto;
+                    max-height: 1.2in;
+                    object-fit: contain;
+                    margin: 0 auto 8px;
+                }
+
+                .form-title {
+                    margin: 0 0 12px;
+                    text-align: center;
+                    font: bold 15pt Georgia, "Times New Roman", serif;
+                }
+
+                /* MAIN DETAILS TABLE */
+                .form-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    table-layout: fixed;
+                    font-size: 8.3pt;
+                }
+
+                .form-table td {
+                    border: 1px solid #b9b9b9;
+                    padding: 4px 5px;
+                    vertical-align: middle;
+                    overflow-wrap: anywhere;
+                }
+
+                .form-table .field {
+                    width: 19%;
+                    font-size: 7.4pt;
+                    font-weight: bold;
+                    text-transform: uppercase;
+                }
+
+                .form-table .field-value {
+                    width: 58%;
+                    overflow-wrap: anywhere;
+                    word-break: normal;
+                }
+
+                .form-table .qr-cell {
+                    width: 23%;
+                    text-align: center;
+                    vertical-align: middle;
+                }
+
+                .qr-placeholder {
+                    width: 0.85in;
+                    height: 0.85in;
+                    margin: 0 auto 5px;
+                    border: 1px dashed #777;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: #555;
+                    font-size: 8pt;
+                    font-weight: bold;
+                }
+
+                .qr-note {
+                    font-size: 7pt;
+                    line-height: 1.4;
+                    overflow-wrap: anywhere;
+                }
+
+                /* REMARKS — OUTSIDE THE TABLE */
+                .remarks-section {
+                    width: 100%;
+                    margin-top: 5px;
+                    padding: 0;
+                    border: none;
+                    font-size: 8.5pt;
+                    overflow-wrap: anywhere;
+                }
+
+                .remarks-heading {
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 12px;
+                    margin-bottom: 8px;
+                    line-height: 1.4;
+                }
+
+                .remarks-label {
+                    flex: 0 0 0.8in;
+                    font-size: 7.4pt;
+                    font-weight: bold;
+                    text-transform: uppercase;
+                }
+
+                .remarks-value {
+                    flex: 1;
+                    min-width: 0;
+                    white-space: pre-wrap;
+                    overflow-wrap: anywhere;
+                }
+
+                /* Transaction history */
+                .transaction-history {
+                    width: 100%;
+                    padding-left: 0.35in;
+                    line-height: 1.45;
+                    overflow-wrap: anywhere;
+                }
+
+                .transaction-history > * {
+                    max-width: 100%;
+                    overflow-wrap: anywhere;
+                }
+
+                .trail-remarks {
+                    margin: 4px 0 12px 0.3in;
+                }
+
+                .trail-action {
+                    margin: 0 0 8px;
+                }
+
+                /* FOOTER */
+                .form-footer {
+                    margin-top: auto;
+                    padding-top: 10px;
+                    border-top: 1px solid #aaa;
+                    width: 100%;
+                    break-inside: avoid;
+                    page-break-inside: avoid;
+                }
+
+                .footer-main {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    width: 100%;
+                }
+
+                .footer-logo {
+                    display: block;
+                    flex: 0 0 0.55in;
+                    width: 0.55in;
+                    height: 0.55in;
+                    object-fit: contain;
+                }
+
+                .footer-details {
+                    flex: 1;
+                    min-width: 0;
+                    text-align: left;
+                }
+
+                .footer-copy {
+                    font-size: 6.8pt;
+                    line-height: 1.4;
+                    overflow-wrap: anywhere;
+                }
+
+                .footer-copy strong {
+                    font-size: 8.5pt;
+                }
+
+                .contact-row {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    flex-wrap: wrap;
+                    column-gap: 9px;
+                    row-gap: 3px;
+                    margin-top: 5px;
+                    font-size: 6.5pt;
+                    line-height: 1.3;
+                }
+
+                .contact-item {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 3px;
+                    white-space: nowrap;
+                }
+
+                .contact-icon {
+                    display: inline-block;
+                    width: 8px;
+                    height: 8px;
+                    object-fit: contain;
+                }
+
+                .tagline {
+                    display: block;
+                    width: calc(100% - 0.65in);
+                    height: auto;
+                    max-height: 0.24in;
+                    object-fit: contain;
+                    object-position: center;
+                    margin: 5px 0 0 auto;
+                }
+
+                @media print {
+                    html, body {
+                        width: 100%;
+                        background: #fff;
+                    }
+
+                    .sheet {
+                        width: 100%;
+                        min-height: 10.2in;
+                        margin: 0;
+                        padding: 0;
+                    }
+
+                    img {
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                    }
+
+                    .form-footer {
+                        break-inside: avoid;
+                        page-break-inside: avoid;
+                    }
+                }
+
+                @media screen {
+                    body {
+                        background: #e5e7eb;
+                        padding: 20px;
+                    }
+
+                    .sheet {
+                        width: 7.6in;
+                        min-height: 10.2in;
+                        margin: auto;
+                        padding: 0.08in;
+                        background: #fff;
+                        box-shadow: 0 2px 18px #0002;
+                    }
+                }
+            </style>
+            </head>
+
+            <body>
+            <main class="sheet">
+
+                <img class="header"
+                    src="${image('header.png')}"
+                    alt="National Commission on Indigenous Peoples">
+
+                <h1 class="form-title">DISPOSITION FORM</h1>
+
+                <!-- MAIN INFORMATION TABLE: REMARKS ARE NOT INCLUDED -->
+                <table class="form-table">
+                    <tbody>
+                        <tr>
+                            <td class="field">TO/FOR:</td>
+                            <td class="field-value">
+                                ${safe(latest?.to_office) || 'Not specified'}
+                            </td>
+                            <td class="qr-cell" rowspan="6">
+                                <div class="qr-placeholder">QR<br>WIP</div>
+                                <div class="qr-note">
+                                    <strong>DOTS No.:</strong><br>
+                                    ${safe(document.tracking_number) || 'Not assigned'}
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td class="field">FROM:</td>
+                            <td class="field-value">
+                                ${safe(latest?.from_office) || safe(document.office_name) || 'Not specified'}
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td class="field">SUBJECT:</td>
+                            <td class="field-value">
+                                ${safe(document.title) || '—'}
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td class="field">PURPOSE:</td>
+                            <td class="field-value">
+                                ${safe(document.purpose_type) || 'For Appropriate Action'}
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td class="field">DOCUMENT:</td>
+                            <td class="field-value">
+                                ${safe(getDocumentTypeName(document)) || 'No document attached'}
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td class="field">DATE CREATED:</td>
+                            <td class="field-value">
+                                ${safe(document.created_at) || '—'}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <!-- REMARKS: SEPARATE SECTION WITHOUT TABLE BORDERS -->
+                <section class="remarks-section">
+
+                    <div class="remarks-heading">
+                        <div class="remarks-label">REMARKS:</div>
+                        <div class="remarks-value">
+                            ${safe(document.remarks) || ''}
+                        </div>
+                    </div>
+
+                    ${transactionLines ? `
+                        <div class="transaction-history">
+                            ${transactionLines}
+                        </div>
+                    ` : ''}
+
+                </section>
+
+                <!-- FOOTER -->
+                <footer class="form-footer">
+
+                    <div class="footer-main">
+
+                        <img class="footer-logo"
+                            src="${image('bagong-pilipinas.png')}"
+                            alt="Bagong Pilipinas">
+
+                        <div class="footer-details">
+
+                            <div class="footer-copy">
+                                <strong>AS - CASHIER</strong><br>
+                                6th and 7th Floors, Sunnymede IT Center,
+                                1614 Quezon Avenue, South Triangle,
+                                Quezon City 1103
+                            </div>
+
+                            <div class="contact-row">
+
+                                <span class="contact-item">
+                                    <img class="contact-icon"
+                                        src="${image('telephone-icon.png')}"
+                                        alt="">
+                                    (02) 875 1200
+                                </span>
+
+                                <span class="contact-item">
+                                    <img class="contact-icon"
+                                        src="${image('website-icon.png')}"
+                                        alt="">
+                                    ncip.gov.ph
+                                </span>
+
+                                <span class="contact-item">
+                                    <img class="contact-icon"
+                                        src="${image('email-icon.png')}"
+                                        alt="">
+                                    csc@ncip.gov.ph
+                                </span>
+
+                            </div>
+                        </div>
+                    </div>
+
+                    <img class="tagline"
+                        src="${image('ncip-footer.png')}"
+                        alt="Masaganang Katutubong Pamayanan: Sandigan ng Pambansang Kaunlaran">
+
+                </footer>
+
+            </main>
+
+            <script>
+                window.addEventListener('load', () => {
+                    setTimeout(() => window.print(), 300);
+                });
+            </script>
+            </body>
+            </html>`);
+            popup.document.close();
+        };
+
     const handleUpdate = (e: React.FormEvent, finalize: boolean) => {
         e.preventDefault();
 
@@ -201,6 +672,7 @@ export default function DocumentsIndex({
             const matchesStatus = statusFilter === 'all' ||
                 normalizedStatus === statusFilter.toLowerCase() ||
                 (statusFilter === 'released' && ['processed', 'available'].includes(normalizedStatus)) ||
+                (statusFilter === 'ongoing' && normalizedStatus === 'pending') ||
                 (statusFilter === 'archived' && normalizedStatus === 'terminal');
 
             return matchesSearch && matchesStatus;
@@ -280,7 +752,7 @@ export default function DocumentsIndex({
                             className="col-span-2 h-11 min-w-0 rounded-xl border border-[#deded9] bg-[#fafaf8] pl-3 pr-8 text-sm text-[#333] outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:col-span-1"
                         >
                             <option value="all">All Status</option>
-                            <option value="pending">Pending</option>
+                            <option value="ongoing">Ongoing</option>
                             <option value="approved">Approved</option>
                             <option value="released">Released</option>
                             <option value="archived">Archived</option>
@@ -385,25 +857,26 @@ export default function DocumentsIndex({
                                                         document.status
                                                     )}`}
                                                 >
-                                                    {document.status || 'pending'}
+                                                    {(document.status || 'draft').toUpperCase()}
                                                 </span>
                                             </td>
-                                            <td className="min-w-[220px] px-4 py-4 text-[#666660]">
-                                                {document.last_transaction || '—'}
+                                            <td className="min-w-[240px] px-4 py-3">
+                                                {document.transactions?.[0] ? <div className="flex flex-col gap-1.5">
+                                                    <span className="w-fit rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800">{document.transactions[0].action || document.transactions[0].status || 'Transaction'}</span>
+                                                    <span className="text-xs text-slate-600">{[document.transactions[0].from_office, document.transactions[0].to_office].filter(Boolean).join(' → ') || document.transactions[0].holder || 'Office not recorded'}</span>
+                                                    <span className="text-[11px] text-slate-400">{document.transactions[0].created_at || document.transactions[0].created_by || '—'}</span>
+                                                </div> : <span className="text-sm text-slate-400">No transactions</span>}
                                             </td>
                                             <td className="whitespace-nowrap px-4 py-4 no-print">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => openEdit(document)}
-                                                    disabled={isLegacy}
-                                                    className={`rounded-md px-3 py-1.5 text-xs font-medium ${
-                                                        isLegacy
-                                                            ? 'cursor-not-allowed bg-slate-100 text-slate-400'
-                                                            : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-                                                    }`}
-                                                >
-                                                    Edit
-                                                </button>
+                                                <div className="flex min-w-[260px] flex-wrap gap-1.5">
+                                                    <button type="button" aria-label="View document" title="View document" onClick={() => setViewingRow(document)} className="rounded-md bg-slate-100 p-2 text-slate-700 hover:bg-slate-200"><Eye size={15} /></button>
+                                                    {document.is_finalized && <button type="button" aria-label="Print disposition form" title="Print disposition form" onClick={() => printDisposition(document)} className="rounded-md bg-indigo-50 p-2 text-indigo-700 hover:bg-indigo-100"><Printer size={15} /></button>}
+                                                    {document.can_update && <button type="button" aria-label="Update draft" title="Update draft" onClick={() => openEdit(document)} className="rounded-md bg-blue-50 p-2 text-blue-700 hover:bg-blue-100"><Pencil size={15} /></button>}
+                                                    {document.can_release && <button type="button" aria-label="Release document" title="Release document" onClick={() => { setReleasingRow(document); setDestinationOfficeId(''); }} className="rounded-md bg-sky-50 p-2 text-sky-700 hover:bg-sky-100"><Send size={15} /></button>}
+                                                    {document.can_terminal && <button type="button" aria-label="Tag as terminal" title="Tag as terminal" onClick={() => { if (window.confirm('Tag this document as terminal?')) router.post(`/documents/${document.id}/terminal`); }} className="rounded-md bg-violet-50 p-2 text-violet-700 hover:bg-violet-100"><Archive size={15} /></button>}
+                                                    {document.can_receive && <button type="button" aria-label="Receive document" title="Receive document" onClick={() => { if (window.confirm('Confirm receipt of this document?')) router.post(`/documents/${document.id}/receive`); }} className="rounded-md bg-emerald-50 p-2 text-emerald-700 hover:bg-emerald-100"><Inbox size={15} /></button>}
+                                                    {document.can_delete && <button type="button" aria-label="Delete draft" title="Delete draft" onClick={() => { if (window.confirm('Remove this draft from the active list?')) router.delete(`/documents/${document.id}`); }} className="rounded-md bg-rose-50 p-2 text-rose-700 hover:bg-rose-100"><Trash2 size={15} /></button>}
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -454,6 +927,28 @@ export default function DocumentsIndex({
                 </div>
             </div>
             </div>
+
+            {viewingRow && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={() => setViewingRow(null)}>
+                    <div role="dialog" aria-modal="true" className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+                        <div className="mb-5 flex items-center justify-between"><h3 className="text-lg font-semibold">Document Details</h3><button type="button" onClick={() => setViewingRow(null)} className="text-sm text-slate-500">Close</button></div>
+                        <dl className="mb-6 grid grid-cols-[140px_1fr] gap-x-4 gap-y-3 text-sm"><dt className="font-medium text-slate-500">Tracking Number</dt><dd>{viewingRow.tracking_number || '—'}</dd><dt className="font-medium text-slate-500">Title</dt><dd>{viewingRow.title || 'Untitled'}</dd><dt className="font-medium text-slate-500">Document Type</dt><dd>{getDocumentTypeName(viewingRow) || '—'}</dd><dt className="font-medium text-slate-500">Origin</dt><dd>{viewingRow.origin_type || '—'}</dd><dt className="font-medium text-slate-500">Status</dt><dd>{(viewingRow.status || 'draft').toUpperCase()}</dd><dt className="font-medium text-slate-500">Remarks</dt><dd className="whitespace-pre-wrap">{viewingRow.remarks || '—'}</dd></dl>
+                        <section aria-labelledby="transaction-history-title"><h4 id="transaction-history-title" className="mb-3 text-sm font-semibold text-slate-800">Transaction History</h4>
+                            {viewingRow.transactions?.length ? <ol className="space-y-3 border-l-2 border-slate-200 pl-4">{viewingRow.transactions.map((transaction, index) => <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="relative rounded-xl border border-slate-200 bg-slate-50 p-3 before:absolute before:-left-[22px] before:top-4 before:h-2.5 before:w-2.5 before:rounded-full before:bg-sky-500"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-slate-800">{transaction.action || transaction.status || 'Transaction'}</span><span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium uppercase text-slate-600">{transaction.status || '—'}</span></div><p className="mt-1 text-sm text-slate-600">{[transaction.from_office, transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder ? `Held by ${transaction.holder}` : 'Office details unavailable')}</p><p className="mt-1 text-xs text-slate-500">{[transaction.created_by, transaction.created_at].filter(Boolean).join(' · ') || 'Date and user unavailable'}</p></li>)}</ol> : <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No transactions recorded.</p>}
+                        </section>
+                    </div>
+                </div>
+            )}
+
+            {releasingRow && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+                    <form onSubmit={handleRelease} className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-2xl">
+                        <h3 className="text-lg font-semibold">Release Document</h3><p className="text-sm text-slate-600">Select the receiving office for {releasingRow.tracking_number}.</p>
+                        <select required value={destinationOfficeId} onChange={(event) => setDestinationOfficeId(event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2"><option value="">Select destination office</option>{offices.filter((office) => /^\d+$/.test(String(office.id))).map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}</select>
+                        <div className="flex justify-end gap-2"><button type="button" onClick={() => setReleasingRow(null)} className="rounded-lg border px-4 py-2 text-sm">Cancel</button><button type="submit" className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white">Release</button></div>
+                    </form>
+                </div>
+            )}
 
             {(isCreateOpen || editingRow) && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4">

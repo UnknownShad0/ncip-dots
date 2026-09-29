@@ -189,7 +189,7 @@ The system's user accounts table.
 | `lastname` | VARCHAR | |
 | `middlename` | VARCHAR | Nullable |
 | `extensionname` | VARCHAR | Nullable (Jr., Sr., etc.) |
-| `role` | INT | `1`=Super Admin, `2`=Admin/Exec, `14`=Encoder, others=Viewer |
+| `role` | INT | `1`=System Admin, `2`=Executive, `3`=Admin Staff, `14`=Encoder; other role IDs are treated as viewers unless explicitly authorized |
 | `emailAddress` | VARCHAR | Unique |
 | `status` | CHAR(1) | `1`=Active, `0`=Inactive |
 | `isVerified` | CHAR(1) | `Y`/`N` — must change password on first login |
@@ -263,6 +263,33 @@ The audit/routing log for each document. One row per routing action. This is the
 | `dateCreated` | DATETIME | |
 
 **Status Semantics:**
+
+The workflow labels shown in the Documents list are derived from the latest trail state. They are the labels staff use to understand which action is available; they are not additional values stored in `document_trail.status`.
+
+| Documents list label | Stored trail state | Workflow meaning |
+|---|---|---|
+| `ONGOING` | `PENDING` | Document is awaiting action at the current office, including first release or after receipt |
+| `RELEASED` | `AVAILABLE` | Document has been routed and is in transit |
+| `ARCHIVED` | `TERMINAL`, or legacy `document.Archived = 'Y'` | Document has reached terminal disposition |
+
+The latest trail entry determines the current label. A document with no trail state retains its document status (for example `DRAFT`).
+
+**Documents list actions and access rules:**
+
+- **View** is available for every listed document. Legacy records are read-only.
+- **Update** is available only for an unfinalized draft to its creator in the originating office, or to an `admin` / `super_admin`.
+- **Print Disposition Form** is available for finalized documents.
+- **Release Document** and **Tag as Terminal** are available when the signed-in user's office holds the latest `PENDING` entry. Release records the destination office and creates an `AVAILABLE` trail entry; terminal disposition creates a `TERMINAL` entry and archives the document.
+- **Receive** is available to System Admin, Executive, Admin Staff, and Encoder roles (role IDs `1`, `2`, `3`, and `14`) only when the latest trail is `AVAILABLE` and its receiving office is the signed-in user's assigned office. There is no cross-office admin override. The server locks the document, rechecks its latest trail, then appends a `PENDING` entry. In the migrated schema, `from_office_id` retains the `AVAILABLE` entry's originating office and `to_office_id` represents both receiving and holder. The receiver is stored as `created_by`; the trail timestamp, audit event, and optional creator email notification are written as part of receiving.
+- **Delete** is available only for unfinalized drafts, to their creator in the originating office or an `admin` / `super_admin`. Deletion is soft deletion.
+
+**Application RBAC and document visibility:**
+
+- The Libraries navigation and all library, setup, and user-account routes require an administrator. Executive accounts do not receive global library access.
+- Administrators (`System Admin` / `Admin` roles) can view documents across offices. Other accounts are scoped to their assigned office.
+- Office-scoped users can view a document when their office is the document's originating office or appears as the originating, receiving, or holder office in its trail. This lets the receiving bureau see an incoming `AVAILABLE` document and preserves access for offices that have participated in its routing history.
+- Drafts without trail entries remain visible to their creator. A user with no office assignment cannot browse office documents.
+- The local account stores the legacy bureau ID for identity and keeps a local `office_id` association for the current document workflow. Legacy offices and roles remain reference data loaded from `legacy_db`.
 
 | Status | Meaning | holder = | receiving = |
 |---|---|---|---|

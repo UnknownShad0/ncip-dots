@@ -53,6 +53,8 @@ All analytics are driven from existing tables (`documents`, `document_trail`, `a
 
 These are the metrics every logged-in user sees on their Dashboard, scoped to their own office unless they are `super_admin` or `admin`.
 
+The Documents list uses workflow labels derived from the latest trail entry: `PENDING` is displayed as **ONGOING**, `AVAILABLE` as **RELEASED**, and `TERMINAL` (or the legacy archived flag) as **ARCHIVED**. Keep these presentation labels distinct from stored trail values used by analytics queries and indexes.
+
 | Metric | Description | Source Table |
 |---|---|---|
 | **Pending** | Documents where the latest trail status = `PENDING` and the user's office is the holder | `document_trail` |

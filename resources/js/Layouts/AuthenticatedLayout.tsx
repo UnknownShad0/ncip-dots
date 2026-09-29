@@ -37,6 +37,7 @@ export default function AuthenticatedLayout({
     children,
 }: PropsWithChildren<{ header?: ReactNode }>) {
     const user = (usePage().props as any).auth.user;
+    const canManageLibraries = (usePage().props as any).canManageLibraries === true;
     const [mobileOpen, setMobileOpen] = useState(false);
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
         Object.fromEntries(groups.filter((group) => group.label).map((group) => [
@@ -58,7 +59,7 @@ export default function AuthenticatedLayout({
                         <button className="lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Close menu"><X size={20} /></button>
                     </div>
                     <nav className="flex-1 overflow-y-auto py-3">
-                        {groups.map((group, index) => (
+                        {groups.filter((group) => group.label !== 'Libraries' || canManageLibraries).map((group, index) => (
                             <section key={`${group.label}-${index}`} className={`${group.label ? 'px-5 pb-2 pt-3' : 'border-b border-[#e2e2df] px-0 pb-2'}`}>
                                 {group.label && <button type="button" aria-expanded={Boolean(openGroups[group.label])} onClick={() => setOpenGroups((current) => ({ ...current, [group.label]: !current[group.label] }))} className="mb-1 flex w-full items-center justify-between rounded-md px-1 py-1 text-left text-[14px] font-medium text-[#898984] hover:text-[#555752]">
                                     {group.label}

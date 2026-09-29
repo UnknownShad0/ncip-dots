@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 
 class User extends Authenticatable
 {
@@ -22,12 +23,20 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name',
+        'username',
+        'firstname',
+        'lastname',
+        'middlename',
+        'extensionname',
         'email',
         'password',
         'role',
+        'role_id',
         'office_id',
+        'legacy_bureau_id',
         'division_id',
         'is_active',
+        'is_locked',
         'last_login_at',
     ];
 
@@ -53,12 +62,44 @@ class User extends Authenticatable
             'password' => 'hashed',
             'last_login_at' => 'datetime',
             'is_active' => 'boolean',
+            'is_locked' => 'boolean',
+            'role_id' => 'integer',
+            'legacy_bureau_id' => 'integer',
         ];
     }
 
     public function office(): BelongsTo
     {
         return $this->belongsTo(Office::class);
+    }
+
+    public function isAdministrator(): bool
+    {
+        if (in_array((int) $this->role_id, [1, 3], true)) {
+            return true;
+        }
+
+        $role = Str::of((string) $this->role)->lower()->replace(['_', '-'], ' ')->squish()->toString();
+
+        return in_array($role, ['admin', 'administrator', 'system admin', 'super admin', 'admin staff'], true);
+    }
+
+    public function canManageLibraries(): bool
+    {
+        return in_array((int) $this->role_id, [1, 2], true);
+    }
+
+    public function canReceiveDocuments(): bool
+    {
+        if (in_array((int) $this->role_id, [1, 2, 3, 14], true)) {
+            return true;
+        }
+
+        $role = Str::of((string) $this->role)->lower()->replace(['_', '-'], ' ')->squish()->toString();
+
+        return in_array($role, [
+            'system admin', 'super admin', 'admin', 'administrator', 'admin staff', 'executive', 'executives', 'encoder',
+        ], true);
     }
 
     public function division(): BelongsTo

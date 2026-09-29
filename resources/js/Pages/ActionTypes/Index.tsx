@@ -148,7 +148,7 @@ export default function ActionTypesIndex({
     const paginatedActionTypes = sortedActionTypes.slice((page - 1) * perPage, page * perPage);
 
     return (
-        <AuthenticatedLayout header={<h2 className="text-xl font-semibold text-slate-800">Action Types</h2>}>
+        <AuthenticatedLayout header={<div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Library management</p><h1 className="text-2xl font-bold tracking-tight text-[#171717] sm:text-3xl">Action Types</h1></div>}>
             <Head title="Action Types" />
 
             <style>{`
@@ -162,9 +162,9 @@ export default function ActionTypesIndex({
                 }
             `}</style>
 
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm print-table-only">
-                <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-4 md:flex-row md:items-center md:justify-between no-print">
-                    <h3 className="text-lg font-semibold text-slate-800">Action Type List</h3>
+            <div className="mx-auto max-w-[1440px] overflow-hidden rounded-2xl border border-[#e2e2df] bg-white shadow-sm print-table-only">
+                <div className="flex flex-col gap-4 border-b border-[#e2e2df] bg-white px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 no-print">
+                    <div><h2 className="text-xl font-semibold tracking-tight text-[#171717]">Action type register</h2><p className="mt-1 text-sm text-[#73736e]">Manage the actions available during document routing.</p></div>
 
                     <div className="flex flex-col gap-2 sm:flex-row">
                         <input
@@ -172,13 +172,13 @@ export default function ActionTypesIndex({
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             placeholder="Search by name, code, or description"
-                            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500"
+                            className="h-11 rounded-xl border border-[#deded9] bg-[#fafaf8] px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                         />
 
                         <button
                             type="button"
                             onClick={handlePrint}
-                            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+                            className="h-11 rounded-xl border border-[#deded9] bg-white px-4 text-sm font-semibold text-[#444] transition hover:bg-[#f6f6f3]"
                         >
                             Print
                         </button>
@@ -186,7 +186,7 @@ export default function ActionTypesIndex({
                         <button
                             type="button"
                             onClick={openCreate}
-                            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+                            className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
                         >
                             New Action Type
                         </button>
@@ -195,7 +195,7 @@ export default function ActionTypesIndex({
 
                 <div className="overflow-x-auto">
                     <table className="min-w-full text-left text-sm">
-                        <thead className="bg-slate-100 text-slate-700">
+                        <thead className="bg-[#f7f8fa] text-[#555752]">
                             <tr>
                                 <th className="px-4 py-3 font-semibold">
                                     <button type="button" onClick={() => handleSort('name')} className="flex items-center gap-1">
@@ -233,7 +233,7 @@ export default function ActionTypesIndex({
                                     const isLegacy = row.source === 'Old DB';
 
                                     return (
-                                        <tr key={`${row.id ?? 'row'}-${index}`} className="border-t border-slate-200">
+                                        <tr key={`${row.id ?? 'row'}-${index}`} className="border-t border-[#eeeeeb] transition-colors hover:bg-[#fafaf8]">
                                             <td className="px-4 py-3 font-medium text-slate-800">{row.name}</td>
                                             <td className="px-4 py-3 text-slate-600">{row.code || '—'}</td>
                                             <td className="px-4 py-3 text-slate-600">{row.description || '—'}</td>
@@ -260,7 +260,7 @@ export default function ActionTypesIndex({
                     </table>
                 </div>
 
-                <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between no-print">
+                <div className="flex flex-col gap-3 border-t border-[#e8e8e4] bg-[#fafaf8] px-5 py-4 sm:flex-row sm:items-center sm:justify-between no-print">
                     <div className="flex items-center gap-2 text-sm text-slate-600">
                         <span>Rows per page:</span>
                         <select
@@ -303,9 +303,9 @@ export default function ActionTypesIndex({
 
             {(isCreateOpen || editingRow) && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-                    <div className="w-full max-w-xl rounded-xl bg-white p-6 shadow-xl">
+                    <div role="dialog" aria-modal="true" aria-labelledby="action-type-modal-title" className="max-h-[calc(100vh-2rem)] w-full max-w-xl overflow-y-auto rounded-2xl border border-[#e2e2df] bg-white p-6 shadow-2xl">
                         <div className="mb-4 flex items-center justify-between">
-                            <h3 className="text-lg font-semibold text-slate-800">
+                            <h3 id="action-type-modal-title" className="text-lg font-semibold text-slate-800">
                                 {editingRow ? 'Update Action Type' : 'Add Action Type'}
                             </h3>
 
