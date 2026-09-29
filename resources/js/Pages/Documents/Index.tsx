@@ -92,6 +92,7 @@ export default function DocumentsIndex({
 }) {
     const [editingRow, setEditingRow] = useState<DocumentItem | null>(null);
     const [viewingRow, setViewingRow] = useState<DocumentItem | null>(null);
+    const [printDocument, setPrintDocument] = useState<DocumentItem | null>(null);
     const [releasingRow, setReleasingRow] = useState<DocumentItem | null>(null);
     const [destinationOfficeId, setDestinationOfficeId] = useState('');
     const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -184,444 +185,7 @@ export default function DocumentsIndex({
         });
     };
 
-    const printDisposition = (document: DocumentItem) => {
-        const safe = (value?: string | null) => (value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character));
-        const popup = window.open('', '_blank', 'width=900,height=700');
-        if (!popup) return;
-        const image = (name: string) => `${window.location.origin}/images/${name}`;
-        const transactions = document.transactions ?? [];
-        const latest = transactions[0];
-        const transactionLines = transactions.map((entry) => {
-            const action = safe(entry.action || entry.status || 'Processed');
-            const actor = safe(entry.created_by || 'Unknown user');
-            const actionType = (entry.action || entry.status || '').toLowerCase();
-            const officeName = actionType.includes('releas')
-                ? entry.from_office || entry.holder || entry.to_office
-                : actionType.includes('receiv')
-                    ? entry.to_office || entry.holder || entry.from_office
-                    : entry.holder || entry.from_office || entry.to_office;
-            const office = safe(officeName || 'Unknown office');
-            const date = safe(entry.created_at || '');
-            const remarks = entry.remarks ? `<div class="trail-remarks">Remarks: '${safe(entry.remarks)}'</div>` : '';
-
-            return `${remarks}<div class="trail-action">&#10004; ${action} by ${actor} of ${office}${date ? ` at ${date}` : ''}</div>`;
-        }).join('');
-         popup.document.write(`<!doctype html>
-            <html>
-            <head>
-            <meta charset="utf-8">
-            <title>Disposition Form - ${safe(document.tracking_number)}</title>
-
-            <style>
-                @page {
-                    size: letter portrait;
-                    margin: 0.4in 0.45in;
-                }
-
-                * {
-                    box-sizing: border-box;
-                }
-
-                html, body {
-                    margin: 0;
-                    padding: 0;
-                    color: #111;
-                    font-family: Arial, Helvetica, sans-serif;
-                    font-size: 9pt;
-                }
-
-                .sheet {
-                    width: 100%;
-                    min-height: 10.2in;
-                    display: flex;
-                    flex-direction: column;
-                }
-
-                /* HEADER */
-                .header {
-                    display: block;
-                    width: 100%;
-                    height: auto;
-                    max-height: 1.2in;
-                    object-fit: contain;
-                    margin: 0 auto 8px;
-                }
-
-                .form-title {
-                    margin: 0 0 12px;
-                    text-align: center;
-                    font: bold 15pt Georgia, "Times New Roman", serif;
-                }
-
-                /* MAIN DETAILS TABLE */
-                .form-table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    table-layout: fixed;
-                    font-size: 8.3pt;
-                }
-
-                .form-table td {
-                    border: 1px solid #b9b9b9;
-                    padding: 4px 5px;
-                    vertical-align: middle;
-                    overflow-wrap: anywhere;
-                }
-
-                .form-table .field {
-                    width: 19%;
-                    font-size: 7.4pt;
-                    font-weight: bold;
-                    text-transform: uppercase;
-                }
-
-                .form-table .field-value {
-                    width: 58%;
-                    overflow-wrap: anywhere;
-                    word-break: normal;
-                }
-
-                .form-table .qr-cell {
-                    width: 23%;
-                    text-align: center;
-                    vertical-align: middle;
-                }
-
-                .qr-placeholder {
-                    width: 0.85in;
-                    height: 0.85in;
-                    margin: 0 auto 5px;
-                    border: 1px dashed #777;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    color: #555;
-                    font-size: 8pt;
-                    font-weight: bold;
-                }
-
-                .qr-note {
-                    font-size: 7pt;
-                    line-height: 1.4;
-                    overflow-wrap: anywhere;
-                }
-
-                /* REMARKS — OUTSIDE THE TABLE */
-                .remarks-section {
-                    width: 100%;
-                    margin-top: 5px;
-                    padding: 0;
-                    border: none;
-                    font-size: 8.5pt;
-                    overflow-wrap: anywhere;
-                }
-
-                .remarks-heading {
-                    display: flex;
-                    align-items: flex-start;
-                    gap: 12px;
-                    margin-bottom: 8px;
-                    line-height: 1.4;
-                }
-
-                .remarks-label {
-                    flex: 0 0 0.8in;
-                    font-size: 7.4pt;
-                    font-weight: bold;
-                    text-transform: uppercase;
-                }
-
-                .remarks-value {
-                    flex: 1;
-                    min-width: 0;
-                    white-space: pre-wrap;
-                    overflow-wrap: anywhere;
-                }
-
-                /* Transaction history */
-                .transaction-history {
-                    width: 100%;
-                    padding-left: 0.35in;
-                    line-height: 1.45;
-                    overflow-wrap: anywhere;
-                }
-
-                .transaction-history > * {
-                    max-width: 100%;
-                    overflow-wrap: anywhere;
-                }
-
-                .trail-remarks {
-                    margin: 4px 0 12px 0.3in;
-                }
-
-                .trail-action {
-                    margin: 0 0 8px;
-                }
-
-                /* FOOTER */
-                .form-footer {
-                    margin-top: auto;
-                    padding-top: 10px;
-                    border-top: 1px solid #aaa;
-                    width: 100%;
-                    break-inside: avoid;
-                    page-break-inside: avoid;
-                }
-
-                .footer-main {
-                    display: flex;
-                    align-items: center;
-                    gap: 10px;
-                    width: 100%;
-                }
-
-                .footer-logo {
-                    display: block;
-                    flex: 0 0 0.55in;
-                    width: 0.55in;
-                    height: 0.55in;
-                    object-fit: contain;
-                }
-
-                .footer-details {
-                    flex: 1;
-                    min-width: 0;
-                    text-align: left;
-                }
-
-                .footer-copy {
-                    font-size: 6.8pt;
-                    line-height: 1.4;
-                    overflow-wrap: anywhere;
-                }
-
-                .footer-copy strong {
-                    font-size: 8.5pt;
-                }
-
-                .contact-row {
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    flex-wrap: wrap;
-                    column-gap: 9px;
-                    row-gap: 3px;
-                    margin-top: 5px;
-                    font-size: 6.5pt;
-                    line-height: 1.3;
-                }
-
-                .contact-item {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 3px;
-                    white-space: nowrap;
-                }
-
-                .contact-icon {
-                    display: inline-block;
-                    width: 8px;
-                    height: 8px;
-                    object-fit: contain;
-                }
-
-                .tagline {
-                    display: block;
-                    width: calc(100% - 0.65in);
-                    height: auto;
-                    max-height: 0.24in;
-                    object-fit: contain;
-                    object-position: center;
-                    margin: 5px 0 0 auto;
-                }
-
-                @media print {
-                    html, body {
-                        width: 100%;
-                        background: #fff;
-                    }
-
-                    .sheet {
-                        width: 100%;
-                        min-height: 10.2in;
-                        margin: 0;
-                        padding: 0;
-                    }
-
-                    img {
-                        -webkit-print-color-adjust: exact;
-                        print-color-adjust: exact;
-                    }
-
-                    .form-footer {
-                        break-inside: avoid;
-                        page-break-inside: avoid;
-                    }
-                }
-
-                @media screen {
-                    body {
-                        background: #e5e7eb;
-                        padding: 20px;
-                    }
-
-                    .sheet {
-                        width: 7.6in;
-                        min-height: 10.2in;
-                        margin: auto;
-                        padding: 0.08in;
-                        background: #fff;
-                        box-shadow: 0 2px 18px #0002;
-                    }
-                }
-            </style>
-            </head>
-
-            <body>
-            <main class="sheet">
-
-                <img class="header"
-                    src="${image('header.png')}"
-                    alt="National Commission on Indigenous Peoples">
-
-                <h1 class="form-title">DISPOSITION FORM</h1>
-
-                <!-- MAIN INFORMATION TABLE: REMARKS ARE NOT INCLUDED -->
-                <table class="form-table">
-                    <tbody>
-                        <tr>
-                            <td class="field">TO/FOR:</td>
-                            <td class="field-value">
-                                ${safe(latest?.to_office) || 'Not specified'}
-                            </td>
-                            <td class="qr-cell" rowspan="6">
-                                <div class="qr-placeholder">QR<br>WIP</div>
-                                <div class="qr-note">
-                                    <strong>DOTS No.:</strong><br>
-                                    ${safe(document.tracking_number) || 'Not assigned'}
-                                </div>
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td class="field">FROM:</td>
-                            <td class="field-value">
-                                ${safe(latest?.from_office) || safe(document.office_name) || 'Not specified'}
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td class="field">SUBJECT:</td>
-                            <td class="field-value">
-                                ${safe(document.title) || '—'}
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td class="field">PURPOSE:</td>
-                            <td class="field-value">
-                                ${safe(document.purpose_type) || 'For Appropriate Action'}
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td class="field">DOCUMENT:</td>
-                            <td class="field-value">
-                                ${safe(getDocumentTypeName(document)) || 'No document attached'}
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td class="field">DATE CREATED:</td>
-                            <td class="field-value">
-                                ${safe(document.created_at) || '—'}
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-
-                <!-- REMARKS: SEPARATE SECTION WITHOUT TABLE BORDERS -->
-                <section class="remarks-section">
-
-                    <div class="remarks-heading">
-                        <div class="remarks-label">REMARKS:</div>
-                        <div class="remarks-value">
-                            ${safe(document.remarks) || ''}
-                        </div>
-                    </div>
-
-                    ${transactionLines ? `
-                        <div class="transaction-history">
-                            ${transactionLines}
-                        </div>
-                    ` : ''}
-
-                </section>
-
-                <!-- FOOTER -->
-                <footer class="form-footer">
-
-                    <div class="footer-main">
-
-                        <img class="footer-logo"
-                            src="${image('bagong-pilipinas.png')}"
-                            alt="Bagong Pilipinas">
-
-                        <div class="footer-details">
-
-                            <div class="footer-copy">
-                                <strong>AS - CASHIER</strong><br>
-                                6th and 7th Floors, Sunnymede IT Center,
-                                1614 Quezon Avenue, South Triangle,
-                                Quezon City 1103
-                            </div>
-
-                            <div class="contact-row">
-
-                                <span class="contact-item">
-                                    <img class="contact-icon"
-                                        src="${image('telephone-icon.png')}"
-                                        alt="">
-                                    (02) 875 1200
-                                </span>
-
-                                <span class="contact-item">
-                                    <img class="contact-icon"
-                                        src="${image('website-icon.png')}"
-                                        alt="">
-                                    ncip.gov.ph
-                                </span>
-
-                                <span class="contact-item">
-                                    <img class="contact-icon"
-                                        src="${image('email-icon.png')}"
-                                        alt="">
-                                    csc@ncip.gov.ph
-                                </span>
-
-                            </div>
-                        </div>
-                    </div>
-
-                    <img class="tagline"
-                        src="${image('ncip-footer.png')}"
-                        alt="Masaganang Katutubong Pamayanan: Sandigan ng Pambansang Kaunlaran">
-
-                </footer>
-
-            </main>
-
-            <script>
-                window.addEventListener('load', () => {
-                    setTimeout(() => window.print(), 300);
-                });
-            </script>
-            </body>
-            </html>`);
-            popup.document.close();
-        };
-
+    const printDisposition = (document: DocumentItem) => setPrintDocument(document);
     const handleUpdate = (e: React.FormEvent, finalize: boolean) => {
         e.preventDefault();
 
@@ -706,6 +270,26 @@ export default function DocumentsIndex({
         }
     }, [page, totalPages]);
 
+    useEffect(() => {
+        if (!printDocument) return;
+
+        let cancelled = false;
+        const onAfterPrint = () => setPrintDocument(null);
+        window.addEventListener('afterprint', onAfterPrint);
+        const timeout = window.setTimeout(async () => {
+            const printRoot = window.document.querySelector('.disposition-print-root');
+            const images = Array.from(printRoot?.querySelectorAll('img') ?? []);
+            await Promise.all(images.map((image) => image.decode().catch(() => undefined)));
+            if (!cancelled) window.print();
+        }, 100);
+
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timeout);
+            window.removeEventListener('afterprint', onAfterPrint);
+        };
+    }, [printDocument]);
+
     const paginatedDocuments = sortedDocuments.slice((page - 1) * perPage, page * perPage);
 
     return (
@@ -719,9 +303,12 @@ export default function DocumentsIndex({
                     body * { visibility: hidden !important; }
                     .print-table-only, .print-table-only * { visibility: visible !important; }
                     .print-table-only { position: absolute; left: 0; top: 0; width: 100%; padding: 0; margin: 0; }
+                    .disposition-print-root, .disposition-print-root * { visibility: visible !important; }
+                    .disposition-print-root { display: none; }
+                    .disposition-print-root[data-printing="true"] { display: block !important; position: absolute; left: 0; top: 0; z-index: 99999; width: 100%; background: #fff; }
                     .no-print { display: none !important; }
-                    table { width: 100% !important; }
-                    th, td { font-size: 11px !important; }
+                    .print-table-only table { width: 100% !important; }
+                    .print-table-only th, .print-table-only td { font-size: 11px !important; }
                 }
             `}</style>
 
@@ -1031,7 +618,113 @@ export default function DocumentsIndex({
                     </div>
                 </div>
             )}
+
+            {printDocument && <DispositionPrintView document={printDocument} />}
         </AuthenticatedLayout>
+    );
+}
+
+function DispositionPrintView({ document }: { document: DocumentItem }) {
+    const transactions = document.transactions ?? [];
+    const latest = transactions[0];
+    const image = (name: string) => `/images/${name}`;
+
+    return (
+        <article className="disposition-print-root" data-printing="true">
+            <style>{`
+                @page { size: letter portrait; margin: 0.4in 0.45in; }
+                .disposition-sheet { width: 100%; min-height: 10.2in; display: flex; flex-direction: column; color: #111; font: 9pt Arial, Helvetica, sans-serif; }
+                .disposition-header { display: block; width: 100%; max-height: 1.2in; object-fit: contain; margin: 0 auto 8px; }
+                .disposition-title { margin: 0 0 12px; text-align: center; font: bold 12pt Georgia, 'Times New Roman', serif; }
+                .disposition-fields { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8.3pt; }
+                .disposition-fields td { border: 1px solid #b9b9b9; padding: 4px 5px; vertical-align: middle; overflow-wrap: anywhere; }
+                .disposition-fields .field-label { width: 19%; font-size: 7.4pt; font-weight: bold; text-transform: uppercase; }
+                .disposition-fields .field-value { width: 58%; }
+                .disposition-fields .qr-cell { width: 23%; text-align: center; }
+                .disposition-qr { width: .85in; height: .85in; margin: 0 auto 5px; border: 1px dashed #777; display: flex; align-items: center; justify-content: center; color: #555; font-size: 8pt; font-weight: bold; }
+                .disposition-qr-note { font-size: 7pt; line-height: 1.4; overflow-wrap: anywhere; }
+                .disposition-remarks { margin-top: 5px; font-size: 8.5pt; overflow-wrap: anywhere; }
+                .disposition-remarks-heading { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 8px; line-height: 1.4; }
+                .disposition-remarks-label { flex: 0 0 .8in; font-size: 7.4pt; font-weight: bold; text-transform: uppercase; }
+                .disposition-remarks-value { flex: 1; min-width: 0; white-space: pre-wrap; }
+                .disposition-trails { padding-left: .35in; line-height: 1.45; overflow-wrap: anywhere; }
+                .disposition-trail-remarks { margin: 4px 0 12px .3in; }
+                .disposition-trail-action { margin: 0 0 8px; }
+                .disposition-footer { margin-top: auto; padding-top: 10px; border-top: 1px solid #aaa; width: 100%; break-inside: avoid; page-break-inside: avoid; }
+                .disposition-footer-main { display: flex; align-items: center; gap: 10px; width: 100%; }
+                .disposition-logo { flex: 0 0 .55in; width: .60in; height: .60in; object-fit: contain; }
+                .disposition-footer-details { flex: 1; min-width: 0; }
+                .disposition-footer-copy { font-size: 6.8pt; line-height: 1.4; }
+                .disposition-footer-copy strong { font-size: 8.5pt; }
+                .disposition-contact-row { display: flex; justify-content: left; flex-wrap: wrap; gap: 3px 9px; font-size: 6.5pt; line-height: 1.3; }
+                .disposition-contact-item { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+                .disposition-contact-icon { width: 8px; height: 8px; object-fit: contain; }
+.disposition-tagline {
+    display: block;
+    width: calc(100% - .60in - 10px);
+    max-height: .20in;
+    object-fit: contain;
+    object-position: left center;
+    margin: 0;
+}                @media print { .disposition-sheet { min-height: 10.2in; } .disposition-print-root img { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+                @media screen { .disposition-print-root { display: none; } }
+            `}</style>
+            <main className="disposition-sheet">
+                <img className="disposition-header" src={image('header.png')} alt="National Commission on Indigenous Peoples" />
+                <h1 className="disposition-title">DISPOSITION FORM</h1>
+                <table className="disposition-fields">
+                    <tbody>
+                        <tr>
+                            <td className="field-label">TO/FOR:</td>
+                            <td className="field-value">{latest?.to_office || 'Not specified'}</td>
+                            <td className="qr-cell" rowSpan={6}>
+                                <div className="disposition-qr">QR<br />WIP</div>
+                                <div className="disposition-qr-note"><strong>DOTS No.:</strong><br />{document.tracking_number || 'Not assigned'}</div>
+                            </td>
+                        </tr>
+                        <tr><td className="field-label">FROM:</td><td className="field-value">{latest?.from_office || document.office_name || 'Not specified'}</td></tr>
+                        <tr><td className="field-label">SUBJECT:</td><td className="field-value">{document.title || '—'}</td></tr>
+                        <tr><td className="field-label">PURPOSE:</td><td className="field-value">{document.purpose_type || 'For Appropriate Action'}</td></tr>
+                        <tr><td className="field-label">DOCUMENT:</td><td className="field-value">{getDocumentTypeName(document) || 'No document attached'}</td></tr>
+                        <tr><td className="field-label">DATE CREATED:</td><td className="field-value">{document.created_at || '—'}</td></tr>
+                    </tbody>
+                </table>
+                <section className="disposition-remarks">
+                    <div className="disposition-remarks-heading">
+                        <strong className="disposition-remarks-label">REMARKS:</strong>
+                        <div className="disposition-remarks-value">{document.remarks || ''}</div>
+                    </div>
+                    {transactions.length > 0 && <div className="disposition-trails">
+                        {transactions.map((entry, index) => {
+                            const actionType = (entry.action || entry.status || '').toLowerCase();
+                            const office = actionType.includes('releas')
+                                ? entry.from_office || entry.holder || entry.to_office
+                                : actionType.includes('receiv')
+                                    ? entry.to_office || entry.holder || entry.from_office
+                                    : entry.holder || entry.from_office || entry.to_office;
+                            return <div key={`${entry.created_at ?? 'trail'}-${index}`}>
+                                {entry.remarks && <div className="disposition-trail-remarks">Remarks: '{entry.remarks}'</div>}
+                                <div className="disposition-trail-action">✔ {entry.action || entry.status || 'Processed'} by {entry.created_by || 'Unknown user'} of {office || 'Unknown office'}{entry.created_at ? ` at ${entry.created_at}` : ''}</div>
+                            </div>;
+                        })}
+                    </div>}
+                </section>
+                <footer className="disposition-footer">
+                    <div className="disposition-footer-main">
+                        <img className="disposition-logo" src={image('bagong-pilipinas.png')} alt="Bagong Pilipinas" />
+                        <div className="disposition-footer-details">
+                                <div className="disposition-footer-copy"><strong>{(document.office_name || latest?.from_office || 'Office not assigned').toUpperCase()}</strong><br />6th and 7th Floors, Sunnymede IT Center, 1614 Quezon Avenue, South Triangle, Quezon City 1103</div>
+                            <div className="disposition-contact-row">
+                                <span className="disposition-contact-item"><img className="disposition-contact-icon" src={image('telephone-icon.png')} alt="" />(02) 875 1200</span>
+                                <span className="disposition-contact-item"><img className="disposition-contact-icon" src={image('website-icon.png')} alt="" />ncip.gov.ph</span>
+                                <span className="disposition-contact-item"><img className="disposition-contact-icon" src={image('email-icon.png')} alt="" />csc@ncip.gov.ph</span>
+                            </div>
+                            <img className="disposition-tagline" src={image('ncip-footer.png')} alt="Masaganang Katutubong Pamayanan: Sandigan ng Pambansang Kaunlaran" />
+                        </div>
+                    </div>
+                </footer>
+            </main>
+        </article>
     );
 }
 

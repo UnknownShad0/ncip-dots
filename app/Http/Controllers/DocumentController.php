@@ -81,7 +81,7 @@ class DocumentController extends Controller
         $legacyTrackingNumbers = $legacyDocuments->pluck('trackingNo')->filter()->unique()->values();
         $legacyTrailRows = DocumentTrailLegacy::query()
             ->whereIn('trackingNo', $legacyTrackingNumbers)
-            ->select(['docTrailId', 'trackingNo', 'status', 'action', 'createdBy', 'dateCreated', 'originating', 'receiving', 'holder'])
+            ->select(['docTrailId', 'trackingNo', 'status', 'action', 'remarks', 'createdBy', 'dateCreated', 'originating', 'receiving', 'holder'])
             ->orderByDesc('dateCreated')
             ->orderByDesc('docTrailId')
             ->get();
@@ -120,6 +120,7 @@ class DocumentController extends Controller
         $legacyDocuments = $legacyDocuments
             ->map(function ($document) use ($legacyTransactions, $legacyTransactionUsers, $legacyDocumentTypes, $legacyTransactionsByDocument, $legacyBureaus) {
                 $transaction = $legacyTransactions->get($document->trackingNo);
+                $originatingBureauId = $legacyTransactionsByDocument->get($document->trackingNo, collect())->last()?->originating;
                 $typeName = $legacyDocumentTypes->get($document->dtId)?->name ?? '';
 
                 if (strtolower($typeName) === 'others' && filled($document->otherDtype)) {
@@ -135,8 +136,9 @@ class DocumentController extends Controller
                     'id' => $document->docId,
                     'tracking_number' => $document->trackingNo ?? '',
                     'title' => $document->title ?? '',
+                    'created_at' => $document->dateCreated?->format('F j Y h:i:s A'),
                     'status' => $status,
-                    'office_name' => '',
+                    'office_name' => $legacyBureaus->get($originatingBureauId)?->longName ?? $legacyBureaus->get($originatingBureauId)?->shortName ?? '',
                     'document_type' => $typeName,
                     'origin_type' => $document->originType ?? '',
                     'last_transaction' => $this->formatLastTransaction(
@@ -148,11 +150,12 @@ class DocumentController extends Controller
                     'transactions' => $legacyTransactionsByDocument->get($document->trackingNo, collect())->map(fn ($trail) => [
                         'action' => $trail->action ?: ucfirst(strtolower((string) $trail->status)),
                         'status' => $trail->status,
+                        'remarks' => $trail->remarks,
                         'from_office' => $legacyBureaus->get($trail->originating)?->shortName ?? $legacyBureaus->get($trail->originating)?->longName,
                         'to_office' => $legacyBureaus->get($trail->receiving)?->shortName ?? $legacyBureaus->get($trail->receiving)?->longName,
                         'holder' => $legacyBureaus->get($trail->holder)?->shortName ?? $legacyBureaus->get($trail->holder)?->longName,
                         'created_by' => $legacyTransactionUsers->get($trail->createdBy) ?? $trail->createdBy,
-                        'created_at' => $trail->dateCreated?->format('M j, Y g:i A'),
+                        'created_at' => $trail->dateCreated?->format('F j Y h:i:s A'),
                     ])->values(),
                     'remarks' => $document->remarks ?? '',
                     'source' => 'Old DB',
@@ -167,7 +170,7 @@ class DocumentController extends Controller
             $newDocumentQuery->where('created_at', '>=', now()->subDays(15));
         }
         $newDocuments = $newDocumentQuery
-            ->with(['office', 'documentType', 'latestTrail.creator', 'latestTrail.fromOffice', 'latestTrail.toOffice', 'trails.creator', 'trails.fromOffice', 'trails.toOffice'])
+            ->with(['office', 'documentType', 'purposeType', 'latestTrail.creator', 'latestTrail.fromOffice', 'latestTrail.toOffice', 'trails.creator', 'trails.fromOffice', 'trails.toOffice'])
             ->select(['id', 'tracking_number', 'title', 'status', 'office_id', 'created_by', 'is_finalized', 'remarks', 'document_type_id', 'action_type_id', 'purpose_type_id', 'origin_type', 'received_from', 'urgent', 'notify_by_email', 'created_at'])
             ->orderBy('created_at', 'desc')
             ->limit(200)
@@ -191,18 +194,20 @@ class DocumentController extends Controller
                     'status' => $this->workflowStatus($document->latestTrail?->status ?? $document->status),
                     'office_name' => $document->office?->name ?? '',
                     'document_type' => $document->documentType?->name ?? '',
+                    'purpose_type' => $document->purposeType?->name ?? '',
                     'origin_type' => $document->origin_type ?? '',
                     'last_transaction' => $this->formatTrailTransaction($document->latestTrail),
                     'transactions' => $document->trails->sortByDesc('id')->values()->map(fn (DocumentTrail $trail) => [
                         'action' => $trail->action ?: ucfirst(strtolower((string) $trail->status)),
                         'status' => $trail->status,
+                        'remarks' => $trail->remarks,
                         'from_office' => $trail->fromOffice?->name,
                         'to_office' => $trail->toOffice?->name,
                         'holder' => $trail->toOffice?->name,
                         'created_by' => $trail->creator?->name,
-                        'created_at' => $trail->created_at?->format('M j, Y g:i A'),
+                        'created_at' => $trail->created_at?->format('F j Y h:i:s A'),
                     ]),
-                    'created_at' => $document->created_at?->format('M j, Y g:i A'),
+                    'created_at' => $document->created_at?->format('F j Y h:i:s A'),
                     'remarks' => $document->remarks ?? '',
                     'document_type_id' => $document->document_type_id,
                     'action_type_id' => $document->action_type_id,
@@ -288,7 +293,10 @@ class DocumentController extends Controller
             $userOffice = $officeId ? Office::query()->find($officeId) : null;
             $date = now();
             $officeName = $userOffice?->name ?: 'DOTS';
-            $bureauPrefix = preg_replace('/\s+/', '-', trim($officeName));
+            $bureauPrefix = trim(
+                preg_replace('/-+/', '-', preg_replace('/\s+/', '-', trim($officeName))),
+                '-'
+            );
 
             $document = Document::create([
                 'title' => $validated['title'],
