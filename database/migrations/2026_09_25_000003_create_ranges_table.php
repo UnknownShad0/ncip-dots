@@ -19,6 +19,10 @@ return new class extends Migration
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
         });
+
+        Schema::table('offices', function (Blueprint $table) {
+            $table->foreign('range_id')->references('id')->on('ranges')->nullOnDelete();
+        });
     }
 
     /**
@@ -26,6 +30,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        Schema::table('offices', function (Blueprint $table) {
+            $table->dropForeign(['range_id']);
+        });
+
         Schema::dropIfExists('ranges');
     }
 };

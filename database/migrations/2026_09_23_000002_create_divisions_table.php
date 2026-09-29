@@ -18,6 +18,11 @@ return new class extends Migration
             $table->string('code')->nullable();
             $table->timestamps();
         });
+
+        Schema::table('users', function (Blueprint $table) {
+            $table->foreign('office_id')->references('id')->on('offices')->nullOnDelete();
+            $table->foreign('division_id')->references('id')->on('divisions')->nullOnDelete();
+        });
     }
 
     /**
@@ -25,6 +30,11 @@ return new class extends Migration
      */
     public function down(): void
     {
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropForeign(['office_id']);
+            $table->dropForeign(['division_id']);
+        });
+
         Schema::dropIfExists('divisions');
     }
 };

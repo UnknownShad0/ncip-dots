@@ -274,7 +274,14 @@ export default function DocumentsIndex({
         if (!printDocument) return;
 
         let cancelled = false;
-        const onAfterPrint = () => setPrintDocument(null);
+        const clearDispositionPrintMode = () => {
+            window.document.body.classList.remove('disposition-printing');
+        };
+        const onAfterPrint = () => {
+            clearDispositionPrintMode();
+            setPrintDocument(null);
+        };
+        window.document.body.classList.add('disposition-printing');
         window.addEventListener('afterprint', onAfterPrint);
         const timeout = window.setTimeout(async () => {
             const printRoot = window.document.querySelector('.disposition-print-root');
@@ -287,6 +294,7 @@ export default function DocumentsIndex({
             cancelled = true;
             window.clearTimeout(timeout);
             window.removeEventListener('afterprint', onAfterPrint);
+            clearDispositionPrintMode();
         };
     }, [printDocument]);
 
@@ -303,9 +311,12 @@ export default function DocumentsIndex({
                     body * { visibility: hidden !important; }
                     .print-table-only, .print-table-only * { visibility: visible !important; }
                     .print-table-only { position: absolute; left: 0; top: 0; width: 100%; padding: 0; margin: 0; }
-                    .disposition-print-root, .disposition-print-root * { visibility: visible !important; }
                     .disposition-print-root { display: none; }
-                    .disposition-print-root[data-printing="true"] { display: block !important; position: absolute; left: 0; top: 0; z-index: 99999; width: 100%; background: #fff; }
+                    body.disposition-printing * { visibility: hidden !important; }
+                    body.disposition-printing .print-table-only { display: none !important; }
+                    body.disposition-printing .disposition-print-root,
+                    body.disposition-printing .disposition-print-root * { visibility: visible !important; }
+                    body.disposition-printing .disposition-print-root[data-printing="true"] { display: block !important; position: absolute; left: 0; top: 0; z-index: 99999; width: 100%; background: #fff; }
                     .no-print { display: none !important; }
                     .print-table-only table { width: 100% !important; }
                     .print-table-only th, .print-table-only td { font-size: 11px !important; }

@@ -15,6 +15,8 @@ return new class extends Migration
             $table->foreignId('to_office_id')->nullable()->constrained('offices')->nullOnDelete();
             $table->foreignId('assigned_to_user_id')->nullable()->constrained('users')->nullOnDelete();
             $table->string('status')->default('pending');
+            $table->text('action')->nullable();
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->text('remarks')->nullable();
             $table->timestamps();
         });

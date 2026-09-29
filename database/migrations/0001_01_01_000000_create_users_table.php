@@ -14,7 +14,20 @@ return new class extends Migration
         Schema::create('users', function (Blueprint $table) {
             $table->id();
             $table->string('name');
+            $table->string('username', 50)->nullable()->unique();
+            $table->string('firstname', 100)->nullable();
+            $table->string('lastname', 100)->nullable();
+            $table->string('middlename', 100)->nullable();
+            $table->string('extensionname', 100)->nullable();
             $table->string('email')->unique();
+            $table->string('role')->default('user');
+            $table->unsignedInteger('role_id')->nullable()->index();
+            $table->foreignId('office_id')->nullable();
+            $table->unsignedInteger('legacy_bureau_id')->nullable()->index();
+            $table->foreignId('division_id')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->boolean('is_locked')->default(false);
+            $table->timestamp('last_login_at')->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->rememberToken();
