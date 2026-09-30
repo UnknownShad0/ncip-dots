@@ -75,7 +75,7 @@ class DocumentController extends Controller
         $legacyDocuments = $legacyDocumentQuery
             ->select([
                 'docId', 'trackingNo', 'dtId', 'otherDtype', 'purpose', 'originType', 'title', 'remarks',
-                'Archived', 'createdBy', 'dateCreated', 'isFinalized',
+                'Archived', 'createdBy', 'dateCreated', 'isFinalized', 'urgent',
             ])
             ->orderBy('dateCreated', 'desc')
             ->limit(200)
@@ -142,6 +142,7 @@ class DocumentController extends Controller
                     'other_document_type' => $document->otherDtype ?? '',
                     'purpose_type' => $document->purpose ?? '',
                     'created_by_name' => $legacyTransactionUsers->get($document->createdBy) ?? $document->createdBy,
+                    'urgent' => $document->urgent ?? null,
                     'origin_type' => $document->originType ?? '',
                     'last_transaction' => $this->formatLastTransaction(
                         $transaction?->action,

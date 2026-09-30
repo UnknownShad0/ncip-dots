@@ -41,7 +41,7 @@ type DocumentItem = {
     other_document_type?: string | null;
     other_purpose?: string | null;
     purpose_type_id?: number | null;
-    urgent?: boolean;
+    urgent?: boolean | string | null;
     notify_by_email?: boolean;
     is_finalized?: boolean;
     can_update?: boolean;
@@ -95,6 +95,15 @@ const getStatusClasses = (status?: string) => {
         default:
             return 'bg-slate-100 text-slate-700';
     }
+};
+
+const getTransactionClasses = (action?: string | null, status?: string | null) => {
+    const label = (action || status || '').toLowerCase();
+
+    if (label.includes('terminal')) return 'bg-violet-100 text-violet-800';
+    if (label.includes('receiv')) return 'bg-emerald-100 text-emerald-800';
+    if (label.includes('finaliz')) return 'bg-blue-100 text-blue-800';
+    return 'bg-sky-50 text-sky-800';
 };
 
 export default function DocumentsIndex({
@@ -389,6 +398,13 @@ export default function DocumentsIndex({
             {crudAlert && <CrudAlertModal {...crudAlert} onClose={() => setCrudAlert(null)} />}
 
             <style>{`
+                .urgent-document-row > td,
+                .urgent-document-row:hover > td {
+                    background-color: rgb(255 241 242 / 90%) !important;
+                }
+                .urgent-document-row > td:first-child {
+                    border-left: 3px solid #e11d48;
+                }
                 @media print {
                     body * { visibility: hidden !important; }
                     .print-table-only, .print-table-only * { visibility: visible !important; }
@@ -512,14 +528,16 @@ export default function DocumentsIndex({
                             ) : (
                                 paginatedDocuments.map((document, index) => {
                                     const isLegacy = document.source === 'Old DB';
+                                    const isUrgent = document.urgent === true || (typeof document.urgent === 'string' && document.urgent.trim().toLowerCase() === 'yes');
 
                                     return (
                                         <tr
                                             key={document.id ?? `${document.tracking_number ?? 'doc'}-${index}`}
-                                            className="border-t border-[#eeeeeb] transition-colors hover:bg-[#fafaf8]"
+                                            className={`${isUrgent ? 'urgent-document-row' : ''} border-t border-[#eeeeeb] transition-colors hover:bg-[#fafaf8]`}
                                         >
                                             <td className="whitespace-nowrap px-4 py-4 text-xs font-semibold text-blue-800">
                                                 <span className="font-mono">{document.tracking_number || 'N/A'}</span>
+                                                {isUrgent && <span className="ml-2 inline-flex rounded-full bg-rose-100 px-2 py-0.5 font-sans text-[10px] font-bold uppercase text-rose-800">Urgent</span>}
                                                 {isLegacy && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 font-sans text-[10px] font-medium text-slate-600">Legacy</span>}
                                             </td>
                                             <td className="min-w-[190px] px-4 py-4 font-medium text-[#242424]">
@@ -542,7 +560,7 @@ export default function DocumentsIndex({
                                             </td>
                                             <td className="min-w-[240px] px-4 py-3">
                                                 {document.transactions?.[0] ? <div className="flex flex-col gap-1.5">
-                                                    <span className="w-fit rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800">{document.transactions[0].action || document.transactions[0].status || 'Transaction'}</span>
+                                                    <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${getTransactionClasses(document.transactions[0].action, document.transactions[0].status)}`}>{document.transactions[0].action || document.transactions[0].status || 'Transaction'}</span>
                                                     <span className="text-xs text-slate-600">{[document.transactions[0].from_office, document.transactions[0].to_office].filter(Boolean).join(' → ') || document.transactions[0].holder || 'Office not recorded'}</span>
                                                     <span className="text-[11px] text-slate-400">{document.transactions[0].created_at || document.transactions[0].created_by || '—'}</span>
                                                 </div> : <span className="text-sm text-slate-400">No transactions</span>}
