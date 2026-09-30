@@ -51,7 +51,7 @@ type DocumentItem = {
     can_delete?: boolean;
 };
 
-type LibraryOption = { id: number | string; name: string; source?: string };
+type LibraryOption = { id: number | string; name: string; source?: string; disabled?: boolean };
 type CrudAlert = { title: string; message: string; onConfirm?: () => void; confirmLabel?: string; isDestructive?: boolean };
 
 type SortKey = 'tracking_number' | 'title' | 'document_type' | 'origin_type' | 'status' | 'office_name' | 'last_transaction';
@@ -711,7 +711,7 @@ export default function DocumentsIndex({
                                     <label htmlFor="release-office" className="mb-1 block text-sm font-medium text-slate-700">Required Receiving Office <span className="text-rose-600">*</span></label>
                                     <select id="release-office" required value={releaseForm.officeId} onChange={(event) => { setReleaseForm({ ...releaseForm, officeId: event.target.value }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
                                         <option value="">Select receiving office</option>
-                                        {offices.filter((office) => /^\d+$/.test(String(office.id))).map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}
+                                        {offices.map((office) => <option key={office.id} value={office.id} disabled={office.disabled}>{office.name}</option>)}
                                     </select>
                                 </div>
                                 <div className="sm:col-span-2">
