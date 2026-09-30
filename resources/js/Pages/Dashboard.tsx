@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import CrudAlertModal from '@/Components/CrudAlertModal';
 import { Head, router } from '@inertiajs/react';
 import { Archive, ArrowDownToLine, FileClock, Files, Search, Send } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -27,6 +28,8 @@ type IncomingDocument = {
     from_office?: string | null;
     creator_name?: string | null;
 };
+
+type CrudAlert = { title: string; message: string; onConfirm?: () => void; confirmLabel?: string };
 
 const formatNumber = (value?: number | string) => {
     const number = Number(value ?? 0);
@@ -60,6 +63,7 @@ export default function Dashboard({
     const [trackingNumber, setTrackingNumber] = useState('');
     const [receiveError, setReceiveError] = useState('');
     const [receivingId, setReceivingId] = useState<number | null>(null);
+    const [crudAlert, setCrudAlert] = useState<CrudAlert | null>(null);
     const documents = useMemo(() => recentDocuments.filter((document) => {
         const search = query.trim().toLowerCase();
         return !search || [document.title, document.tracking_number, document.office?.name].some((value) => value?.toLowerCase().includes(search));
@@ -77,9 +81,24 @@ export default function Dashboard({
         setReceiveError('');
         router.post(`/documents/${document.id}/receive`, {}, {
             preserveScroll: true,
-            onSuccess: () => setTrackingNumber(''),
+            onSuccess: () => {
+                setTrackingNumber('');
+                setCrudAlert({ title: 'Document received', message: 'Document received successfully.' });
+            },
             onError: (errors) => setReceiveError(errors.tracking_number ?? 'Could not receive this document. Refresh the incoming list and try again.'),
             onFinish: () => setReceivingId(null),
+        });
+    };
+
+    const confirmReceive = (document: IncomingDocument) => {
+        setCrudAlert({
+            title: 'Receive document?',
+            message: `Confirm receipt of ${document.tracking_number || 'this document'}?`,
+            confirmLabel: 'Receive',
+            onConfirm: () => {
+                setCrudAlert(null);
+                receive(document);
+            },
         });
     };
 
@@ -90,7 +109,7 @@ export default function Dashboard({
             setReceiveError('No available incoming document matches that tracking number.');
             return;
         }
-        receive(document);
+        confirmReceive(document);
     };
 
     const cards = [
@@ -139,6 +158,7 @@ export default function Dashboard({
             </div>
         }>
             <Head title="Dashboard" />
+            {crudAlert && <CrudAlertModal {...crudAlert} onClose={() => setCrudAlert(null)} />}
             <div className="mx-auto max-w-[1280px]">
                 <section aria-label="Document summary" className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     {cards.map(({ label, value, detail, icon: Icon, tone, iconTone }) => (
@@ -187,7 +207,7 @@ export default function Dashboard({
                                         <p className="truncate font-medium text-slate-800">{document.title || 'Untitled document'}</p>
                                         <p className="mt-0.5 truncate text-sm text-[#73736e]">{[document.tracking_number, document.from_office && `From ${document.from_office}`].filter(Boolean).join(' · ')}</p>
                                     </div>
-                                    <button type="button" onClick={() => receive(document)} disabled={receivingId !== null} className="shrink-0 rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50">
+                                    <button type="button" onClick={() => confirmReceive(document)} disabled={receivingId !== null} className="shrink-0 rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50">
                                         {receivingId === document.id ? 'Receiving…' : 'Receive'}
                                     </button>
                                 </div>

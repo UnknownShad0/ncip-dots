@@ -1,7 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import CrudAlertModal from '@/Components/CrudAlertModal';
 import { Head, router } from '@inertiajs/react';
-import { Archive, ArrowDownUp, ChevronLeft, ChevronRight, Eye, FilePlus2, Inbox, Pencil, Printer, Search, Send, Trash2 } from 'lucide-react';
+import { Archive, ArrowDownUp, ChevronLeft, ChevronRight, Eye, FilePlus2, FileText, Inbox, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 
@@ -14,6 +14,9 @@ type DocumentItem = {
     document_type?: string | { name?: string } | null;
     purpose_type?: string;
     documentType?: { name?: string } | null;
+    created_by_name?: string;
+    file_name?: string;
+    file_url?: string;
     origin_type?: string;
     last_transaction?: string;
     created_at?: string;
@@ -33,6 +36,10 @@ type DocumentItem = {
     remarks?: string;
     source?: string;
     document_type_id?: number | null;
+    action_type_id?: number | null;
+    other_action?: string | null;
+    other_document_type?: string | null;
+    other_purpose?: string | null;
     purpose_type_id?: number | null;
     urgent?: boolean;
     notify_by_email?: boolean;
@@ -51,8 +58,19 @@ type SortKey = 'tracking_number' | 'title' | 'document_type' | 'origin_type' | '
 
 const getDocumentTypeName = (document: DocumentItem): string => {
     const type = document.document_type ?? document.documentType;
-    return typeof type === 'string' ? type : type?.name ?? '';
+    const name = typeof type === 'string' ? type : type?.name ?? '';
+    return name.trim().toLowerCase() === 'others' && document.other_document_type
+        ? `${name} (${document.other_document_type})`
+        : name;
 };
+
+const getPurposeTypeName = (document: DocumentItem): string =>
+    (document.purpose_type ?? '').trim().toLowerCase() === 'others' && document.other_purpose
+        ? `Others (${document.other_purpose})`
+        : document.purpose_type ?? '';
+
+const isOtherOption = (value: string, options: LibraryOption[]) =>
+    options.find((option) => String(option.id) === value)?.name.trim().toLowerCase() === 'others';
 
 const getStatusClasses = (status?: string) => {
     const normalized = (status ?? 'pending').toLowerCase();
@@ -83,21 +101,27 @@ export default function DocumentsIndex({
     documents = [],
     title = 'All Documents',
     documentTypes = [],
+    actionTypes = [],
     purposeTypes = [],
     offices = [],
+    maxUploadSizeKb,
 }: {
     documents?: DocumentItem[];
     title?: string;
     documentTypes?: LibraryOption[];
+    actionTypes?: LibraryOption[];
     purposeTypes?: LibraryOption[];
     offices?: LibraryOption[];
+    maxUploadSizeKb: number;
 }) {
+    const uploadLimitKb = Number(maxUploadSizeKb ?? 0);
     const [editingRow, setEditingRow] = useState<DocumentItem | null>(null);
     const [crudAlert, setCrudAlert] = useState<CrudAlert | null>(null);
     const [viewingRow, setViewingRow] = useState<DocumentItem | null>(null);
     const [printDocument, setPrintDocument] = useState<DocumentItem | null>(null);
     const [releasingRow, setReleasingRow] = useState<DocumentItem | null>(null);
-    const [destinationOfficeId, setDestinationOfficeId] = useState('');
+    const [releaseForm, setReleaseForm] = useState({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', file: null as File | null });
+    const [releaseError, setReleaseError] = useState('');
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
@@ -111,7 +135,11 @@ export default function DocumentsIndex({
         origin_type: '',
         remarks: '',
         document_type_id: '',
+        other_document_type: '',
+        action_type_id: '',
+        other_action: '',
         purpose_type_id: '',
+        other_purpose: '',
         urgent: false,
         notify_by_email: false,
         file: null as File | null,
@@ -126,7 +154,11 @@ export default function DocumentsIndex({
             origin_type: '',
             remarks: '',
             document_type_id: '',
+            other_document_type: '',
+            action_type_id: '',
+            other_action: '',
             purpose_type_id: '',
+            other_purpose: '',
             urgent: false,
             notify_by_email: false,
             file: null,
@@ -145,7 +177,11 @@ export default function DocumentsIndex({
             origin_type: row.origin_type ?? '',
             remarks: row.remarks ?? '',
             document_type_id: row.document_type_id ? String(row.document_type_id) : '',
+            other_document_type: row.other_document_type ?? '',
+            action_type_id: row.action_type_id ? String(row.action_type_id) : '',
+            other_action: row.other_action ?? '',
             purpose_type_id: row.purpose_type_id ? String(row.purpose_type_id) : '',
+            other_purpose: row.other_purpose ?? '',
             urgent: Boolean(row.urgent),
             notify_by_email: Boolean(row.notify_by_email),
             file: null,
@@ -161,7 +197,11 @@ export default function DocumentsIndex({
             origin_type: '',
             remarks: '',
             document_type_id: '',
+            other_document_type: '',
+            action_type_id: '',
+            other_action: '',
             purpose_type_id: '',
+            other_purpose: '',
             urgent: false,
             notify_by_email: false,
             file: null,
@@ -185,13 +225,36 @@ export default function DocumentsIndex({
 
     const handleRelease = (event: FormEvent) => {
         event.preventDefault();
-        if (!releasingRow?.id || !destinationOfficeId) return;
-        router.post(`/documents/${releasingRow.id}/release`, { to_office_id: destinationOfficeId }, {
+        if (!releasingRow?.id) return;
+
+        const selectedAction = actionTypes.find((action) => String(action.id) === releaseForm.actionTypeId);
+        const needsOtherAction = selectedAction?.name.trim().toLowerCase() === 'others';
+        if (!releaseForm.actionTypeId || !releaseForm.officeId || (needsOtherAction && !releaseForm.otherAction.trim())) {
+            setReleaseError('Complete the required fields before submitting.');
+            return;
+        }
+        if (releaseForm.file && releaseForm.file.size > uploadLimitKb * 1024) {
+            setReleaseError(`The selected file must be ${uploadLimitKb / 1024} MB or smaller.`);
+            return;
+        }
+        if (releaseForm.file && !/\.(pdf|jpe?g|png)$/i.test(releaseForm.file.name)) {
+            setReleaseError('Choose a PDF, JPG, or PNG file.');
+            return;
+        }
+
+        router.post(`/documents/${releasingRow.id}/release`, {
+            action_type_id: releaseForm.actionTypeId,
+            other_action: needsOtherAction ? releaseForm.otherAction.trim() : '',
+            to_office_id: releaseForm.officeId,
+            remarks: releaseForm.remarks,
+        }, {
             onSuccess: () => {
                 setReleasingRow(null);
-                setDestinationOfficeId('');
+                setReleaseForm({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', file: null });
+                setReleaseError('');
                 setCrudAlert({ title: 'Document released', message: 'Document released successfully.' });
             },
+            onError: (errors) => setReleaseError(errors.other_action ?? errors.action_type_id ?? errors.to_office_id ?? errors.remarks ?? 'Could not release this document.'),
         });
     };
 
@@ -316,6 +379,7 @@ export default function DocumentsIndex({
     }, [printDocument]);
 
     const paginatedDocuments = sortedDocuments.slice((page - 1) * perPage, page * perPage);
+    const isOtherAction = (actionTypeId: string) => actionTypes.find((action) => String(action.id) === actionTypeId)?.name.trim().toLowerCase() === 'others';
 
     return (
         <AuthenticatedLayout
@@ -488,7 +552,7 @@ export default function DocumentsIndex({
                                                     <button type="button" aria-label="View document" title="View document" onClick={() => setViewingRow(document)} className="rounded-md bg-slate-100 p-2 text-slate-700 hover:bg-slate-200"><Eye size={15} /></button>
                                                     {document.is_finalized && <button type="button" aria-label="Print disposition form" title="Print disposition form" onClick={() => printDisposition(document)} className="rounded-md bg-indigo-50 p-2 text-indigo-700 hover:bg-indigo-100"><Printer size={15} /></button>}
                                                     {document.can_update && <button type="button" aria-label="Update draft" title="Update draft" onClick={() => openEdit(document)} className="rounded-md bg-blue-50 p-2 text-blue-700 hover:bg-blue-100"><Pencil size={15} /></button>}
-                                                    {document.can_release && <button type="button" aria-label="Release document" title="Release document" onClick={() => { setReleasingRow(document); setDestinationOfficeId(''); }} className="rounded-md bg-sky-50 p-2 text-sky-700 hover:bg-sky-100"><Send size={15} /></button>}
+                                                    {document.can_release && <button type="button" aria-label="Release document" title="Release document" onClick={() => { setReleasingRow(document); setReleaseForm({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', file: null }); setReleaseError(''); }} className="rounded-md bg-sky-50 p-2 text-sky-700 hover:bg-sky-100"><Send size={15} /></button>}
                                                     {document.can_terminal && <button type="button" aria-label="Tag as terminal" title="Tag as terminal" onClick={() => requestDocumentAction('Tag document as terminal?', `Mark ${document.tracking_number || 'this document'} as terminal?`, 'Tag as terminal', () => { setCrudAlert(null); router.post(`/documents/${document.id}/terminal`, {}, { onSuccess: () => setCrudAlert({ title: 'Document updated', message: 'Document tagged as terminal.' }) }); })} className="rounded-md bg-violet-50 p-2 text-violet-700 hover:bg-violet-100"><Archive size={15} /></button>}
                                                     {document.can_receive && <button type="button" aria-label="Receive document" title="Receive document" onClick={() => requestDocumentAction('Receive document?', `Confirm receipt of ${document.tracking_number || 'this document'}?`, 'Receive', () => { setCrudAlert(null); router.post(`/documents/${document.id}/receive`, {}, { onSuccess: () => setCrudAlert({ title: 'Document received', message: 'Document received successfully.' }) }); })} className="rounded-md bg-emerald-50 p-2 text-emerald-700 hover:bg-emerald-100"><Inbox size={15} /></button>}
                                                     {document.can_delete && <button type="button" aria-label="Delete draft" title="Delete draft" onClick={() => requestDocumentAction('Delete draft?', `Remove ${document.tracking_number || 'this draft'} from the active list?`, 'Delete draft', () => { setCrudAlert(null); router.delete(`/documents/${document.id}`, { onSuccess: () => setCrudAlert({ title: 'Draft deleted', message: 'Document draft deleted successfully.' }) }); }, true)} className="rounded-md bg-rose-50 p-2 text-rose-700 hover:bg-rose-100"><Trash2 size={15} /></button>}
@@ -545,23 +609,112 @@ export default function DocumentsIndex({
             </div>
 
             {viewingRow && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={() => setViewingRow(null)}>
-                    <div role="dialog" aria-modal="true" className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
-                        <div className="mb-5 flex items-center justify-between"><h3 className="text-lg font-semibold">Document Details</h3><button type="button" onClick={() => setViewingRow(null)} className="text-sm text-slate-500">Close</button></div>
-                        <dl className="mb-6 grid grid-cols-[140px_1fr] gap-x-4 gap-y-3 text-sm"><dt className="font-medium text-slate-500">Tracking Number</dt><dd>{viewingRow.tracking_number || '—'}</dd><dt className="font-medium text-slate-500">Title</dt><dd>{viewingRow.title || 'Untitled'}</dd><dt className="font-medium text-slate-500">Document Type</dt><dd>{getDocumentTypeName(viewingRow) || '—'}</dd><dt className="font-medium text-slate-500">Origin</dt><dd>{viewingRow.origin_type || '—'}</dd><dt className="font-medium text-slate-500">Status</dt><dd>{(viewingRow.status || 'draft').toUpperCase()}</dd><dt className="font-medium text-slate-500">Remarks</dt><dd className="whitespace-pre-wrap">{viewingRow.remarks || '—'}</dd></dl>
-                        <section aria-labelledby="transaction-history-title"><h4 id="transaction-history-title" className="mb-3 text-sm font-semibold text-slate-800">Transaction History</h4>
-                            {viewingRow.transactions?.length ? <ol className="space-y-3 border-l-2 border-slate-200 pl-4">{viewingRow.transactions.map((transaction, index) => <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="relative rounded-xl border border-slate-200 bg-slate-50 p-3 before:absolute before:-left-[22px] before:top-4 before:h-2.5 before:w-2.5 before:rounded-full before:bg-sky-500"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-slate-800">{transaction.action || transaction.status || 'Transaction'}</span><span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium uppercase text-slate-600">{transaction.status || '—'}</span></div><p className="mt-1 text-sm text-slate-600">{[transaction.from_office, transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder ? `Held by ${transaction.holder}` : 'Office details unavailable')}</p><p className="mt-1 text-xs text-slate-500">{[transaction.created_by, transaction.created_at].filter(Boolean).join(' · ') || 'Date and user unavailable'}</p></li>)}</ol> : <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No transactions recorded.</p>}
+                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/45 p-4" onClick={() => setViewingRow(null)}>
+                    <section role="dialog" aria-modal="true" aria-labelledby="document-details-title" className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-4xl overflow-y-auto rounded-2xl border border-[#e2e2df] bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+                        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[#e8e8e4] bg-white px-5 py-4 sm:px-6">
+                            <div className="flex min-w-0 items-start gap-3">
+                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><FileText size={20} aria-hidden="true" /></span>
+                                <div className="min-w-0">
+                                    <h2 id="document-details-title" className="text-lg font-semibold text-[#171717]">Document details</h2>
+                                    <p className="mt-0.5 break-words text-sm text-[#73736e]">{viewingRow.tracking_number || 'No tracking number'} · {viewingRow.title || 'Untitled'}</p>
+                                </div>
+                            </div>
+                            <button type="button" onClick={() => setViewingRow(null)} aria-label="Close document details" className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700">
+                                <X size={19} aria-hidden="true" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-6 p-5 sm:p-6">
+                            <section aria-label="Document information" className="grid gap-4 rounded-xl border border-[#e8e8e4] bg-[#fafaf8] p-4 sm:grid-cols-2 lg:grid-cols-3">
+                                <div><p className="text-xs font-semibold uppercase text-[#898984]">Tracking number</p><p className="mt-1 break-words font-mono text-sm font-medium text-slate-800">{viewingRow.tracking_number || '—'}</p></div>
+                                <div><p className="text-xs font-semibold uppercase text-[#898984]">Title</p><p className="mt-1 break-words text-sm font-medium text-slate-800">{viewingRow.title || 'Untitled'}</p></div>
+                                <div><p className="text-xs font-semibold uppercase text-[#898984]">Document type</p><p className="mt-1 text-sm font-medium text-slate-800">{getDocumentTypeName(viewingRow) || '—'}</p></div>
+                                <div><p className="text-xs font-semibold uppercase text-[#898984]">Origin</p><p className="mt-1 text-sm text-slate-700">{viewingRow.origin_type || '—'}</p></div>
+                                <div><p className="text-xs font-semibold uppercase text-[#898984]">Office</p><p className="mt-1 text-sm text-slate-700">{viewingRow.office_name || viewingRow.office?.name || '—'}</p></div>
+                                <div><p className="text-xs font-semibold uppercase text-[#898984]">Status</p><span className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(viewingRow.status)}`}>{(viewingRow.status || 'draft').toUpperCase()}</span></div>
+                                <div className="sm:col-span-2 lg:col-span-3"><p className="text-xs font-semibold uppercase text-[#898984]">Remarks</p><p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-700">{viewingRow.remarks || '—'}</p></div>
+                            </section>
+
+                            <section aria-labelledby="transaction-history-title">
+                                <div className="mb-3 flex items-center justify-between gap-3">
+                                    <div><h3 id="transaction-history-title" className="font-semibold text-[#171717]">Transaction history</h3><p className="mt-0.5 text-sm text-[#73736e]">Document activity in workflow order.</p></div>
+                                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{viewingRow.transactions?.length ?? 0} transactions</span>
+                                </div>
+                                {viewingRow.transactions?.length ? <ol className="space-y-3 border-l-2 border-slate-200 pl-4">{viewingRow.transactions.map((transaction, index) => <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="relative rounded-xl border border-[#e2e2df] bg-[#fafaf8] p-3 before:absolute before:-left-[22px] before:top-4 before:h-2.5 before:w-2.5 before:rounded-full before:bg-sky-500"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-slate-800">{transaction.action || transaction.status || 'Transaction'}</span><span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium uppercase text-slate-600">{transaction.status || '—'}</span></div><p className="mt-1 text-sm text-slate-600">{[transaction.from_office, transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder ? `Held by ${transaction.holder}` : 'Office details unavailable')}</p><p className="mt-1 text-xs text-slate-500">{[transaction.created_by, transaction.created_at].filter(Boolean).join(' · ') || 'Date and user unavailable'}</p></li>)}</ol> : <p className="rounded-xl border border-dashed border-[#deded9] px-4 py-8 text-center text-sm text-[#73736e]">No transactions recorded.</p>}
                         </section>
-                    </div>
+                        </div>
+                    </section>
                 </div>
             )}
 
             {releasingRow && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-                    <form onSubmit={handleRelease} className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-2xl">
-                        <h3 className="text-lg font-semibold">Release Document</h3><p className="text-sm text-slate-600">Select the receiving office for {releasingRow.tracking_number}.</p>
-                        <select required value={destinationOfficeId} onChange={(event) => setDestinationOfficeId(event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2"><option value="">Select destination office</option>{offices.filter((office) => /^\d+$/.test(String(office.id))).map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}</select>
-                        <div className="flex justify-end gap-2"><button type="button" onClick={() => setReleasingRow(null)} className="rounded-lg border px-4 py-2 text-sm">Cancel</button><button type="submit" className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white">Release</button></div>
+                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/45 p-4" onClick={() => setReleasingRow(null)}>
+                    <form role="dialog" aria-modal="true" onSubmit={handleRelease} aria-labelledby="release-document-title" className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#e2e2df] bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+                        <input type="hidden" name="document_id" value={releasingRow.id ?? ''} />
+                        <input type="hidden" name="tracking_number" value={releasingRow.tracking_number ?? ''} />
+                        <div className="sticky top-0 z-10 border-b border-[#e8e8e4] bg-white px-5 py-4 sm:px-6">
+                            <h2 id="release-document-title" className="text-lg font-semibold text-[#171717]">Release document</h2>
+                            <p className="mt-0.5 break-words text-sm text-[#73736e]">{releasingRow.tracking_number || 'No tracking number'} · {releasingRow.title || 'Untitled'}</p>
+                        </div>
+
+                        <div className="space-y-6 p-5 sm:p-6">
+                            <section aria-label="Selected document details" className="grid gap-x-5 gap-y-4 rounded-xl border border-[#e8e8e4] bg-[#fafaf8] p-4 sm:grid-cols-2">
+                                <ReadOnlyDetail label="Tracking number" value={releasingRow.tracking_number} />
+                                <ReadOnlyDetail label="Title" value={releasingRow.title} />
+                                <ReadOnlyDetail label="Type" value={getDocumentTypeName(releasingRow)} />
+                                <ReadOnlyDetail label="Purpose" value={getPurposeTypeName(releasingRow)} />
+                                <ReadOnlyDetail label="Created by" value={releasingRow.created_by_name} />
+                                <ReadOnlyDetail label="Date created" value={releasingRow.created_at} />
+                                <div className="sm:col-span-2">
+                                    <p className="text-xs font-semibold uppercase text-[#898984]">Remarks</p>
+                                    <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-700">{releasingRow.remarks || '—'}</p>
+                                </div>
+                                <div className="sm:col-span-2">
+                                    <p className="text-xs font-semibold uppercase text-[#898984]">File</p>
+                                    {releasingRow.file_url ? <a href={releasingRow.file_url} target="_blank" rel="noreferrer" className="mt-1 inline-block break-all text-sm font-medium text-blue-700 underline">{releasingRow.file_name || 'View attached file'}</a> : <p className="mt-1 text-sm text-slate-700">{releasingRow.file_name || 'No file attached'}</p>}
+                                </div>
+                            </section>
+
+                            <section className="grid gap-4 sm:grid-cols-2" aria-label="Release details">
+                                <div>
+                                    <label htmlFor="release-action-type" className="mb-1 block text-sm font-medium text-slate-700">Required Action <span className="text-rose-600">*</span></label>
+                                    <select id="release-action-type" required value={releaseForm.actionTypeId} onChange={(event) => { setReleaseForm({ ...releaseForm, actionTypeId: event.target.value, otherAction: '' }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                                        <option value="">Select action</option>
+                                        {actionTypes.map((action) => <option key={`${action.source ?? 'new'}-${action.id}`} value={action.id}>{action.name}</option>)}
+                                    </select>
+                                </div>
+                                {actionTypes.find((action) => String(action.id) === releaseForm.actionTypeId)?.name.trim().toLowerCase() === 'others' && (
+                                    <div>
+                                        <label htmlFor="release-other-action" className="mb-1 block text-sm font-medium text-slate-700">Please specify <span className="text-rose-600">*</span></label>
+                                        <input id="release-other-action" required maxLength={255} value={releaseForm.otherAction} onChange={(event) => { setReleaseForm({ ...releaseForm, otherAction: event.target.value }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                                    </div>
+                                )}
+                                <div>
+                                    <label htmlFor="release-office" className="mb-1 block text-sm font-medium text-slate-700">Required Receiving Office <span className="text-rose-600">*</span></label>
+                                    <select id="release-office" required value={releaseForm.officeId} onChange={(event) => { setReleaseForm({ ...releaseForm, officeId: event.target.value }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                                        <option value="">Select receiving office</option>
+                                        {offices.filter((office) => /^\d+$/.test(String(office.id))).map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}
+                                    </select>
+                                </div>
+                                <div className="sm:col-span-2">
+                                    <label htmlFor="release-remarks" className="mb-1 block text-sm font-medium text-slate-700">Remarks</label>
+                                    <textarea id="release-remarks" maxLength={250} rows={3} value={releaseForm.remarks} onChange={(event) => setReleaseForm({ ...releaseForm, remarks: event.target.value })} className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                                    <p className="mt-1 text-right text-xs text-slate-500">{releaseForm.remarks.length}/250</p>
+                                </div>
+                                <div className="sm:col-span-2">
+                                    <label htmlFor="release-file" className="mb-1 block text-sm font-medium text-slate-700">Replacement or new version (optional)</label>
+                                    <input id="release-file" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" onChange={(event) => { setReleaseForm({ ...releaseForm, file: event.target.files?.[0] ?? null }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                                    <p className="mt-1 text-xs text-slate-500">PDF, JPG, or PNG. Maximum file size: {uploadLimitKb / 1024} MB.</p>
+                                </div>
+                            </section>
+
+                            {releaseError && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{releaseError}</p>}
+                        </div>
+
+                        <div className="flex justify-end gap-2 border-t border-[#e8e8e4] bg-[#fafaf8] px-5 py-4 sm:px-6">
+                            <button type="button" onClick={() => setReleasingRow(null)} className="rounded-lg border border-[#deded9] bg-white px-4 py-2 text-sm font-medium text-[#444] hover:bg-[#f6f6f3]">Close</button>
+                            <button type="submit" className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700">Submit</button>
+                        </div>
                     </form>
                 </div>
             )}
@@ -600,7 +753,32 @@ export default function DocumentsIndex({
                             </div>
 
                             <div className="grid gap-4 sm:grid-cols-2">
-                                <LibrarySelect label="Document Type" value={form.document_type_id} options={documentTypes} onChange={(value) => setForm({ ...form, document_type_id: value })} />
+                                <div>
+                                    <label className="mb-1 block text-sm font-medium text-slate-700">Action Type</label>
+                                    <select value={form.action_type_id} onChange={(event) => setForm({ ...form, action_type_id: event.target.value, other_action: '' })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                                        <option value="">Select action type</option>
+                                        {actionTypes.map((action) => <option key={`${action.source ?? 'new'}-${action.id}`} value={action.id}>{action.name}</option>)}
+                                    </select>
+                                </div>
+                                {isOtherAction(form.action_type_id) && (
+                                    <div>
+                                        <label className="mb-1 block text-sm font-medium text-slate-700">Please specify <span className="text-rose-600">*</span></label>
+                                        <input value={form.other_action} onChange={(event) => setForm({ ...form, other_action: event.target.value })} required maxLength={255} className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+                                    </div>
+                                )}
+                                <div>
+                                    <label htmlFor="document-type-select" className="mb-1 block text-sm font-medium text-slate-700">Document Type</label>
+                                    <select id="document-type-select" value={form.document_type_id} onChange={(event) => setForm({ ...form, document_type_id: event.target.value, other_document_type: '' })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                                        <option value="">Select document type</option>
+                                        {documentTypes.map((option) => <option key={`${option.source ?? 'new'}-${option.id}`} value={option.id}>{option.name}</option>)}
+                                    </select>
+                                </div>
+                                {isOtherOption(form.document_type_id, documentTypes) && (
+                                    <div>
+                                        <label htmlFor="document-type-other" className="mb-1 block text-sm font-medium text-slate-700">Please specify <span className="text-rose-600">*</span></label>
+                                        <input id="document-type-other" value={form.other_document_type} onChange={(event) => setForm({ ...form, other_document_type: event.target.value })} required maxLength={255} className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+                                    </div>
+                                )}
                                 <div>
                                     <label className="mb-1 block text-sm font-medium text-slate-700">Origin Type</label>
                                     <select value={form.origin_type} onChange={(e) => setForm({ ...form, origin_type: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
@@ -609,7 +787,19 @@ export default function DocumentsIndex({
                                         <option value="External">External</option>
                                     </select>
                                 </div>
-                                <LibrarySelect label="Purpose" value={form.purpose_type_id} options={purposeTypes} onChange={(value) => setForm({ ...form, purpose_type_id: value })} />
+                                <div>
+                                    <label htmlFor="purpose-type-select" className="mb-1 block text-sm font-medium text-slate-700">Purpose</label>
+                                    <select id="purpose-type-select" value={form.purpose_type_id} onChange={(event) => setForm({ ...form, purpose_type_id: event.target.value, other_purpose: '' })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                                        <option value="">Select purpose</option>
+                                        {purposeTypes.map((option) => <option key={`${option.source ?? 'new'}-${option.id}`} value={option.id}>{option.name}</option>)}
+                                    </select>
+                                </div>
+                                {isOtherOption(form.purpose_type_id, purposeTypes) && (
+                                    <div>
+                                        <label htmlFor="purpose-type-other" className="mb-1 block text-sm font-medium text-slate-700">Please specify <span className="text-rose-600">*</span></label>
+                                        <input id="purpose-type-other" value={form.other_purpose} onChange={(event) => setForm({ ...form, other_purpose: event.target.value })} required maxLength={255} className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+                                    </div>
+                                )}
                             </div>
 
                             <div>
@@ -775,6 +965,15 @@ function LibrarySelect({
                 <option value="">Select {label.toLowerCase()}</option>
                 {options.map((option) => <option key={`${option.source ?? 'new'}-${option.id}`} value={option.id}>{option.name}</option>)}
             </select>
+        </div>
+    );
+}
+
+function ReadOnlyDetail({ label, value }: { label: string; value?: string | null }) {
+    return (
+        <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase text-[#898984]">{label}</p>
+            <p className="mt-1 break-words text-sm font-medium text-slate-800">{value || '—'}</p>
         </div>
     );
 }

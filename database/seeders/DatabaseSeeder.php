@@ -82,17 +82,20 @@ class DatabaseSeeder extends Seeder
             return [$account['role_id'] => $user];
         });
 
-        DocumentType::firstOrCreate(['name' => 'Incoming Letter']);
-        ActionType::firstOrCreate(['name' => 'Review']);
-        PurposeType::firstOrCreate(['name' => 'Reference']);
+        $incomingLetterType = DocumentType::firstOrCreate(['name' => 'Incoming Letter']);
+        DocumentType::firstOrCreate(['name' => 'Others']);
+        $reviewActionType = ActionType::firstOrCreate(['name' => 'Review']);
+        ActionType::firstOrCreate(['name' => 'Others']);
+        $referencePurposeType = PurposeType::firstOrCreate(['name' => 'Reference']);
+        PurposeType::firstOrCreate(['name' => 'Others']);
 
         Document::firstOrCreate(
             ['tracking_number' => 'DOC-1001'],
             [
                 'title' => 'Pilot Document',
-                'document_type_id' => DocumentType::first()->id,
-                'action_type_id' => ActionType::first()->id,
-                'purpose_type_id' => PurposeType::first()->id,
+                'document_type_id' => $incomingLetterType->id,
+                'action_type_id' => $reviewActionType->id,
+                'purpose_type_id' => $referencePurposeType->id,
                 'office_id' => $office->id,
                 'division_id' => $division->id,
                 'created_by' => $accounts[1]->id,

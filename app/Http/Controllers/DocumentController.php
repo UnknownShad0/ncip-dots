@@ -20,12 +20,15 @@ use App\Services\DocumentAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class DocumentController extends Controller
 {
+    private const MAX_DOCUMENT_UPLOAD_KB = 10240;
+
     public function index()
     {
         return $this->renderDocumentList();
@@ -71,7 +74,7 @@ class DocumentController extends Controller
 
         $legacyDocuments = $legacyDocumentQuery
             ->select([
-                'docId', 'trackingNo', 'dtId', 'otherDtype', 'originType', 'title', 'remarks',
+                'docId', 'trackingNo', 'dtId', 'otherDtype', 'purpose', 'originType', 'title', 'remarks',
                 'Archived', 'createdBy', 'dateCreated', 'isFinalized',
             ])
             ->orderBy('dateCreated', 'desc')
@@ -90,7 +93,7 @@ class DocumentController extends Controller
             ->keyBy('trackingNo');
 
         $legacyTransactionUsers = UserLegacy::query()
-            ->whereIn('userUuid', $legacyTrailRows->pluck('createdBy')->filter()->unique())
+            ->whereIn('userUuid', $legacyTrailRows->pluck('createdBy')->merge($legacyDocuments->pluck('createdBy'))->filter()->unique())
             ->get(['userUuid', 'username', 'firstname', 'middlename', 'lastname', 'extensionname'])
             ->mapWithKeys(function (UserLegacy $user) {
                 $name = collect([$user->firstname, $user->middlename, $user->lastname, $user->extensionname])
@@ -123,10 +126,6 @@ class DocumentController extends Controller
                 $originatingBureauId = $legacyTransactionsByDocument->get($document->trackingNo, collect())->last()?->originating;
                 $typeName = $legacyDocumentTypes->get($document->dtId)?->name ?? '';
 
-                if (strtolower($typeName) === 'others' && filled($document->otherDtype)) {
-                    $typeName .= ' ('.$document->otherDtype.')';
-                }
-
                 $status = $this->workflowStatus($transaction?->status);
                 if (($document->Archived ?? null) === 'Y') {
                     $status = 'archived';
@@ -140,6 +139,9 @@ class DocumentController extends Controller
                     'status' => $status,
                     'office_name' => $legacyBureaus->get($originatingBureauId)?->longName ?? $legacyBureaus->get($originatingBureauId)?->shortName ?? '',
                     'document_type' => $typeName,
+                    'other_document_type' => $document->otherDtype ?? '',
+                    'purpose_type' => $document->purpose ?? '',
+                    'created_by_name' => $legacyTransactionUsers->get($document->createdBy) ?? $document->createdBy,
                     'origin_type' => $document->originType ?? '',
                     'last_transaction' => $this->formatLastTransaction(
                         $transaction?->action,
@@ -170,13 +172,14 @@ class DocumentController extends Controller
             $newDocumentQuery->where('created_at', '>=', now()->subDays(15));
         }
         $newDocuments = $newDocumentQuery
-            ->with(['office', 'documentType', 'purposeType', 'latestTrail.creator', 'latestTrail.fromOffice', 'latestTrail.toOffice', 'trails.creator', 'trails.fromOffice', 'trails.toOffice'])
-            ->select(['id', 'tracking_number', 'title', 'status', 'office_id', 'created_by', 'is_finalized', 'remarks', 'document_type_id', 'action_type_id', 'purpose_type_id', 'origin_type', 'received_from', 'urgent', 'notify_by_email', 'created_at'])
+            ->with(['office', 'documentType', 'purposeType', 'creator', 'files', 'latestTrail.creator', 'latestTrail.fromOffice', 'latestTrail.toOffice', 'trails.creator', 'trails.fromOffice', 'trails.toOffice'])
+            ->select(['id', 'tracking_number', 'title', 'status', 'office_id', 'created_by', 'is_finalized', 'remarks', 'document_type_id', 'action_type_id', 'other_action', 'purpose_type_id', 'other_document_type', 'other_purpose', 'origin_type', 'received_from', 'urgent', 'notify_by_email', 'created_at'])
             ->orderBy('created_at', 'desc')
             ->limit(200)
             ->get()
             ->map(function ($document) use ($currentOfficeId, $isAdministrator, $user) {
                 $latest = $document->latestTrail;
+                $latestFile = $document->files->sortByDesc('id')->first();
                 $officeId = $currentOfficeId;
                 $admin = $isAdministrator;
                 $holderOfficeId = $latest?->to_office_id ?? $document->office_id;
@@ -194,7 +197,12 @@ class DocumentController extends Controller
                     'status' => $this->workflowStatus($document->latestTrail?->status ?? $document->status),
                     'office_name' => $document->office?->name ?? '',
                     'document_type' => $document->documentType?->name ?? '',
+                    'other_document_type' => $document->other_document_type ?? '',
                     'purpose_type' => $document->purposeType?->name ?? '',
+                    'other_purpose' => $document->other_purpose ?? '',
+                    'created_by_name' => $document->creator?->name ?? '',
+                    'file_name' => $latestFile?->original_name ?? $latestFile?->file_name,
+                    'file_url' => $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null,
                     'origin_type' => $document->origin_type ?? '',
                     'last_transaction' => $this->formatTrailTransaction($document->latestTrail),
                     'transactions' => $document->trails->sortByDesc('id')->values()->map(fn (DocumentTrail $trail) => [
@@ -277,13 +285,19 @@ class DocumentController extends Controller
             'title' => ['required', 'string', 'max:255'],
             'remarks' => ['nullable', 'string'],
             'document_type_id' => ['nullable', 'integer', 'exists:document_types,id'],
+            'action_type_id' => ['nullable', 'integer', 'exists:action_types,id'],
+            'other_action' => ['nullable', 'string', 'max:255'],
             'purpose_type_id' => ['nullable', 'integer', 'exists:purpose_types,id'],
+            'other_document_type' => ['nullable', 'string', 'max:255'],
+            'other_purpose' => ['nullable', 'string', 'max:255'],
             'origin_type' => ['nullable', 'string', 'max:100'],
             'urgent' => ['boolean'],
             'notify_by_email' => ['boolean'],
             'is_finalized' => ['required', 'boolean'],
-            'file' => ['nullable', 'file', 'max:10240'],
+            'file' => ['nullable', 'file', 'max:'.self::MAX_DOCUMENT_UPLOAD_KB],
         ]);
+        $validated = $this->normalizeActionTypeDetails($validated);
+        $validated = $this->normalizeDocumentTypeAndPurpose($validated);
 
         $document = null;
         DB::transaction(function () use ($validated, &$document) {
@@ -304,7 +318,11 @@ class DocumentController extends Controller
                 'status' => $validated['is_finalized'] ? 'pending' : 'draft',
                 'remarks' => $validated['remarks'] ?? null,
                 'document_type_id' => $validated['document_type_id'] ?? null,
+                'action_type_id' => $validated['action_type_id'] ?? null,
+                'other_action' => $validated['other_action'],
                 'purpose_type_id' => $validated['purpose_type_id'] ?? null,
+                'other_document_type' => $validated['other_document_type'],
+                'other_purpose' => $validated['other_purpose'],
                 'origin_type' => $validated['origin_type'] ?? null,
                 'office_id' => $officeId,
                 'urgent' => $validated['urgent'] ?? false,
@@ -348,13 +366,19 @@ class DocumentController extends Controller
             'title' => ['required', 'string', 'max:255'],
             'remarks' => ['nullable', 'string'],
             'document_type_id' => ['nullable', 'integer', 'exists:document_types,id'],
+            'action_type_id' => ['nullable', 'integer', 'exists:action_types,id'],
+            'other_action' => ['nullable', 'string', 'max:255'],
             'purpose_type_id' => ['nullable', 'integer', 'exists:purpose_types,id'],
+            'other_document_type' => ['nullable', 'string', 'max:255'],
+            'other_purpose' => ['nullable', 'string', 'max:255'],
             'origin_type' => ['nullable', 'string', 'max:100'],
             'urgent' => ['boolean'],
             'notify_by_email' => ['boolean'],
             'is_finalized' => ['required', 'boolean'],
-            'file' => ['nullable', 'file', 'max:10240'],
+            'file' => ['nullable', 'file', 'max:'.self::MAX_DOCUMENT_UPLOAD_KB],
         ]);
+        $validated = $this->normalizeActionTypeDetails($validated);
+        $validated = $this->normalizeDocumentTypeAndPurpose($validated);
 
         $document = Document::findOrFail($id);
         abort_unless($this->canManageDraft($document), 403);
@@ -364,7 +388,11 @@ class DocumentController extends Controller
             'status' => $validated['is_finalized'] ? 'pending' : 'draft',
             'remarks' => $validated['remarks'] ?? null,
             'document_type_id' => $validated['document_type_id'] ?? null,
+            'action_type_id' => $validated['action_type_id'] ?? null,
+            'other_action' => $validated['other_action'],
             'purpose_type_id' => $validated['purpose_type_id'] ?? null,
+            'other_document_type' => $validated['other_document_type'],
+            'other_purpose' => $validated['other_purpose'],
             'origin_type' => $validated['origin_type'] ?? null,
             'urgent' => $validated['urgent'] ?? false,
             'notify_by_email' => $validated['notify_by_email'] ?? false,
@@ -394,10 +422,14 @@ class DocumentController extends Controller
 
     public function release(Request $request, $id)
     {
+        $this->resolveLegacySelections($request);
         $validated = $request->validate([
+            'action_type_id' => ['required', 'integer', 'exists:action_types,id'],
+            'other_action' => ['nullable', 'string', 'max:255'],
             'to_office_id' => ['required', 'integer', 'exists:offices,id'],
-            'remarks' => ['nullable', 'string'],
+            'remarks' => ['nullable', 'string', 'max:250'],
         ]);
+        $validated = $this->normalizeActionTypeDetails($validated);
         $document = Document::with('latestTrail')->findOrFail($id);
         $this->authorizeCurrentHolder($document);
         $officeId = app(DocumentAccess::class)->currentOfficeId(auth()->user());
@@ -408,7 +440,7 @@ class DocumentController extends Controller
                 'to_office_id' => $validated['to_office_id'],
                 'created_by' => auth()->id(),
                 'status' => 'available',
-                'action' => 'Released',
+                'action' => 'Released - '.$validated['action_type_name'].(mb_strtolower($validated['action_type_name']) === 'others' ? ': '.$validated['other_action'] : ''),
                 'remarks' => $validated['remarks'] ?? null,
             ]);
             $document->update(['status' => 'available']);
@@ -531,6 +563,49 @@ class DocumentController extends Controller
         return $draft && ($admin || ($originOffice && (int) $document->created_by === (int) $user?->id));
     }
 
+    private function normalizeActionTypeDetails(array $validated): array
+    {
+        $actionType = isset($validated['action_type_id']) ? ActionType::find($validated['action_type_id']) : null;
+        $actionTypeName = trim((string) $actionType?->name);
+        $isOtherAction = mb_strtolower($actionTypeName) === 'others';
+
+        if ($isOtherAction && !filled($validated['other_action'] ?? null)) {
+            throw ValidationException::withMessages([
+                'other_action' => 'Please specify the action when selecting Others.',
+            ]);
+        }
+
+        $validated['action_type_name'] = $actionTypeName;
+        $validated['other_action'] = $isOtherAction ? trim((string) $validated['other_action']) : null;
+
+        return $validated;
+    }
+
+    private function normalizeDocumentTypeAndPurpose(array $validated): array
+    {
+        $documentType = isset($validated['document_type_id']) ? DocumentType::find($validated['document_type_id']) : null;
+        $purposeType = isset($validated['purpose_type_id']) ? PurposeType::find($validated['purpose_type_id']) : null;
+        $isOtherDocumentType = mb_strtolower(trim((string) $documentType?->name)) === 'others';
+        $isOtherPurpose = mb_strtolower(trim((string) $purposeType?->name)) === 'others';
+
+        if ($isOtherDocumentType && !filled($validated['other_document_type'] ?? null)) {
+            throw ValidationException::withMessages([
+                'other_document_type' => 'Please specify the document type when selecting Others.',
+            ]);
+        }
+
+        if ($isOtherPurpose && !filled($validated['other_purpose'] ?? null)) {
+            throw ValidationException::withMessages([
+                'other_purpose' => 'Please specify the purpose when selecting Others.',
+            ]);
+        }
+
+        $validated['other_document_type'] = $isOtherDocumentType ? trim((string) $validated['other_document_type']) : null;
+        $validated['other_purpose'] = $isOtherPurpose ? trim((string) $validated['other_purpose']) : null;
+
+        return $validated;
+    }
+
     private function authorizeCurrentHolder(Document $document): void
     {
         $officeId = app(DocumentAccess::class)->currentOfficeId(auth()->user());
@@ -544,6 +619,7 @@ class DocumentController extends Controller
     private function documentFormOptions(): array
     {
         return [
+            'maxUploadSizeKb' => self::MAX_DOCUMENT_UPLOAD_KB,
             'documentTypes' => $this->mergeLibraryOptions(
                 DocumentType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
                 $this->legacyRows(fn () => DocumentTypeLegacy::query()->whereIn('status', ['active', 'Active', 'enabled', 'Enabled', '1', 'Y'])->orderBy('name')->get(['name']))
