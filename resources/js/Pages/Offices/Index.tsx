@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import CrudAlertModal from '@/Components/CrudAlertModal';
 import { Head, router } from '@inertiajs/react';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -32,6 +33,7 @@ export default function OfficesIndex({
     ranges?: RangeOption[];
 }) {
     const [editingRow, setEditingRow] = useState<OfficeRow | null>(null);
+    const [crudAlert, setCrudAlert] = useState<{ title: string; message: string } | null>(null);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [sortKey, setSortKey] = useState<SortKey>('name');
@@ -61,7 +63,7 @@ export default function OfficesIndex({
     };
 
     const openEdit = (row: OfficeRow) => {
-        if (row.source !== 'Old DB') {
+        if (row.source === 'Old DB') {
             return;
         }
 
@@ -96,7 +98,10 @@ export default function OfficesIndex({
             ...form,
             operation: 'create',
         }, {
-            onSuccess: closeModal,
+            onSuccess: () => {
+                closeModal();
+                setCrudAlert({ title: 'Office created', message: 'Office added successfully.' });
+            },
         });
     };
 
@@ -111,7 +116,10 @@ export default function OfficesIndex({
             ...form,
             operation: 'update',
         }, {
-            onSuccess: closeModal,
+            onSuccess: () => {
+                closeModal();
+                setCrudAlert({ title: 'Office updated', message: 'Office updated successfully.' });
+            },
         });
     };
 
@@ -183,6 +191,7 @@ export default function OfficesIndex({
     return (
         <AuthenticatedLayout header={<div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Library management</p><h1 className="text-2xl font-bold tracking-tight text-[#171717] sm:text-3xl">Offices</h1></div>}>
             <Head title="Offices" />
+            {crudAlert && <CrudAlertModal {...crudAlert} onClose={() => setCrudAlert(null)} />}
 
             <style>{`
                 @media print {
@@ -281,8 +290,8 @@ export default function OfficesIndex({
                                                 <button
                                                     type="button"
                                                     onClick={() => openEdit(row)}
-                                                    disabled={!isLegacy}
-                                                    className={`rounded-md px-3 py-1.5 text-xs font-medium ${!isLegacy ? 'cursor-not-allowed bg-slate-300 text-slate-500' : 'bg-sky-600 text-white hover:bg-sky-700'}`}
+                                                    disabled={isLegacy}
+                                                    className={`rounded-md px-3 py-1.5 text-xs font-medium ${isLegacy ? 'cursor-not-allowed bg-slate-300 text-slate-500' : 'bg-sky-600 text-white hover:bg-sky-700'}`}
                                                 >
                                                     Edit
                                                 </button>

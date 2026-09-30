@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import CrudAlertModal from '@/Components/CrudAlertModal';
 import { Head, router } from '@inertiajs/react';
 import { Archive, ArrowDownUp, ChevronLeft, ChevronRight, Eye, FilePlus2, Inbox, Pencil, Printer, Search, Send, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -44,6 +45,7 @@ type DocumentItem = {
 };
 
 type LibraryOption = { id: number | string; name: string; source?: string };
+type CrudAlert = { title: string; message: string; onConfirm?: () => void; confirmLabel?: string; isDestructive?: boolean };
 
 type SortKey = 'tracking_number' | 'title' | 'document_type' | 'origin_type' | 'status' | 'office_name' | 'last_transaction';
 
@@ -91,6 +93,7 @@ export default function DocumentsIndex({
     offices?: LibraryOption[];
 }) {
     const [editingRow, setEditingRow] = useState<DocumentItem | null>(null);
+    const [crudAlert, setCrudAlert] = useState<CrudAlert | null>(null);
     const [viewingRow, setViewingRow] = useState<DocumentItem | null>(null);
     const [printDocument, setPrintDocument] = useState<DocumentItem | null>(null);
     const [releasingRow, setReleasingRow] = useState<DocumentItem | null>(null);
@@ -173,7 +176,10 @@ export default function DocumentsIndex({
             if (value !== null && value !== undefined) data.append(key, value instanceof File ? value : typeof value === 'boolean' ? (value ? '1' : '0') : String(value));
         });
         router.post('/documents', data, {
-            onSuccess: closeModal,
+            onSuccess: () => {
+                closeModal();
+                setCrudAlert({ title: 'Document saved', message: finalize ? 'Document finalized successfully.' : 'Document draft created successfully.' });
+            },
         });
     };
 
@@ -181,7 +187,11 @@ export default function DocumentsIndex({
         event.preventDefault();
         if (!releasingRow?.id || !destinationOfficeId) return;
         router.post(`/documents/${releasingRow.id}/release`, { to_office_id: destinationOfficeId }, {
-            onSuccess: () => { setReleasingRow(null); setDestinationOfficeId(''); },
+            onSuccess: () => {
+                setReleasingRow(null);
+                setDestinationOfficeId('');
+                setCrudAlert({ title: 'Document released', message: 'Document released successfully.' });
+            },
         });
     };
 
@@ -198,8 +208,15 @@ export default function DocumentsIndex({
             if (value !== null && value !== undefined) data.append(key, value instanceof File ? value : typeof value === 'boolean' ? (value ? '1' : '0') : String(value));
         });
         router.post(`/documents/${editingRow.id}`, data, {
-            onSuccess: closeModal,
+            onSuccess: () => {
+                closeModal();
+                setCrudAlert({ title: 'Document updated', message: finalize ? 'Document updated and finalized successfully.' : 'Document updated successfully.' });
+            },
         });
+    };
+
+    const requestDocumentAction = (title: string, message: string, confirmLabel: string, action: () => void, isDestructive = false) => {
+        setCrudAlert({ title, message, confirmLabel, isDestructive, onConfirm: action });
     };
 
     const handlePrint = () => {
@@ -305,6 +322,7 @@ export default function DocumentsIndex({
             header={<div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Document management</p><h1 className="text-2xl font-bold tracking-tight text-[#171717] sm:text-3xl">{title}</h1></div>}
         >
             <Head title={title} />
+            {crudAlert && <CrudAlertModal {...crudAlert} onClose={() => setCrudAlert(null)} />}
 
             <style>{`
                 @media print {
@@ -471,9 +489,9 @@ export default function DocumentsIndex({
                                                     {document.is_finalized && <button type="button" aria-label="Print disposition form" title="Print disposition form" onClick={() => printDisposition(document)} className="rounded-md bg-indigo-50 p-2 text-indigo-700 hover:bg-indigo-100"><Printer size={15} /></button>}
                                                     {document.can_update && <button type="button" aria-label="Update draft" title="Update draft" onClick={() => openEdit(document)} className="rounded-md bg-blue-50 p-2 text-blue-700 hover:bg-blue-100"><Pencil size={15} /></button>}
                                                     {document.can_release && <button type="button" aria-label="Release document" title="Release document" onClick={() => { setReleasingRow(document); setDestinationOfficeId(''); }} className="rounded-md bg-sky-50 p-2 text-sky-700 hover:bg-sky-100"><Send size={15} /></button>}
-                                                    {document.can_terminal && <button type="button" aria-label="Tag as terminal" title="Tag as terminal" onClick={() => { if (window.confirm('Tag this document as terminal?')) router.post(`/documents/${document.id}/terminal`); }} className="rounded-md bg-violet-50 p-2 text-violet-700 hover:bg-violet-100"><Archive size={15} /></button>}
-                                                    {document.can_receive && <button type="button" aria-label="Receive document" title="Receive document" onClick={() => { if (window.confirm('Confirm receipt of this document?')) router.post(`/documents/${document.id}/receive`); }} className="rounded-md bg-emerald-50 p-2 text-emerald-700 hover:bg-emerald-100"><Inbox size={15} /></button>}
-                                                    {document.can_delete && <button type="button" aria-label="Delete draft" title="Delete draft" onClick={() => { if (window.confirm('Remove this draft from the active list?')) router.delete(`/documents/${document.id}`); }} className="rounded-md bg-rose-50 p-2 text-rose-700 hover:bg-rose-100"><Trash2 size={15} /></button>}
+                                                    {document.can_terminal && <button type="button" aria-label="Tag as terminal" title="Tag as terminal" onClick={() => requestDocumentAction('Tag document as terminal?', `Mark ${document.tracking_number || 'this document'} as terminal?`, 'Tag as terminal', () => { setCrudAlert(null); router.post(`/documents/${document.id}/terminal`, {}, { onSuccess: () => setCrudAlert({ title: 'Document updated', message: 'Document tagged as terminal.' }) }); })} className="rounded-md bg-violet-50 p-2 text-violet-700 hover:bg-violet-100"><Archive size={15} /></button>}
+                                                    {document.can_receive && <button type="button" aria-label="Receive document" title="Receive document" onClick={() => requestDocumentAction('Receive document?', `Confirm receipt of ${document.tracking_number || 'this document'}?`, 'Receive', () => { setCrudAlert(null); router.post(`/documents/${document.id}/receive`, {}, { onSuccess: () => setCrudAlert({ title: 'Document received', message: 'Document received successfully.' }) }); })} className="rounded-md bg-emerald-50 p-2 text-emerald-700 hover:bg-emerald-100"><Inbox size={15} /></button>}
+                                                    {document.can_delete && <button type="button" aria-label="Delete draft" title="Delete draft" onClick={() => requestDocumentAction('Delete draft?', `Remove ${document.tracking_number || 'this draft'} from the active list?`, 'Delete draft', () => { setCrudAlert(null); router.delete(`/documents/${document.id}`, { onSuccess: () => setCrudAlert({ title: 'Draft deleted', message: 'Document draft deleted successfully.' }) }); }, true)} className="rounded-md bg-rose-50 p-2 text-rose-700 hover:bg-rose-100"><Trash2 size={15} /></button>}
                                                 </div>
                                             </td>
                                         </tr>

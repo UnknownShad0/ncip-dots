@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import CrudAlertModal from '@/Components/CrudAlertModal';
 import { Head, router } from '@inertiajs/react';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -19,6 +20,7 @@ export default function DocumentTypesIndex({
     documentTypes?: DocumentTypeRow[];
 }) {
     const [editingRow, setEditingRow] = useState<DocumentTypeRow | null>(null);
+    const [crudAlert, setCrudAlert] = useState<{ title: string; message: string } | null>(null);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [sortKey, setSortKey] = useState<SortKey>('name');
@@ -75,7 +77,10 @@ export default function DocumentTypesIndex({
             ...form,
             is_active: form.is_active ? 1 : 0,
         }, {
-            onSuccess: closeModal,
+            onSuccess: () => {
+                closeModal();
+                setCrudAlert({ title: 'Document type created', message: 'Document type added successfully.' });
+            },
         });
     };
 
@@ -90,7 +95,10 @@ export default function DocumentTypesIndex({
             ...form,
             is_active: form.is_active ? 1 : 0,
         }, {
-            onSuccess: closeModal,
+            onSuccess: () => {
+                closeModal();
+                setCrudAlert({ title: 'Document type updated', message: 'Document type updated successfully.' });
+            },
         });
     };
 
@@ -150,6 +158,7 @@ export default function DocumentTypesIndex({
     return (
         <AuthenticatedLayout header={<div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Library management</p><h1 className="text-2xl font-bold tracking-tight text-[#171717] sm:text-3xl">Document Types</h1></div>}>
             <Head title="Document Types" />
+            {crudAlert && <CrudAlertModal {...crudAlert} onClose={() => setCrudAlert(null)} />}
 
             <style>{`
                 @media print {
