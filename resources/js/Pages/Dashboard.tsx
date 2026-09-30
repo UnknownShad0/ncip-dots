@@ -27,6 +27,7 @@ type IncomingDocument = {
     title: string;
     from_office?: string | null;
     creator_name?: string | null;
+    can_receive?: boolean;
 };
 
 type CrudAlert = { title: string; message: string; onConfirm?: () => void; confirmLabel?: string };
@@ -52,17 +53,19 @@ export default function Dashboard({
     recentDocuments = [],
     incomingDocuments = [],
     canReceiveDocuments = false,
+    canViewIncomingDocuments = false,
 }: {
     stats?: DashboardStats;
     recentDocuments?: RecentDocument[];
     incomingDocuments?: IncomingDocument[];
     canReceiveDocuments?: boolean;
+    canViewIncomingDocuments?: boolean;
 }) {
     const [query, setQuery] = useState('');
     const [incomingQuery, setIncomingQuery] = useState('');
     const [trackingNumber, setTrackingNumber] = useState('');
     const [receiveError, setReceiveError] = useState('');
-    const [receivingId, setReceivingId] = useState<number | null>(null);
+    const [receivingTrackingNumber, setReceivingTrackingNumber] = useState('');
     const [crudAlert, setCrudAlert] = useState<CrudAlert | null>(null);
     const documents = useMemo(() => recentDocuments.filter((document) => {
         const search = query.trim().toLowerCase();
@@ -75,41 +78,35 @@ export default function Dashboard({
         ].some((value) => value?.toLowerCase().includes(search)));
     }, [incomingDocuments, incomingQuery]);
 
-    const receive = (document: IncomingDocument) => {
-        if (!canReceiveDocuments || receivingId !== null) return;
-        setReceivingId(document.id);
+    const receive = (trackingNumberToReceive: string) => {
+        if (!canReceiveDocuments || receivingTrackingNumber !== '') return;
+        setReceivingTrackingNumber(trackingNumberToReceive);
         setReceiveError('');
-        router.post(`/documents/${document.id}/receive`, {}, {
+        router.post('/documents/receive', { tracking_number: trackingNumberToReceive }, {
             preserveScroll: true,
             onSuccess: () => {
                 setTrackingNumber('');
                 setCrudAlert({ title: 'Document received', message: 'Document received successfully.' });
             },
             onError: (errors) => setReceiveError(errors.tracking_number ?? 'Could not receive this document. Refresh the incoming list and try again.'),
-            onFinish: () => setReceivingId(null),
+            onFinish: () => setReceivingTrackingNumber(''),
         });
     };
 
-    const confirmReceive = (document: IncomingDocument) => {
+    const confirmReceive = (trackingNumberToReceive: string) => {
         setCrudAlert({
             title: 'Receive document?',
-            message: `Confirm receipt of ${document.tracking_number || 'this document'}?`,
+            message: `Confirm receipt of ${trackingNumberToReceive || 'this document'}?`,
             confirmLabel: 'Receive',
             onConfirm: () => {
                 setCrudAlert(null);
-                receive(document);
+                receive(trackingNumberToReceive);
             },
         });
     };
 
     const receiveByTrackingNumber = () => {
-        const normalized = trackingNumber.trim().toLowerCase();
-        const document = incomingDocuments.find((item) => item.tracking_number.toLowerCase() === normalized);
-        if (!document) {
-            setReceiveError('No available incoming document matches that tracking number.');
-            return;
-        }
-        confirmReceive(document);
+        confirmReceive(trackingNumber.trim());
     };
 
     const cards = [
@@ -184,15 +181,15 @@ export default function Dashboard({
                         </div>
                     </div>
 
-                    {canReceiveDocuments ? <>
-                        <form onSubmit={(event) => { event.preventDefault(); receiveByTrackingNumber(); }} className="mb-5 flex flex-col gap-2 sm:flex-row">
+                    {canViewIncomingDocuments ? <>
+                        {canReceiveDocuments ? <form onSubmit={(event) => { event.preventDefault(); receiveByTrackingNumber(); }} className="mb-5 flex flex-col gap-2 sm:flex-row">
                             <label className="sr-only" htmlFor="receive-tracking-number">Tracking number</label>
                             <input id="receive-tracking-number" value={trackingNumber} onChange={(event) => { setTrackingNumber(event.target.value); setReceiveError(''); }} placeholder="Enter tracking number" className="min-w-0 flex-1 rounded-xl border-slate-300 text-sm" />
-                            <button type="submit" disabled={!trackingNumber.trim() || receivingId !== null} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+                            <button type="submit" disabled={!trackingNumber.trim() || receivingTrackingNumber !== ''} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
                                 <ArrowDownToLine size={17} /> Receive
                             </button>
-                        </form>
-                        {receiveError && <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{receiveError}</p>}
+                        </form> : <p className="mb-4 rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">You can view incoming documents, but receiving requires an assigned office and matching destination.</p>}
+                        {canReceiveDocuments && receiveError && <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{receiveError}</p>}
                         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <h3 className="font-semibold text-slate-800">Incoming to your office <span className="ml-1 text-sm font-normal text-[#898984]">({incomingDocuments.length})</span></h3>
                             <label className="relative block w-full sm:max-w-xs">
@@ -207,8 +204,8 @@ export default function Dashboard({
                                         <p className="truncate font-medium text-slate-800">{document.title || 'Untitled document'}</p>
                                         <p className="mt-0.5 truncate text-sm text-[#73736e]">{[document.tracking_number, document.from_office && `From ${document.from_office}`].filter(Boolean).join(' · ')}</p>
                                     </div>
-                                    <button type="button" onClick={() => confirmReceive(document)} disabled={receivingId !== null} className="shrink-0 rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50">
-                                        {receivingId === document.id ? 'Receiving…' : 'Receive'}
+                                    <button type="button" onClick={() => confirmReceive(document.tracking_number)} disabled={!canReceiveDocuments || !document.can_receive || receivingTrackingNumber !== ''} title={!canReceiveDocuments ? 'Receiving is unavailable for your account.' : !document.can_receive ? 'This document is addressed to another office.' : 'Receive document'} className="shrink-0 rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50">
+                                        {receivingTrackingNumber === document.tracking_number ? 'Receiving…' : 'Receive'}
                                     </button>
                                 </div>
                             ))}

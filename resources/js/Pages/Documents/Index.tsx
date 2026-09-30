@@ -52,6 +52,7 @@ type DocumentItem = {
 };
 
 type LibraryOption = { id: number | string; name: string; source?: string };
+type ReceivingOfficeOption = LibraryOption & { office_id: number | string | null; is_selectable?: boolean };
 type CrudAlert = { title: string; message: string; onConfirm?: () => void; confirmLabel?: string; isDestructive?: boolean };
 
 type SortKey = 'tracking_number' | 'title' | 'document_type' | 'origin_type' | 'status' | 'office_name' | 'last_transaction';
@@ -113,6 +114,7 @@ export default function DocumentsIndex({
     actionTypes = [],
     purposeTypes = [],
     offices = [],
+    receivingOffices = [],
     maxUploadSizeKb,
 }: {
     documents?: DocumentItem[];
@@ -121,6 +123,7 @@ export default function DocumentsIndex({
     actionTypes?: LibraryOption[];
     purposeTypes?: LibraryOption[];
     offices?: LibraryOption[];
+    receivingOffices?: ReceivingOfficeOption[];
     maxUploadSizeKb: number;
 }) {
     const uploadLimitKb = Number(maxUploadSizeKb ?? 0);
@@ -237,8 +240,9 @@ export default function DocumentsIndex({
         if (!releasingRow?.id) return;
 
         const selectedAction = actionTypes.find((action) => String(action.id) === releaseForm.actionTypeId);
+        const selectedReceivingOffice = receivingOffices.find((office) => String(office.id) === releaseForm.officeId);
         const needsOtherAction = selectedAction?.name.trim().toLowerCase() === 'others';
-        if (!releaseForm.actionTypeId || !releaseForm.officeId || (needsOtherAction && !releaseForm.otherAction.trim())) {
+        if (!releaseForm.actionTypeId || !selectedReceivingOffice?.office_id || (needsOtherAction && !releaseForm.otherAction.trim())) {
             setReleaseError('Complete the required fields before submitting.');
             return;
         }
@@ -254,7 +258,7 @@ export default function DocumentsIndex({
         router.post(`/documents/${releasingRow.id}/release`, {
             action_type_id: releaseForm.actionTypeId,
             other_action: needsOtherAction ? releaseForm.otherAction.trim() : '',
-            to_office_id: releaseForm.officeId,
+            to_office_id: selectedReceivingOffice.office_id,
             remarks: releaseForm.remarks,
         }, {
             onSuccess: () => {
@@ -572,7 +576,7 @@ export default function DocumentsIndex({
                                                     {document.can_update && <button type="button" aria-label="Update draft" title="Update draft" onClick={() => openEdit(document)} className="rounded-md bg-blue-50 p-2 text-blue-700 hover:bg-blue-100"><Pencil size={15} /></button>}
                                                     {document.can_release && <button type="button" aria-label="Release document" title="Release document" onClick={() => { setReleasingRow(document); setReleaseForm({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', file: null }); setReleaseError(''); }} className="rounded-md bg-sky-50 p-2 text-sky-700 hover:bg-sky-100"><Send size={15} /></button>}
                                                     {document.can_terminal && <button type="button" aria-label="Tag as terminal" title="Tag as terminal" onClick={() => requestDocumentAction('Tag document as terminal?', `Mark ${document.tracking_number || 'this document'} as terminal?`, 'Tag as terminal', () => { setCrudAlert(null); router.post(`/documents/${document.id}/terminal`, {}, { onSuccess: () => setCrudAlert({ title: 'Document updated', message: 'Document tagged as terminal.' }) }); })} className="rounded-md bg-violet-50 p-2 text-violet-700 hover:bg-violet-100"><Archive size={15} /></button>}
-                                                    {document.can_receive && <button type="button" aria-label="Receive document" title="Receive document" onClick={() => requestDocumentAction('Receive document?', `Confirm receipt of ${document.tracking_number || 'this document'}?`, 'Receive', () => { setCrudAlert(null); router.post(`/documents/${document.id}/receive`, {}, { onSuccess: () => setCrudAlert({ title: 'Document received', message: 'Document received successfully.' }) }); })} className="rounded-md bg-emerald-50 p-2 text-emerald-700 hover:bg-emerald-100"><Inbox size={15} /></button>}
+                                                    {document.can_receive && <button type="button" aria-label="Receive document" title="Receive document" onClick={() => requestDocumentAction('Receive document?', `Confirm receipt of ${document.tracking_number || 'this document'}?`, 'Receive', () => { setCrudAlert(null); router.post('/documents/receive', { tracking_number: document.tracking_number }, { onSuccess: () => setCrudAlert({ title: 'Document received', message: 'Document received successfully.' }), onError: (errors) => setCrudAlert({ title: 'Could not receive document', message: errors.tracking_number ?? 'This document could not be received.' }) }); })} className="rounded-md bg-emerald-50 p-2 text-emerald-700 hover:bg-emerald-100"><Inbox size={15} /></button>}
                                                     {document.can_delete && <button type="button" aria-label="Delete draft" title="Delete draft" onClick={() => requestDocumentAction('Delete draft?', `Remove ${document.tracking_number || 'this draft'} from the active list?`, 'Delete draft', () => { setCrudAlert(null); router.delete(`/documents/${document.id}`, { onSuccess: () => setCrudAlert({ title: 'Draft deleted', message: 'Document draft deleted successfully.' }) }); }, true)} className="rounded-md bg-rose-50 p-2 text-rose-700 hover:bg-rose-100"><Trash2 size={15} /></button>}
                                                 </div>
                                             </td>
@@ -709,9 +713,9 @@ export default function DocumentsIndex({
                                 )}
                                 <div>
                                     <label htmlFor="release-office" className="mb-1 block text-sm font-medium text-slate-700">Required Receiving Office <span className="text-rose-600">*</span></label>
-                                    <select id="release-office" required value={releaseForm.officeId} onChange={(event) => { setReleaseForm({ ...releaseForm, officeId: event.target.value }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
-                                        <option value="">Select receiving office</option>
-                                        {offices.filter((office) => /^\d+$/.test(String(office.id))).map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}
+                                    <select id="release-office" required disabled={receivingOffices.length === 0} value={releaseForm.officeId} onChange={(event) => { setReleaseForm({ ...releaseForm, officeId: event.target.value }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500">
+                                        <option value="">{receivingOffices.length ? 'Select receiving office' : 'No receiving offices configured for your range'}</option>
+                                        {receivingOffices.map((office) => <option key={`${office.source ?? 'new'}-${office.id}`} value={office.id} disabled={office.is_selectable === false || !office.office_id}>{office.name}{!office.office_id ? ' (not configured for release)' : ''}</option>)}
                                     </select>
                                 </div>
                                 <div className="sm:col-span-2">

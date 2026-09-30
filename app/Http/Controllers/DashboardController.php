@@ -96,7 +96,8 @@ class DashboardController extends Controller
             ->get();
 
         $canReceiveDocuments = $user->canReceiveDocuments() && $officeId !== null;
-        $incomingDocuments = $canReceiveDocuments
+        $canViewIncomingDocuments = $canViewAllDocuments || $canReceiveDocuments;
+        $incomingDocuments = $canViewIncomingDocuments
             ? Document::query()
                 ->with(['latestTrail.fromOffice', 'creator', 'office'])
                 ->whereHas('latestTrail', function ($trail) use ($officeId, $canViewAllDocuments) {
@@ -111,6 +112,9 @@ class DashboardController extends Controller
                     'title' => $document->title,
                     'from_office' => $document->latestTrail?->fromOffice?->name ?? $document->office?->name,
                     'creator_name' => $document->creator?->name,
+                    'can_receive' => $canReceiveDocuments
+                        && !$document->is_archived
+                        && (int) $document->latestTrail?->to_office_id === $officeId,
                 ])
                 ->values()
             : collect();
@@ -120,6 +124,7 @@ class DashboardController extends Controller
             'recentDocuments' => $recentDocuments,
             'incomingDocuments' => $incomingDocuments,
             'canReceiveDocuments' => $canReceiveDocuments,
+            'canViewIncomingDocuments' => $canViewIncomingDocuments,
         ]);
     }
 }

@@ -11,6 +11,9 @@ use App\Models\DocumentType;
 use App\Models\ActionType;
 use App\Models\PurposeType;
 use App\Models\Office;
+use App\Models\Range;
+use App\Models\RangeLegacy;
+use App\Models\User;
 use App\Models\DocumentTypeLegacy;
 use App\Models\ActionTypeLegacy;
 use App\Models\PurposeTypeLegacy;
@@ -450,7 +453,7 @@ class DocumentController extends Controller
         return back()->with('success', 'Document released successfully.');
     }
 
-    public function receive($id)
+    public function receive(Request $request)
     {
         $user = auth()->user();
         abort_unless($user->canReceiveDocuments(), 403, 'Your role cannot receive documents.');
@@ -458,18 +461,39 @@ class DocumentController extends Controller
         $officeId = app(DocumentAccess::class)->currentOfficeId($user);
         abort_unless($officeId, 403, 'Your account is not assigned to an office.');
 
-        $canReceiveAcrossOffices = app(DocumentAccess::class)->canViewAllDocuments($user);
-        $document = DB::transaction(function () use ($id, $officeId, $user, $canReceiveAcrossOffices) {
-            $document = Document::query()->lockForUpdate()->findOrFail($id);
+        $validated = $request->validate([
+            'tracking_number' => ['required', 'string', 'max:255'],
+        ]);
+
+        $document = DB::transaction(function () use ($validated, $officeId, $user) {
+            $document = Document::query()
+                ->where('tracking_number', trim($validated['tracking_number']))
+                ->lockForUpdate()
+                ->first();
+
+            if (!$document) {
+                throw ValidationException::withMessages([
+                    'tracking_number' => 'No document matches that tracking number.',
+                ]);
+            }
+
+            if ($document->is_archived) {
+                throw ValidationException::withMessages([
+                    'tracking_number' => 'Archived documents cannot be received.',
+                ]);
+            }
+
             $latestTrail = $document->trails()->orderByDesc('id')->lockForUpdate()->first();
 
-            if (!(
-                $latestTrail
-                    && strtolower((string) $latestTrail->status) === 'available'
-                    && ($canReceiveAcrossOffices || (int) $latestTrail->to_office_id === $officeId)
-            )) {
+            if (!$latestTrail || strtolower(trim((string) $latestTrail->status)) !== 'available') {
                 throw ValidationException::withMessages([
-                    'tracking_number' => 'This document is no longer available for your office to receive.',
+                    'tracking_number' => 'This document is not available to receive.',
+                ]);
+            }
+
+            if ((int) $latestTrail->to_office_id !== $officeId) {
+                throw ValidationException::withMessages([
+                    'tracking_number' => 'This document is addressed to another office.',
                 ]);
             }
 
@@ -621,6 +645,7 @@ class DocumentController extends Controller
     {
         return [
             'maxUploadSizeKb' => self::MAX_DOCUMENT_UPLOAD_KB,
+            'receivingOffices' => $this->receivingOfficeOptions(auth()->user()),
             'documentTypes' => $this->mergeLibraryOptions(
                 DocumentType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
                 $this->legacyRows(fn () => DocumentTypeLegacy::query()->whereIn('status', ['active', 'Active', 'enabled', 'Enabled', '1', 'Y'])->orderBy('name')->get(['name']))
@@ -638,6 +663,195 @@ class DocumentController extends Controller
                 $this->legacyRows(fn () => BureauLegacy::query()->whereIn('status', ['active', 'Active', 'enabled', 'Enabled', '1', 'Y'])->orderBy('longName')->get(['longName']))
             ),
         ];
+    }
+
+    private function receivingOfficeOptions(?User $user): array
+    {
+        if (!$user) {
+            return [];
+        }
+
+        try {
+            $legacyBureauId = $this->legacyUserBureauId($user);
+            $rangeName = null;
+            $legacyRanges = collect();
+
+            if ($legacyBureauId !== null) {
+                $userBureau = BureauLegacy::query()->find($legacyBureauId);
+                if (!$userBureau || !$this->isActiveBureauStatus($userBureau->status)) {
+                    return [];
+                }
+
+                $legacyRanges = RangeLegacy::query()->get(['id', 'name', 'status']);
+                $userRangeValue = trim((string) $userBureau->range);
+                $userRange = ctype_digit($userRangeValue)
+                    ? $legacyRanges->firstWhere('id', (int) $userRangeValue)
+                    : $legacyRanges->first(fn ($range) => mb_strtolower(trim((string) $range->name)) === mb_strtolower($userRangeValue));
+
+                if (!$userRange || !$this->isActiveRangeStatus($userRange->status)) {
+                    return [];
+                }
+
+                $rangeName = trim((string) $userRange->name);
+            } else {
+                $userOffice = Office::query()->with('range')->find($user->office_id);
+                if (!$userOffice?->range || !$userOffice->range->is_active) {
+                    return [];
+                }
+
+                $rangeName = trim((string) $userOffice->range->name);
+            }
+
+            if ($rangeName === '') {
+                return [];
+            }
+
+            $rangeKey = mb_strtolower($rangeName);
+            $options = [];
+            $includedOfficeIds = [];
+            $blockedOfficeIds = [];
+
+            $activeNewRangeIds = Range::query()
+                ->where('is_active', true)
+                ->whereRaw('LOWER(name) = ?', [$rangeKey])
+                ->pluck('id');
+
+            if ($activeNewRangeIds->isNotEmpty()) {
+                $newOffices = Office::query()
+                    ->whereIn('range_id', $activeNewRangeIds)
+                    ->whereNotIn('id', $includedOfficeIds ?: [0])
+                    ->orderBy('name')
+                    ->get(['id', 'name']);
+
+                foreach ($newOffices as $office) {
+                    $options[] = [
+                        'id' => 'new-office:'.$office->id,
+                        'office_id' => (string) $office->id,
+                        'name' => $office->name,
+                        'source' => 'New DB',
+                    ];
+                }
+            }
+
+            try {
+                $legacyRanges = RangeLegacy::query()->get(['id', 'name', 'status']);
+                $rangesById = $legacyRanges->keyBy('id');
+                $legacyBureaus = BureauLegacy::query()
+                    ->orderBy('longName')
+                    ->get(['bureauId', 'longName', 'range', 'status']);
+
+                foreach ($legacyBureaus as $bureau) {
+                    $bureauRangeValue = trim((string) $bureau->range);
+                    $bureauRange = ctype_digit($bureauRangeValue)
+                        ? $rangesById->get((int) $bureauRangeValue)
+                        : $legacyRanges->first(fn ($range) => mb_strtolower(trim((string) $range->name)) === mb_strtolower($bureauRangeValue));
+
+                    $office = Office::query()->where('name', $bureau->longName)->first();
+                    if (!$this->isActiveBureauStatus($bureau->status)
+                        || !$bureauRange
+                        || !$this->isActiveRangeStatus($bureauRange->status)
+                        || mb_strtolower(trim((string) $bureauRange->name)) !== $rangeKey) {
+                        if ($office) {
+                            $blockedOfficeIds[] = (int) $office->id;
+                        }
+                        continue;
+                    }
+
+                    if ($office?->range_id) {
+                        $officeRange = Range::query()->find($office->range_id);
+                        if (!$officeRange || !$officeRange->is_active || mb_strtolower(trim($officeRange->name)) !== $rangeKey) {
+                            $blockedOfficeIds[] = (int) $office->id;
+                            continue;
+                        }
+                    }
+
+                    $legacyOption = [
+                        'id' => (string) $bureau->bureauId,
+                        'office_id' => $office ? (string) $office->id : null,
+                        'name' => $bureau->longName,
+                        'source' => 'Old DB',
+                        'is_selectable' => $office !== null,
+                    ];
+                    $existingOptionIndex = $office
+                        ? array_search((string) $office->id, array_column($options, 'office_id'), true)
+                        : false;
+                    if ($existingOptionIndex === false) {
+                        $options[] = $legacyOption;
+                    } else {
+                        $options[$existingOptionIndex] = $legacyOption;
+                    }
+                    if ($office) {
+                        $includedOfficeIds[] = (int) $office->id;
+                    }
+                }
+            } catch (\Throwable $exception) {
+                if ($legacyBureauId !== null) {
+                    throw $exception;
+                }
+
+                report($exception);
+            }
+
+            if ($blockedOfficeIds !== []) {
+                $options = array_values(array_filter(
+                    $options,
+                    fn (array $option) => !in_array((int) $option['office_id'], $blockedOfficeIds, true),
+                ));
+            }
+
+            usort($options, fn (array $left, array $right) => strnatcasecmp($left['name'], $right['name']));
+
+            return $options;
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return [];
+        }
+    }
+
+    private function isActiveBureauStatus(?string $status): bool
+    {
+        return in_array(mb_strtolower(trim((string) $status)), ['1', 'active', 'enabled', 'y'], true);
+    }
+
+    private function isActiveRangeStatus(?string $status): bool
+    {
+        return in_array(mb_strtolower(trim((string) $status)), ['1', 'active', 'enabled', 'yes', 'y'], true);
+    }
+
+    private function legacyUserBureauId(User $user): ?int
+    {
+        try {
+            if (filled($user->username)) {
+                $legacyUser = UserLegacy::query()
+                    ->whereRaw('LOWER(username) = ?', [mb_strtolower(trim($user->username))])
+                    ->first(['userUuid', 'bureauId']);
+
+                if (filled($legacyUser?->bureauId)) {
+                    return (int) $legacyUser->bureauId;
+                }
+            }
+
+            if ($user->legacy_bureau_id) {
+                return (int) $user->legacy_bureau_id;
+            }
+
+            if (filled($user->email)) {
+                $legacyUser = UserLegacy::query()
+                    ->whereRaw('LOWER(emailAddress) = ?', [mb_strtolower(trim($user->email))])
+                    ->first(['userUuid', 'bureauId']);
+
+                if (filled($legacyUser?->bureauId)) {
+                    return (int) $legacyUser->bureauId;
+                }
+            }
+
+            return null;
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return null;
+        }
     }
 
     private function legacyRows(callable $query)

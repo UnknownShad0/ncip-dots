@@ -43,8 +43,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/documents/latest', [DocumentController::class, 'latest'])->name('documents.latest');
     Route::post('/documents', [DocumentController::class, 'store'])->name('documents.store');
     Route::put('/documents/{id}', [DocumentController::class, 'update'])->name('documents.update');
+    Route::post('/documents/receive', [DocumentController::class, 'receive'])->name('documents.receive');
     Route::post('/documents/{id}/release', [DocumentController::class, 'release'])->name('documents.release');
-    Route::post('/documents/{id}/receive', [DocumentController::class, 'receive'])->name('documents.receive');
     Route::post('/documents/{id}/terminal', [DocumentController::class, 'tagTerminal'])->name('documents.terminal');
     Route::delete('/documents/{id}', [DocumentController::class, 'destroy'])->name('documents.destroy');
 
