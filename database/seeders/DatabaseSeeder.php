@@ -89,22 +89,22 @@ class DatabaseSeeder extends Seeder
         $referencePurposeType = PurposeType::firstOrCreate(['name' => 'Reference']);
         PurposeType::firstOrCreate(['name' => 'Others']);
 
-        Document::firstOrCreate(
-            ['tracking_number' => 'DOC-1001'],
-            [
-                'title' => 'Pilot Document',
-                'document_type_id' => $incomingLetterType->id,
-                'action_type_id' => $reviewActionType->id,
-                'purpose_type_id' => $referencePurposeType->id,
-                'office_id' => $office->id,
-                'division_id' => $division->id,
-                'created_by' => $accounts[1]->id,
-                'status' => 'pending',
-                'received_from' => 'External Office',
-                'received_at' => now(),
-                'is_archived' => false,
-                'remarks' => 'Initial sample document for the new DOTS scaffold.',
-            ],
-        );
+        // Document::firstOrCreate(
+        //     ['tracking_number' => 'DOC-1001'],
+        //     [
+        //         'title' => 'Pilot Document',
+        //         'document_type_id' => $incomingLetterType->id,
+        //         'action_type_id' => $reviewActionType->id,
+        //         'purpose_type_id' => $referencePurposeType->id,
+        //         'office_id' => $office->id,
+        //         'division_id' => $division->id,
+        //         'created_by' => $accounts[1]->id,
+        //         'status' => 'pending',
+        //         'received_from' => 'External Office',
+        //         'received_at' => now(),
+        //         'is_archived' => false,
+        //         'remarks' => 'Initial sample document for the new DOTS scaffold.',
+        //     ],
+        // );
     }
 }

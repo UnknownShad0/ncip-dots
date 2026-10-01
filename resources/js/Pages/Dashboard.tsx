@@ -5,6 +5,10 @@ import { Archive, ArrowDownToLine, FileClock, Files, Search, Send } from 'lucide
 import { useMemo, useState } from 'react';
 
 type DashboardStats = {
+    awaiting_my_approval?: number;
+    my_submissions_awaiting_approval?: number;
+    returned_for_revision?: number;
+    awaiting_verification?: number;
     incoming_documents?: number;
     active_users?: number;
     pending_documents?: number;
@@ -173,6 +177,36 @@ export default function Dashboard({
                             <p className="mt-2 text-[13px] leading-5 text-slate-600">{detail}</p>
                         </article>
                     ))}
+                </section>
+
+                <section aria-labelledby="creation-tasks-title" className="mb-8 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 sm:p-6">
+                    <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+                        <div>
+                            <h2 id="creation-tasks-title" className="text-lg font-semibold text-slate-900">Document Creation tasks</h2>
+                            <p className="mt-1 text-sm text-slate-600">Items that need your attention in the approval workflow.</p>
+                        </div>
+                        <a href={route('document-creation.index')} className="text-sm font-medium text-indigo-700 hover:text-indigo-900">Open Document Creation</a>
+                    </div>
+                    {(() => {
+                        const taskRows: [string, number | undefined, string][] = [
+                            ['Awaiting my approval', stats.awaiting_my_approval, 'approval'],
+                            ['My submissions awaiting approval', stats.my_submissions_awaiting_approval, 'submitted'],
+                            ['Returned for revision', stats.returned_for_revision, 'revision'],
+                            ['Awaiting verification', stats.awaiting_verification, 'verification'],
+                        ];
+                        const tasks = taskRows.filter(([, count]) => Number(count ?? 0) > 0);
+
+                        return tasks.length > 0 ? (
+                            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                {tasks.map(([label, count, queue]) => (
+                                    <a key={queue} href={`${route('document-creation.index')}?queue=${queue}`} className="flex min-h-24 items-center justify-between gap-4 rounded-xl border border-indigo-100 bg-white px-4 py-3 shadow-sm transition hover:border-indigo-300 hover:shadow">
+                                        <span className="text-sm font-medium leading-5 text-slate-700">{label}</span>
+                                        <span className="flex h-10 min-w-10 items-center justify-center rounded-full bg-indigo-100 px-3 text-lg font-semibold text-indigo-900">{formatNumber(count)}</span>
+                                    </a>
+                                ))}
+                            </div>
+                        ) : <p className="rounded-xl border border-dashed border-indigo-200 bg-white/70 px-4 py-5 text-sm text-slate-600">No document creation tasks need attention.</p>;
+                    })()}
                 </section>
 
                 <section aria-labelledby="receive-document-title" className="mb-8 rounded-[20px] border border-blue-200 bg-white p-5 shadow-sm sm:p-7">

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Document;
+use App\Models\DocumentCreationDraft;
 use App\Models\DocumentLegacy;
 use App\Models\DocumentTrailLegacy;
 use App\Models\UserLegacy;
@@ -60,6 +61,10 @@ class DashboardController extends Controller
             : 0;
 
         $stats = [
+            'awaiting_my_approval' => DocumentCreationDraft::query()->where('approver_id', $user->id)->where('status', 'pending_approval')->count(),
+            'my_submissions_awaiting_approval' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'pending_approval')->count(),
+            'returned_for_revision' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'revision_requested')->count(),
+            'awaiting_verification' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'awaiting_verification')->count(),
             'incoming_documents' => $incomingDocumentsCount + $incomingLegacyCount,
             'pending_documents' => (($officeId || $canViewAllDocuments) ? Document::query()
                 ->whereHas('latestTrail', function ($trail) use ($officeId, $canViewAllDocuments) {

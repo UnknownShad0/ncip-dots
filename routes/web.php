@@ -5,6 +5,7 @@ use App\Http\Controllers\ArchiveController;
 use App\Http\Controllers\AuditTrailController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\DocumentCreationController;
 use App\Http\Controllers\DocumentTypeController;
 use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\IplumaController;
@@ -41,6 +42,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/documents', [DocumentController::class, 'index'])->name('documents.index');
     Route::get('/documents/latest', [DocumentController::class, 'latest'])->name('documents.latest');
+    Route::get('/document-creation', [DocumentCreationController::class, 'index'])->name('document-creation.index');
+    Route::post('/document-creation', [DocumentCreationController::class, 'store'])->name('document-creation.store');
+    Route::put('/document-creation/{draft}', [DocumentCreationController::class, 'update'])->name('document-creation.update');
+    Route::post('/document-creation/{draft}/submit', [DocumentCreationController::class, 'submit'])->name('document-creation.submit');
+    Route::post('/document-creation/{draft}/decision', [DocumentCreationController::class, 'decide'])->name('document-creation.decision');
+    Route::post('/document-creation/{draft}/verify', [DocumentCreationController::class, 'verify'])->name('document-creation.verify');
+    Route::get('/document-creation/{draft}/returned-file', [DocumentCreationController::class, 'downloadReturnedFile'])->name('document-creation.returned-file');
+    Route::post('/document-creation/{draft}/register', [DocumentCreationController::class, 'register'])->name('document-creation.register');
     Route::post('/documents', [DocumentController::class, 'store'])->name('documents.store');
     Route::put('/documents/{id}', [DocumentController::class, 'update'])->name('documents.update');
     Route::post('/documents/{id}/release', [DocumentController::class, 'release'])->name('documents.release');

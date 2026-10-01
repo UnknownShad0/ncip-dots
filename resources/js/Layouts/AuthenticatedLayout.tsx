@@ -12,6 +12,7 @@ const groups = [
     { label: 'Documents', items: [
         { name: 'Latest documents', href: 'documents.latest', icon: Clock3 },
         { name: 'All documents', href: 'documents.index', icon: Folder },
+        { name: 'Document Creation', href: 'document-creation.index', icon: FileText },
     ] },
     { label: 'Other information systems', items: [
         { name: 'PDMIS', href: 'pdmis.index', icon: Database },
