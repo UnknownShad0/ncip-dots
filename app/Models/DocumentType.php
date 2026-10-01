@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class DocumentType extends Model
 {
@@ -27,5 +28,10 @@ class DocumentType extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(Document::class);
+    }
+
+    public function creationTemplate(): HasOne
+    {
+        return $this->hasOne(DocumentCreationTemplate::class);
     }
 }

@@ -36,6 +36,7 @@ class HandleInertiaRequests extends Middleware
                 'user' => $request->user(),
             ],
             'canManageLibraries' => $request->user()?->canManageLibraries() ?? false,
+            'canManagePdfTemplates' => $request->user()?->isAdministrator() ?? false,
             'ziggy' => fn () => [
                 ...(new Ziggy)->toArray(),
                 'location' => $request->url(),

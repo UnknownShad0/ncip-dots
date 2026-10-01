@@ -7,6 +7,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\DocumentCreationController;
 use App\Http\Controllers\DocumentTypeController;
+use App\Http\Controllers\DocumentTemplateController;
 use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\IplumaController;
 use App\Http\Controllers\OfficeController;
@@ -48,8 +49,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/document-creation/{draft}/submit', [DocumentCreationController::class, 'submit'])->name('document-creation.submit');
     Route::post('/document-creation/{draft}/decision', [DocumentCreationController::class, 'decide'])->name('document-creation.decision');
     Route::post('/document-creation/{draft}/verify', [DocumentCreationController::class, 'verify'])->name('document-creation.verify');
+    Route::get('/document-creation/{draft}/submitted-file', [DocumentCreationController::class, 'downloadSubmittedFile'])->name('document-creation.submitted-file');
     Route::get('/document-creation/{draft}/returned-file', [DocumentCreationController::class, 'downloadReturnedFile'])->name('document-creation.returned-file');
     Route::post('/document-creation/{draft}/register', [DocumentCreationController::class, 'register'])->name('document-creation.register');
+    Route::post('/document-templates/{template}/generate', [DocumentTemplateController::class, 'generate'])->name('document-templates.generate');
     Route::post('/documents', [DocumentController::class, 'store'])->name('documents.store');
     Route::put('/documents/{id}', [DocumentController::class, 'update'])->name('documents.update');
     Route::post('/documents/{id}/release', [DocumentController::class, 'release'])->name('documents.release');
@@ -63,6 +66,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/audit-trail', [AuditTrailController::class, 'index'])->name('audit-trail.index');
 
     Route::middleware('administrator')->group(function () {
+        Route::get('/document-templates', [DocumentTemplateController::class, 'index'])->name('document-templates.index');
+        Route::get('/document-templates/{documentType}/edit', [DocumentTemplateController::class, 'edit'])->name('document-templates.edit');
+        Route::put('/document-templates/{documentType}', [DocumentTemplateController::class, 'update'])->name('document-templates.update');
         Route::get('/setup', [SetupController::class, 'index'])->name('setup.index');
         Route::get('/libraries', [SetupController::class, 'libraries'])->name('libraries.index');
         Route::get('/libraries/agencies', [SetupController::class, 'agencies'])->name('libraries.agencies');

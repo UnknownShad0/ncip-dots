@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class DocumentCreationVersion extends Model
 {
-    protected $fillable = ['draft_id', 'version_number', 'content', 'file_path', 'file_name', 'sha256', 'created_by'];
-    protected $casts = ['content' => 'array'];
+    protected $fillable = ['draft_id', 'version_number', 'template_version', 'template_json', 'content', 'file_path', 'file_name', 'sha256', 'created_by'];
+    protected $casts = ['content' => 'array', 'template_json' => 'array'];
     public function draft(): BelongsTo { return $this->belongsTo(DocumentCreationDraft::class, 'draft_id'); }
 }

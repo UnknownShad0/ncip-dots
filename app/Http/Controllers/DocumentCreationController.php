@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Document;
 use App\Models\DocumentCreationDraft;
 use App\Models\DocumentType;
+use App\Models\DocumentCreationTemplate;
 use App\Models\User;
+use App\Services\PdfmeGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -28,6 +30,7 @@ class DocumentCreationController extends Controller
                 $draft->setAttribute('current_submission', $version ? [
                     'version_number' => $version->version_number,
                     'content' => $version->content,
+                    'template_json' => $version->template_json ?? $draft->template?->template_json,
                     'submitted_at' => $version->created_at,
                 ] : null);
 
@@ -36,15 +39,17 @@ class DocumentCreationController extends Controller
 
         return Inertia::render('DocumentCreation/Index', [
             'drafts' => $drafts,
-            'documentTypes' => DocumentType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'documentTypes' => DocumentType::query()->where('is_active', true)->whereHas('creationTemplate', fn ($query) => $query->where('is_active', true))->with('creationTemplate:id,document_type_id,name,version,template_json,is_active')->orderBy('name')->get(['id', 'name']),
             'approvers' => User::query()->where('is_active', true)->where('id', '<>', $user->id)->orderBy('name')->get(['id', 'name', 'role']),
             'currentUserId' => $user->id,
+            'logoDataUri' => 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('images/header.png'))),
         ]);
     }
 
     public function store(Request $request)
     {
         $data = $this->validateDraft($request);
+        $this->assertTemplateMatchesType($data['template_id'], $data['document_type_id']);
         $draft = DocumentCreationDraft::create([...$data, 'created_by' => $request->user()->id, 'status' => 'draft']);
         $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Draft created']);
         return back()->with('success', 'Draft saved.');
@@ -54,6 +59,7 @@ class DocumentCreationController extends Controller
     {
         abort_unless((int) $draft->created_by === (int) $request->user()->id && in_array($draft->status, ['draft', 'revision_requested'], true), 403);
         $data = $this->validateDraft($request);
+        $this->assertTemplateMatchesType($data['template_id'], $data['document_type_id']);
         $draft->update([...$data, 'status' => 'draft']);
         $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Draft updated']);
         return back()->with('success', 'Draft updated.');
@@ -66,10 +72,17 @@ class DocumentCreationController extends Controller
         abort_if((int) $data['approver_id'] === (int) $request->user()->id, 422, 'Choose a different approver.');
         abort_unless(User::query()->whereKey($data['approver_id'])->where('is_active', true)->exists(), 422, 'Choose an active approver.');
         $number = $draft->version_number + 1;
-        $draft->versions()->create(['version_number' => $number, 'content' => $draft->content, 'created_by' => $request->user()->id]);
+        $template = $draft->template;
+        abort_unless($template?->is_active, 422, 'The selected PDF template is no longer active.');
+        $contentSnapshot = [...$draft->content, '_logo_data_uri' => 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('images/header.png')))];
+        $pdfBytes = app(PdfmeGenerator::class)->generate($template->template_json, $this->pdfInputs($contentSnapshot));
+        $fileName = 'version-'.$number.'.pdf';
+        $filePath = "document-creation/submitted/{$draft->id}/{$fileName}";
+        Storage::disk('local')->put($filePath, $pdfBytes);
+        $draft->versions()->create(['version_number' => $number, 'content' => $contentSnapshot, 'template_version' => $template->version, 'template_json' => $template->template_json, 'file_path' => $filePath, 'file_name' => $fileName, 'sha256' => hash('sha256', $pdfBytes), 'created_by' => $request->user()->id]);
         $draft->update(['approver_id' => $data['approver_id'], 'version_number' => $number, 'status' => 'pending_approval', 'submitted_at' => now(), 'decision_at' => null, 'decision_remarks' => null]);
         $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Submitted for approval', 'metadata' => ['version' => $number]]);
-        return back()->with('success', 'PDF version submitted for approval.');
+        return back()->with('success', 'Document version submitted for approval.');
     }
 
     public function decide(Request $request, DocumentCreationDraft $draft)
@@ -108,6 +121,14 @@ class DocumentCreationController extends Controller
         return Storage::disk('local')->download($draft->verified_file_path, $draft->verified_file_name);
     }
 
+    public function downloadSubmittedFile(Request $request, DocumentCreationDraft $draft)
+    {
+        abort_unless($this->canAccess($draft, $request), 403);
+        $version = $draft->versions()->where('version_number', $draft->version_number)->firstOrFail();
+        abort_unless($version->file_path && Storage::disk('local')->exists($version->file_path), 404);
+        return Storage::disk('local')->download($version->file_path, $draft->title.'-version-'.$version->version_number.'.pdf');
+    }
+
     public function register(Request $request, DocumentCreationDraft $draft)
     {
         abort_unless($this->canAccess($draft, $request), 403);
@@ -139,6 +160,7 @@ class DocumentCreationController extends Controller
     {
         $data = $request->validate([
             'document_type_id' => ['required', 'integer', 'exists:document_types,id'],
+            'template_id' => ['required', 'integer', 'exists:document_creation_templates,id'],
             'title' => ['required', 'string', 'max:255'],
             'content' => ['required', 'array'],
             'content.for' => ['nullable', 'string', 'max:255'], 'content.thru' => ['nullable', 'string', 'max:255'],
@@ -148,6 +170,22 @@ class DocumentCreationController extends Controller
         ]);
         $data['content']['cc'] = array_values(array_filter($data['content']['cc'] ?? []));
         return $data;
+    }
+
+    private function assertTemplateMatchesType(int $templateId, int $documentTypeId): void
+    {
+        abort_unless(DocumentCreationTemplate::query()->whereKey($templateId)->where('document_type_id', $documentTypeId)->where('is_active', true)->whereHas('documentType', fn ($query) => $query->where('is_active', true))->exists(), 422, 'Choose the active template assigned to this document type.');
+    }
+
+    private function pdfInputs(array $content): array
+    {
+        return [
+            'FOR' => $content['for'] ?? '', 'THRU' => $content['thru'] ?? '',
+            'ATTENTION' => $content['attention'] ?? '', 'FROM' => $content['from'] ?? '',
+            'SUBJECT' => $content['subject'] ?? '', 'DATE' => $content['date'] ?? '',
+            'CONTENT' => $content['body'] ?? '', 'CC' => implode('; ', $content['cc'] ?? []),
+            'logo' => $content['_logo_data_uri'] ?? '',
+        ];
     }
 
     private function canAccess(DocumentCreationDraft $draft, Request $request): bool

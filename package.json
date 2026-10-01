@@ -33,6 +33,10 @@
     },
     "dependencies": {
         "@hookform/resolvers": "^5.9.1",
+        "@pdfme/common": "^6.2.2",
+        "@pdfme/generator": "^6.2.2",
+        "@pdfme/schemas": "^6.2.2",
+        "@pdfme/ui": "^6.2.2",
         "@tanstack/react-query": "^5.103.2",
         "@tanstack/react-table": "^9.2.4",
         "@tiptap/pm": "^3.31.3",
