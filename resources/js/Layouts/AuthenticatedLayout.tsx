@@ -9,10 +9,11 @@ import { PropsWithChildren, ReactNode, useState } from 'react';
 
 const groups = [
     { label: '', items: [{ name: 'Dashboard', href: 'dashboard', icon: LayoutGrid }] },
-    { label: 'Documents', items: [
+        { label: 'Documents', items: [
         { name: 'Latest documents', href: 'documents.latest', icon: Clock3 },
         { name: 'All documents', href: 'documents.index', icon: Folder },
-        { name: 'Document Creation', href: 'document-creation.index', icon: FileText },
+        { name: 'Generate Document', href: 'document-creation.index', icon: FileText },
+        { name: 'Approved Documents', href: 'approved-documents.index', icon: FileClock },
     ] },
     { label: 'Other information systems', items: [
         { name: 'PDMIS', href: 'pdmis.index', icon: Database },

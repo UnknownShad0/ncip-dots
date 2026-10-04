@@ -52,6 +52,7 @@ type DocumentItem = {
 };
 
 type LibraryOption = { id: number | string; name: string; source?: string; disabled?: boolean };
+type ApprovedDocument = { id: number; title: string; document_type_id: number; document_type?: string; status?: string; disabled?: boolean };
 type CrudAlert = { title: string; message: string; onConfirm?: () => void; confirmLabel?: string; isDestructive?: boolean };
 
 type SortKey = 'tracking_number' | 'title' | 'document_type' | 'origin_type' | 'status' | 'office_name' | 'last_transaction';
@@ -113,6 +114,7 @@ export default function DocumentsIndex({
     actionTypes = [],
     purposeTypes = [],
     offices = [],
+    approvedDocuments = [],
     maxUploadSizeKb,
 }: {
     documents?: DocumentItem[];
@@ -121,6 +123,7 @@ export default function DocumentsIndex({
     actionTypes?: LibraryOption[];
     purposeTypes?: LibraryOption[];
     offices?: LibraryOption[];
+    approvedDocuments?: ApprovedDocument[];
     maxUploadSizeKb: number;
 }) {
     const uploadLimitKb = Number(maxUploadSizeKb ?? 0);
@@ -140,6 +143,8 @@ export default function DocumentsIndex({
     const [perPage, setPerPage] = useState(10);
     const [form, setForm] = useState({
         title: '',
+        document_source: 'upload',
+        approved_draft_id: '',
         tracking_number: '',
         origin_type: '',
         remarks: '',
@@ -159,6 +164,8 @@ export default function DocumentsIndex({
         setIsCreateOpen(false);
         setForm({
             title: '',
+            document_source: 'upload',
+            approved_draft_id: '',
             tracking_number: '',
             origin_type: '',
             remarks: '',
@@ -182,6 +189,8 @@ export default function DocumentsIndex({
         setEditingRow(row);
         setForm({
             title: row.title ?? '',
+            document_source: 'upload',
+            approved_draft_id: '',
             tracking_number: row.tracking_number ?? '',
             origin_type: row.origin_type ?? '',
             remarks: row.remarks ?? '',
@@ -202,6 +211,8 @@ export default function DocumentsIndex({
         setIsCreateOpen(true);
         setForm({
             title: '',
+            document_source: 'upload',
+            approved_draft_id: '',
             tracking_number: '',
             origin_type: '',
             remarks: '',
@@ -761,6 +772,24 @@ export default function DocumentsIndex({
                             )}
 
                             <div>
+                                {!editingRow && <div className="mb-4">
+                                    <label htmlFor="document-source-select" className="mb-1 block text-sm font-medium text-slate-700">Document source</label>
+                                    <div className="flex flex-wrap gap-2" role="group" aria-label="Document source">
+                                        <button type="button" onClick={() => setForm({ ...form, document_source: 'upload', approved_draft_id: '', file: null })} className={`rounded-lg border px-3 py-2 text-sm font-medium ${form.document_source === 'upload' ? 'border-sky-600 bg-sky-50 text-sky-700' : 'border-slate-300 bg-white text-slate-700'}`}>Upload a document</button>
+                                        <button type="button" onClick={() => setForm({ ...form, document_source: 'approved', approved_draft_id: '', file: null })} className={`rounded-lg border px-3 py-2 text-sm font-medium ${form.document_source === 'approved' ? 'border-sky-600 bg-sky-50 text-sky-700' : 'border-slate-300 bg-white text-slate-700'}`}>Use approved document</button>
+                                    </div>
+                                </div>}
+                                {!editingRow && form.document_source === 'approved' && <div className="mb-4">
+                                    <label htmlFor="approved-document-select" className="mb-1 block text-sm font-medium text-slate-700">Approved document</label>
+                                    <select id="approved-document-select" required value={form.approved_draft_id} onChange={(event) => {
+                                        const selected = approvedDocuments.find((document) => String(document.id) === event.target.value);
+                                        setForm({ ...form, approved_draft_id: event.target.value, title: selected?.title ?? form.title, document_type_id: selected ? String(selected.document_type_id) : form.document_type_id });
+                                    }} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                                        <option value="">Select an approved document</option>
+                                        {approvedDocuments.map((document) => <option key={document.id} value={document.id} disabled={document.disabled}>{document.title} · {document.document_type ?? 'Document'}{document.status === 'registered' ? ' (Registered document)' : ''}</option>)}
+                                    </select>
+                                    <p className="mt-1 text-xs text-slate-500">Registered documents reuse the existing DOTS record. Select Release from that record to add another trail action.</p>
+                                </div>}
                                 <label className="mb-1 block text-sm font-medium text-slate-700">Title</label>
                                 <input
                                     value={form.title}
@@ -830,10 +859,10 @@ export default function DocumentsIndex({
                                 />
                             </div>
 
-                            <div>
+                            {form.document_source === 'upload' && <div>
                                 <label className="mb-1 block text-sm font-medium text-slate-700">File (optional)</label>
                                 <input type="file" onChange={(e) => setForm({ ...form, file: e.target.files?.[0] ?? null })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                            </div>
+                            </div>}
                             <div className="flex flex-wrap gap-5">
                                 <label className="inline-flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={form.urgent} onChange={(e) => setForm({ ...form, urgent: e.target.checked })} /> Mark as urgent</label>
                                 <label className="inline-flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={form.notify_by_email} onChange={(e) => setForm({ ...form, notify_by_email: e.target.checked })} /> Email me</label>

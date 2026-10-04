@@ -62,6 +62,20 @@ class DatabaseSeeder extends Seeder
                 'email' => 'encoder@dots.local',
                 'role' => 'Encoder',
                 'role_id' => 14,
+            ],            
+            [
+                'name' => 'JM Admin',
+                'username' => 'jm',
+                'email' => 'admin.sstaff@dots.locagl',
+                'role' => 'Admin Staff',
+                'role_id' => 3,
+            ],            
+            [
+                'name' => 'Jake Admin',
+                'username' => 'jake',
+                'email' => 'admin.staff@dots.locagl',
+                'role' => 'Admin Staff',
+                'role_id' => 3,
             ],
         ];
 

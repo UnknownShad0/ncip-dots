@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Document;
+use App\Models\DocumentCreationDraft;
 use App\Models\AuditTrail;
 use App\Models\DocumentLegacy;
 use App\Models\DocumentTrail;
@@ -19,6 +20,7 @@ use App\Models\BureauLegacy;
 use App\Models\User;
 use App\Models\UserLegacy;
 use App\Services\DocumentAccess;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -288,9 +290,10 @@ class DocumentController extends Controller
     {
         $this->resolveLegacySelections($request);
         $validated = $request->validate([
-            'title' => ['required', 'string', 'max:255'],
+            'approved_draft_id' => ['nullable', 'integer', 'exists:document_creation_drafts,id'],
+            'title' => ['required_without:approved_draft_id', 'nullable', 'string', 'max:255'],
             'remarks' => ['nullable', 'string'],
-            'document_type_id' => ['nullable', 'integer', 'exists:document_types,id'],
+            'document_type_id' => ['required_without:approved_draft_id', 'nullable', 'integer', 'exists:document_types,id'],
             'action_type_id' => ['nullable', 'integer', 'exists:action_types,id'],
             'other_action' => ['nullable', 'string', 'max:255'],
             'purpose_type_id' => ['nullable', 'integer', 'exists:purpose_types,id'],
@@ -302,11 +305,26 @@ class DocumentController extends Controller
             'is_finalized' => ['required', 'boolean'],
             'file' => ['nullable', 'file', 'max:'.self::MAX_DOCUMENT_UPLOAD_KB],
         ]);
+        $approvedDraft = null;
+        if ($validated['approved_draft_id'] ?? null) {
+            $approvedDraft = DocumentCreationDraft::query()
+                ->whereKey($validated['approved_draft_id'])
+                ->whereIn('status', ['approved', 'awaiting_verification', 'verified', 'registered'])
+                ->where('created_by', auth()->id())
+                ->first();
+            abort_unless($approvedDraft, 422, 'The approved document is no longer available for finalization.');
+            if ($approvedDraft->status === 'registered' && $approvedDraft->official_document_id) {
+                return redirect()->route('documents.index')->with('success', 'The existing document is ready for another trail action. Select Release from its row.');
+            }
+            $validated['title'] = $approvedDraft->title;
+            $validated['document_type_id'] = $approvedDraft->document_type_id;
+            $validated['is_finalized'] = true;
+        }
         $validated = $this->normalizeActionTypeDetails($validated);
         $validated = $this->normalizeDocumentTypeAndPurpose($validated);
 
         $document = null;
-        DB::transaction(function () use ($validated, &$document) {
+        DB::transaction(function () use ($validated, $approvedDraft, &$document) {
             $user = auth()->user();
             $access = app(DocumentAccess::class);
             $officeId = $access->currentOfficeId($user);
@@ -350,6 +368,15 @@ class DocumentController extends Controller
                 ]);
             }
 
+            if ($approvedDraft) {
+                $approvedDraft->update(['official_document_id' => $document->id, 'status' => 'registered']);
+                $approvedDraft->events()->create([
+                    'user_id' => auth()->id(),
+                    'event' => 'Registered in DOTS',
+                    'metadata' => ['document_id' => $document->id],
+                ]);
+            }
+
         });
 
         if ($request->hasFile('file')) {
@@ -358,6 +385,18 @@ class DocumentController extends Controller
             $document->files()->create([
                 'file_name' => basename($path), 'original_name' => $file->getClientOriginalName(),
                 'file_path' => $path, 'mime_type' => $file->getMimeType(), 'size_bytes' => $file->getSize(),
+                'uploaded_by' => auth()->id(),
+            ]);
+        } elseif ($approvedDraft) {
+            $path = 'documents/'.$document->tracking_number.'.pdf';
+            $pdf = Pdf::loadHTML($this->approvedDraftHtml($approvedDraft))->setPaper('letter');
+            Storage::disk('public')->put($path, $pdf->output());
+            $document->files()->create([
+                'file_name' => basename($path),
+                'original_name' => $document->title.'.pdf',
+                'file_path' => $path,
+                'mime_type' => 'application/pdf',
+                'size_bytes' => Storage::disk('public')->size($path),
                 'uploaded_by' => auth()->id(),
             ]);
         }
@@ -634,6 +673,22 @@ class DocumentController extends Controller
     {
         return [
             'maxUploadSizeKb' => self::MAX_DOCUMENT_UPLOAD_KB,
+            'approvedDocuments' => DocumentCreationDraft::query()
+                ->with('documentType:id,name')
+                ->whereIn('status', ['approved', 'awaiting_verification', 'verified', 'registered'])
+                ->where('created_by', auth()->id())
+                ->latest('decision_at')
+                ->get(['id', 'title', 'document_type_id'])
+                ->map(fn (DocumentCreationDraft $draft) => [
+                    'id' => $draft->id,
+                    'title' => $draft->title,
+                    'document_type_id' => $draft->document_type_id,
+                    'document_type' => $draft->documentType?->name,
+                    'status' => $draft->status,
+                    'disabled' => false,
+                ])
+                ->values()
+                ->all(),
             'documentTypes' => $this->mergeLibraryOptions(
                 DocumentType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
                 $this->legacyRows(fn () => DocumentTypeLegacy::query()->whereIn('status', ['active', 'Active', 'enabled', 'Enabled', '1', 'Y'])->orderBy('name')->get(['name']))
@@ -653,6 +708,43 @@ class DocumentController extends Controller
                     ->filter(fn (BureauLegacy $bureau) => $this->legacyBureauIsInCurrentUserRange($bureau))
             ),
         ];
+    }
+
+    private function approvedDraftHtml(DocumentCreationDraft $draft): string
+    {
+        $content = $draft->content ?? [];
+        $field = static fn (string $key): string => e((string) ($content[$key] ?? ''));
+        $paragraphs = collect(preg_split('/\R/', (string) ($content['body'] ?? '')))
+            ->filter(fn (string $paragraph) => trim($paragraph) !== '')
+            ->map(fn (string $paragraph) => '<p>'.e($paragraph).'</p>')
+            ->implode('');
+        $cc = collect($content['cc'] ?? [])
+            ->filter(fn ($recipient) => filled($recipient))
+            ->map(fn ($recipient) => e((string) $recipient))
+            ->implode('; ');
+
+        return '<!doctype html><html><head><meta charset="utf-8"><style>
+            @page { margin: 0.65in; }
+            body { font-family: DejaVu Sans, sans-serif; font-size: 11pt; line-height: 1.55; color: #111; }
+            h1 { text-align: center; font-size: 14pt; margin: 0 0 28px; }
+            .meta { margin-bottom: 26px; }
+            .meta div { margin: 4px 0; }
+            .label { display: inline-block; width: 82px; font-weight: bold; }
+            .body { min-height: 360px; }
+            p { margin: 0 0 10px; }
+        </style></head><body>
+            <h1>'.e($draft->title).'</h1>
+            <div class="meta">
+                <div><span class="label">FOR:</span> '.$field('for').'</div>
+                <div><span class="label">THRU:</span> '.$field('thru').'</div>
+                <div><span class="label">ATTENTION:</span> '.$field('attention').'</div>
+                <div><span class="label">FROM:</span> '.$field('from').'</div>
+                <div><span class="label">SUBJECT:</span> '.$field('subject').'</div>
+                <div><span class="label">DATE:</span> '.$field('date').'</div>
+            </div>
+            <div class="body">'.$paragraphs.'</div>
+            '.($cc !== '' ? '<div><strong>CC:</strong> '.$cc.'</div>' : '').'
+        </body></html>';
     }
 
     private function legacyRows(callable $query)
