@@ -77,6 +77,11 @@ class User extends Authenticatable
         return $this->belongsTo(Office::class);
     }
 
+    public function officeByCode(): BelongsTo
+    {
+        return $this->belongsTo(Office::class, 'office_code', 'code');
+    }
+
     public function isAdministrator(): bool
     {
         if (in_array((int) $this->role_id, [1, 3], true)) {

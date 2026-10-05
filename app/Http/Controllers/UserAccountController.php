@@ -224,7 +224,7 @@ class UserAccountController extends Controller
             });
 
         $localUsers = User::query()
-            ->with('office:id,name,code')
+            ->with(['office:id,name,code', 'officeByCode:id,name,code'])
             ->orderBy('name')
             ->get()
             ->map(function (User $user) use ($officeNames, $roleOptions) {
@@ -244,7 +244,10 @@ class UserAccountController extends Controller
                     'role_id' => $user->role_id === null ? '' : (string) $user->role_id,
                     'role' => $roleName,
                     'office_id' => $user->office_id,
-                    'office_name' => $user->office?->name ?? $user->office_code ?? '',
+                    'division_code' => $user->division_code ?? '',
+                    'region_code' => $user->region_code ?? '',
+                    'office_code' => $user->office_code ?? '',
+                    'office_name' => $user->officeByCode?->name ?? $user->office?->name ?? $user->office_code ?? '',
                     'is_active' => (bool) $user->is_active,
                     'is_locked' => (bool) $user->is_locked,
                     'logged_in_status' => 'N',
