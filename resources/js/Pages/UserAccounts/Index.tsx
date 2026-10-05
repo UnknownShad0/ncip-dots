@@ -12,6 +12,9 @@ type UserRow = {
     lastname: string;
     extensionname: string;
     agency_employee_no: string;
+    division_code?: string;
+    region_code?: string;
+    office_code?: string;
     role_id: string;
     role: string;
     office_id: number | null;
@@ -25,6 +28,9 @@ type UserRow = {
 type RoleOption = { id: number; name: string };
 type FormState = {
     agency_employee_no: string;
+    division_code: string;
+    region_code: string;
+    office_code: string;
     firstname: string;
     middlename: string;
     lastname: string;
@@ -55,7 +61,7 @@ type EmployeeLookup = {
 type SortKey = 'name' | 'email' | 'role' | 'office_name' | 'is_active';
 
 const emptyForm: FormState = {
-    agency_employee_no: '', firstname: '', middlename: '', lastname: '', extensionname: '', username: '', email: '', role_id: '', officeId: '',
+    agency_employee_no: '', division_code: '', region_code: '', office_code: '', firstname: '', middlename: '', lastname: '', extensionname: '', username: '', email: '', role_id: '', officeId: '',
     status: '1', isLocked: 'N',
 };
 
@@ -102,6 +108,7 @@ export default function UserAccountsIndex({
         setEditingRow(user);
         setForm({
             agency_employee_no: user.agency_employee_no ?? '',
+            division_code: user.division_code ?? '', region_code: user.region_code ?? '', office_code: user.office_code ?? '',
             firstname: user.firstname ?? '', middlename: user.middlename ?? '',
             lastname: user.lastname ?? '', extensionname: user.extensionname ?? '',
             username: user.username ?? '', email: user.email ?? '', role_id: user.role_id ?? '',
@@ -137,10 +144,14 @@ export default function UserAccountsIndex({
 
             const details = result as EmployeeLookup;
             const matchedOffice = details.offices.find((office) => office.office_id !== null);
+            const directoryOffice = details.offices[0];
             setEmployeeLookup(details);
             setForm((current) => ({
                 ...current,
                 agency_employee_no: details.employee.agency_employee_no || employeeNumber,
+                division_code: details.employee.division_code || '',
+                region_code: directoryOffice?.region_code || '',
+                office_code: directoryOffice?.office_code || '',
                 firstname: details.employee.first_name || '',
                 middlename: details.employee.middle_name || '',
                 lastname: details.employee.last_name || '',
@@ -165,6 +176,8 @@ export default function UserAccountsIndex({
             status: editingRow ? form.status : undefined,
             isLocked: editingRow ? form.isLocked : undefined,
         };
+        // console.log('User account payload:', payload);
+        // return false;
         const options = {
             onSuccess: closeModal,
             onError: (validationErrors: Record<string, string>) => setErrors(validationErrors),

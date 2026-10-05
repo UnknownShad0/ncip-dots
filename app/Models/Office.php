@@ -21,6 +21,15 @@ class Office extends Model
         'email',
         'location',
         'is_active',
+        'directory_source_id',
+        'long_name',
+        'division_name',
+        'office_address',
+        'region_code',
+        'province_code',
+        'municipality_code',
+        'status',
+        'deleted_at',
     ];
 
     protected $casts = [

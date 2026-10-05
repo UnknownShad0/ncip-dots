@@ -15,6 +15,17 @@ class Division extends Model
         'office_id',
         'name',
         'code',
+        'directory_source_id',
+        'long_name',
+        'division_name',
+        'office_address',
+        'region_code',
+        'province_code',
+        'municipality_code',
+        'short_name',
+        'email',
+        'status',
+        'deleted_at',
     ];
 
     public function office(): BelongsTo

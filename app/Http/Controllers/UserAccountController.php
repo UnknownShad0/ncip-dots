@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\BureauLegacy;
+use App\Models\Division;
 use App\Models\Office;
 use App\Models\User;
 use App\Models\UserLegacy;
@@ -78,15 +79,14 @@ class UserAccountController extends Controller
                 ->values()
                 ->all();
 
-            $legacyBureaus = BureauLegacy::query()
-                ->get(['bureauId', 'officeCode', 'longName']);
-            $offices = collect($officeRecords)->map(function (array $office) use ($legacyBureaus) {
+            $localOffices = Office::query()->get(['id', 'code', 'name']);
+            $offices = collect($officeRecords)->map(function (array $office) use ($localOffices) {
                 $region = is_array($office['region'] ?? null) ? $office['region'] : [];
                 $officeCode = (string) $this->apiValue($office, ['office_code', 'officeCode', 'code']);
                 $officeName = $this->apiValue($office, ['office_name', 'officeName', 'name']);
-                $legacyBureau = $legacyBureaus->first(function (BureauLegacy $bureau) use ($officeCode, $officeName) {
-                    $matchesCode = filled($officeCode) && strcasecmp(trim((string) $bureau->officeCode), trim($officeCode)) === 0;
-                    $matchesName = filled($officeName) && strcasecmp(trim((string) $bureau->longName), trim($officeName)) === 0;
+                $localOffice = $localOffices->first(function (Office $candidate) use ($officeCode, $officeName) {
+                    $matchesCode = filled($officeCode) && strcasecmp(trim((string) $candidate->code), trim($officeCode)) === 0;
+                    $matchesName = filled($officeName) && strcasecmp(trim((string) $candidate->name), trim($officeName)) === 0;
 
                     return $matchesCode || $matchesName;
                 });
@@ -96,7 +96,7 @@ class UserAccountController extends Controller
                     'region_name' => $this->apiValue($office, ['region_name', 'regionName']) ?: $this->apiValue($region, ['name', 'region_name']),
                     'office_code' => $officeCode,
                     'office_name' => $officeName,
-                    'office_id' => $legacyBureau?->bureauId,
+                    'office_id' => $localOffice?->id,
                 ];
             })->values();
 
@@ -224,6 +224,7 @@ class UserAccountController extends Controller
             });
 
         $localUsers = User::query()
+            ->with('office:id,name,code')
             ->orderBy('name')
             ->get()
             ->map(function (User $user) use ($officeNames, $roleOptions) {
@@ -242,8 +243,8 @@ class UserAccountController extends Controller
                     'username' => $user->username ?? '',
                     'role_id' => $user->role_id === null ? '' : (string) $user->role_id,
                     'role' => $roleName,
-                    'office_id' => $user->legacy_bureau_id,
-                    'office_name' => $officeNames->get($user->legacy_bureau_id) ?? '',
+                    'office_id' => $user->office_id,
+                    'office_name' => $user->office?->name ?? $user->office_code ?? '',
                     'is_active' => (bool) $user->is_active,
                     'is_locked' => (bool) $user->is_locked,
                     'logged_in_status' => 'N',
@@ -264,21 +265,23 @@ class UserAccountController extends Controller
             'operation' => ['required', 'in:create'],
             'username' => ['required', 'string', 'max:50', 'unique:users,username'],
             'agency_employee_no' => ['required', 'string', 'max:100', 'unique:users,agency_employee_no'],
+            'division_code' => ['required', 'string', 'max:100'],
+            'region_code' => ['nullable', 'string', 'max:100'],
+            'office_code' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'firstname' => ['required', 'string', 'max:100'],
             'middlename' => ['nullable', 'string', 'max:100'],
             'lastname' => ['required', 'string', 'max:100'],
             'extensionname' => ['nullable', 'string', 'max:100'],
             'role_id' => ['required', 'integer', Rule::in($this->roleIds())],
-            'officeId' => ['required', 'integer', Rule::exists('legacy.bureau', 'bureauId')],
+            'officeId' => ['required', 'integer', Rule::exists('offices', 'id')],
         ]);
 
         $role = DB::connection('legacy')->table('role')->where('roleId', $validated['role_id'])->value('rolename');
-        $bureau = BureauLegacy::query()->findOrFail($validated['officeId']);
-        $office = Office::query()->firstOrCreate(
-            ['name' => $bureau->longName],
-            ['short_name' => $bureau->shortName, 'code' => $bureau->officeCode, 'email' => $bureau->officeEmail],
-        );
+        $divisionId = Division::query()->where('code', $validated['division_code'])->value('id');
+        if ($divisionId === null) {
+            return back()->withErrors(['division_code' => 'This employee division is not present in the local office directory.']);
+        }
         User::query()->create([
             'name' => trim(implode(' ', array_filter([$validated['firstname'], $validated['middlename'] ?? null, $validated['lastname'], $validated['extensionname'] ?? null]))),
             'username' => $validated['username'],
@@ -287,11 +290,14 @@ class UserAccountController extends Controller
             'lastname' => $validated['lastname'],
             'extensionname' => $validated['extensionname'] ?? null,
             'agency_employee_no' => $validated['agency_employee_no'],
+            'division_code' => $validated['division_code'] ?? null,
+            'region_code' => $validated['region_code'] ?? null,
+            'office_code' => $validated['office_code'] ?? null,
             'email' => $validated['email'],
             'role' => $role ?: 'user',
             'role_id' => (int) $validated['role_id'],
-            'office_id' => $office->id,
-            'legacy_bureau_id' => (int) $validated['officeId'],
+            'office_id' => (int) $validated['officeId'],
+            'division_id' => (int) $divisionId,
             'password' => Hash::make(Str::random(64)),
             'is_active' => true,
             'is_locked' => false,
@@ -312,17 +318,21 @@ class UserAccountController extends Controller
             'lastname' => ['required', 'string', 'max:100'],
             'extensionname' => ['nullable', 'string', 'max:100'],
             'role_id' => ['required', 'integer', Rule::in($this->roleIds())],
-            'officeId' => ['required', 'integer', Rule::exists('legacy.bureau', 'bureauId')],
+            'officeId' => ['nullable', 'integer', Rule::exists('offices', 'id')],
+            'division_code' => ['nullable', 'string', 'max:100'],
+            'region_code' => ['nullable', 'string', 'max:100'],
+            'office_code' => ['nullable', 'string', 'max:100'],
             'status' => ['required', Rule::in(['1', '0'])],
             'isLocked' => ['required', Rule::in(['Y', 'N'])],
         ]);
 
         $role = DB::connection('legacy')->table('role')->where('roleId', $validated['role_id'])->value('rolename');
-        $bureau = BureauLegacy::query()->findOrFail($validated['officeId']);
-        $office = Office::query()->firstOrCreate(
-            ['name' => $bureau->longName],
-            ['short_name' => $bureau->shortName, 'code' => $bureau->officeCode, 'email' => $bureau->officeEmail],
-        );
+        $divisionId = filled($validated['division_code'] ?? null)
+            ? Division::query()->where('code', $validated['division_code'])->value('id')
+            : $user->division_id;
+        if (filled($validated['division_code'] ?? null) && $divisionId === null) {
+            return back()->withErrors(['division_code' => 'This employee division is not present in the local office directory.']);
+        }
         $user->fill([
             'name' => trim(implode(' ', array_filter([$validated['firstname'], $validated['middlename'] ?? null, $validated['lastname'], $validated['extensionname'] ?? null]))),
             'firstname' => $validated['firstname'],
@@ -331,8 +341,11 @@ class UserAccountController extends Controller
             'extensionname' => $validated['extensionname'] ?? null,
             'role' => $role ?: 'user',
             'role_id' => (int) $validated['role_id'],
-            'office_id' => $office->id,
-            'legacy_bureau_id' => (int) $validated['officeId'],
+            'office_id' => isset($validated['officeId']) ? (int) $validated['officeId'] : $user->office_id,
+            'division_id' => $divisionId,
+            'division_code' => $validated['division_code'] ?? $user->division_code,
+            'region_code' => $validated['region_code'] ?? $user->region_code,
+            'office_code' => $validated['office_code'] ?? $user->office_code,
             'is_active' => $validated['status'] === '1',
             'is_locked' => $validated['isLocked'] === 'Y',
         ]);

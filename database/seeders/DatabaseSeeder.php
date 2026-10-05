@@ -22,6 +22,8 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->call(OfficesSqlSeeder::class);
+
         $office = Office::firstOrCreate([
             'name' => 'Central Office',
             'short_name' => 'CO',
