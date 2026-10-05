@@ -49,6 +49,11 @@ return [
         'auth_header' => 'Authorization',
     ],
 
+    'employee_directory' => [
+        'url' => env('EMPLOYEE_API_URL') ?: 'http://192.168.5.138:8080',
+        'token' => env('EMPLOYEE_API_TOKEN') ?: (env('HRIS_API_TOKEN') ?: env('PDMIS_API_TOKEN')),
+    ],
+
     'ipluma' => [
         'url' => env('IPLUMA_API_URL'),
         'key' => env('IPLUMA_API_KEY'),

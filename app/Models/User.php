@@ -28,6 +28,7 @@ class User extends Authenticatable
         'lastname',
         'middlename',
         'extensionname',
+        'agency_employee_no',
         'email',
         'password',
         'role',

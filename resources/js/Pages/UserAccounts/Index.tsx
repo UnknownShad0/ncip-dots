@@ -8,7 +8,10 @@ type UserRow = {
     email: string;
     username: string;
     firstname: string;
+    middlename: string;
     lastname: string;
+    extensionname: string;
+    agency_employee_no: string;
     role_id: string;
     role: string;
     office_id: number | null;
@@ -19,30 +22,46 @@ type UserRow = {
     last_login_at: string | null;
     source: string;
 };
-type OfficeOption = { id: number; name: string };
 type RoleOption = { id: number; name: string };
 type FormState = {
+    agency_employee_no: string;
     firstname: string;
+    middlename: string;
     lastname: string;
+    extensionname: string;
     username: string;
     email: string;
     role_id: string;
     officeId: string;
     status: string;
     isLocked: string;
-    password: string;
-    password_confirmation: string;
+};
+type EmployeeLookup = {
+    employee: {
+        employee_id: string | number;
+        employee_code: string;
+        username: string;
+        email_address: string;
+        first_name: string;
+        middle_name: string;
+        last_name: string;
+        ext_name: string;
+        agency_employee_no: string;
+        division_code: string;
+        division: string;
+    };
+    offices: { region_code: string; region_name: string; office_code: string; office_name: string; office_id: number | null }[];
 };
 type SortKey = 'name' | 'email' | 'role' | 'office_name' | 'is_active';
 
 const emptyForm: FormState = {
-    firstname: '', lastname: '', username: '', email: '', role_id: '', officeId: '',
-    status: '1', isLocked: 'N', password: '', password_confirmation: '',
+    agency_employee_no: '', firstname: '', middlename: '', lastname: '', extensionname: '', username: '', email: '', role_id: '', officeId: '',
+    status: '1', isLocked: 'N',
 };
 
 export default function UserAccountsIndex({
-    users = [], offices = [], roles = [],
-}: { users?: UserRow[]; offices?: OfficeOption[]; roles?: RoleOption[] }) {
+    users = [], roles = [],
+}: { users?: UserRow[]; roles?: RoleOption[] }) {
     const [search, setSearch] = useState('');
     const [sortKey, setSortKey] = useState<SortKey>('name');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -53,6 +72,9 @@ export default function UserAccountsIndex({
     const [form, setForm] = useState<FormState>(emptyForm);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [processing, setProcessing] = useState(false);
+    const [employeeLookup, setEmployeeLookup] = useState<EmployeeLookup | null>(null);
+    const [lookupError, setLookupError] = useState('');
+    const [lookupProcessing, setLookupProcessing] = useState(false);
 
     const visibleUsers = useMemo(() => {
         const term = search.toLowerCase();
@@ -67,28 +89,71 @@ export default function UserAccountsIndex({
 
     const pageCount = Math.max(1, Math.ceil(visibleUsers.length / perPage));
     const pageUsers = visibleUsers.slice((page - 1) * perPage, page * perPage);
-    const officeOptions = editingRow?.office_id && !offices.some((office) => office.id === editingRow.office_id)
-        ? [...offices, { id: editingRow.office_id, name: `${editingRow.office_name} (Inactive)` }]
-        : offices;
-
     const closeModal = () => {
         setEditingRow(null);
         setIsCreateOpen(false);
         setForm(emptyForm);
         setErrors({});
+        setEmployeeLookup(null);
+        setLookupError('');
     };
 
     const openEdit = (user: UserRow) => {
         setEditingRow(user);
         setForm({
-            firstname: user.firstname ?? '', lastname: user.lastname ?? '',
+            agency_employee_no: user.agency_employee_no ?? '',
+            firstname: user.firstname ?? '', middlename: user.middlename ?? '',
+            lastname: user.lastname ?? '', extensionname: user.extensionname ?? '',
             username: user.username ?? '', email: user.email ?? '', role_id: user.role_id ?? '',
             officeId: user.office_id == null ? '' : String(user.office_id),
             status: user.is_active ? '1' : '0', isLocked: user.is_locked ? 'Y' : 'N',
-            password: '', password_confirmation: '',
         });
         setIsCreateOpen(false);
         setErrors({});
+        setEmployeeLookup(null);
+        setLookupError('');
+    };
+
+    const lookupEmployee = async () => {
+        const employeeNumber = form.agency_employee_no.trim();
+        if (!employeeNumber) {
+            setLookupError('Enter an Agency Employee Number first.');
+            return;
+        }
+
+        setLookupProcessing(true);
+        setLookupError('');
+        setEmployeeLookup(null);
+        setErrors({});
+
+        try {
+            const params = new URLSearchParams({ agency_employee_no: employeeNumber });
+            const response = await fetch(`${route('user-accounts.employee-lookup')}?${params}`, {
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            const result = await response.json();
+
+            if (!response.ok) throw new Error(result.message ?? 'Employee lookup failed.');
+
+            const details = result as EmployeeLookup;
+            const matchedOffice = details.offices.find((office) => office.office_id !== null);
+            setEmployeeLookup(details);
+            setForm((current) => ({
+                ...current,
+                agency_employee_no: details.employee.agency_employee_no || employeeNumber,
+                firstname: details.employee.first_name || '',
+                middlename: details.employee.middle_name || '',
+                lastname: details.employee.last_name || '',
+                extensionname: details.employee.ext_name || '',
+                username: details.employee.username || '',
+                email: details.employee.email_address || '',
+                officeId: matchedOffice ? String(matchedOffice.office_id) : '',
+            }));
+        } catch (error) {
+            setLookupError(error instanceof Error ? error.message : 'Employee lookup failed.');
+        } finally {
+            setLookupProcessing(false);
+        }
     };
 
     const submit = (event: FormEvent) => {
@@ -182,17 +247,35 @@ export default function UserAccountsIndex({
                 <form onSubmit={submit} className="my-8 max-h-[calc(100vh-2rem)] w-full max-w-2xl space-y-4 overflow-y-auto rounded-2xl border border-[#e2e2df] bg-white p-6 shadow-2xl">
                     <div className="flex items-center justify-between"><h3 id="user-account-modal-title" className="text-lg font-semibold text-slate-800">{editingRow ? 'Edit User Account' : 'New User Account'}</h3><button type="button" onClick={closeModal} className="text-slate-500">Close</button></div>
                     <div className="grid gap-4 sm:grid-cols-2">
-                        <Field label="First Name" error={errors.firstname}><input required value={form.firstname} onChange={(e) => setForm({ ...form, firstname: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
-                        <Field label="Last Name" error={errors.lastname}><input required value={form.lastname} onChange={(e) => setForm({ ...form, lastname: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
-                        <Field label="Username" error={errors.username}><input required maxLength={50} disabled={!!editingRow?.username} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="w-full rounded-md border-slate-300 disabled:bg-slate-100" /></Field>
-                        <Field label="Email" error={errors.email}><input required type="email" maxLength={255} disabled={!!editingRow} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-md border-slate-300 disabled:bg-slate-100" /></Field>
+                        {!editingRow && <Field label="Agency Employee Number (ID No.)" error={errors.agency_employee_no}><div className="flex gap-2"><input required maxLength={100} value={form.agency_employee_no} onChange={(e) => { setForm({ ...form, agency_employee_no: e.target.value }); setEmployeeLookup(null); setLookupError(''); }} className="min-w-0 flex-1 rounded-md border-slate-300" /><button type="button" onClick={lookupEmployee} disabled={lookupProcessing} className="shrink-0 rounded-md bg-sky-600 px-3 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50">{lookupProcessing ? 'Looking up…' : 'Lookup'}</button></div>{lookupError && <span className="block text-xs text-red-600">{lookupError}</span>}</Field>}
+                        {editingRow && <Field label="Agency Employee Number (ID No.)"><input readOnly value={form.agency_employee_no} className="w-full rounded-md border-slate-300 bg-slate-100" /></Field>}
+                        <Field label="First Name" error={errors.firstname}><input required readOnly value={form.firstname} className="w-full rounded-md border-slate-300 read-only:bg-slate-100" /></Field>
+                        <Field label="Middle Name" error={errors.middlename}><input readOnly value={form.middlename} className="w-full rounded-md border-slate-300 read-only:bg-slate-100" /></Field>
+                        <Field label="Last Name" error={errors.lastname}><input required readOnly value={form.lastname} className="w-full rounded-md border-slate-300 read-only:bg-slate-100" /></Field>
+                        <Field label="Extension Name" error={errors.extensionname}><input readOnly value={form.extensionname} className="w-full rounded-md border-slate-300 read-only:bg-slate-100" /></Field>
+                        <Field label="Username" error={errors.username}><input required maxLength={50} readOnly value={form.username} className="w-full rounded-md border-slate-300 read-only:bg-slate-100" /></Field>
+                        <Field label="Email" error={errors.email}><input required type="email" maxLength={255} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
                         <Field label="Role" error={errors.role_id}><select required value={form.role_id} onChange={(e) => setForm({ ...form, role_id: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></Field>
-                        <Field label="Office" error={errors.officeId}><select required value={form.officeId} onChange={(e) => setForm({ ...form, officeId: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select office</option>{officeOptions.map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}</select></Field>
+                        <div className="sm:col-span-2"><p className="text-sm text-slate-700">Office</p><p className="mt-1 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800">{editingRow?.office_name || employeeLookup?.offices.find((office) => office.office_id !== null)?.office_name || employeeLookup?.offices[0]?.office_name || (employeeLookup ? 'No office returned by the employee directory' : 'Look up the employee to assign an office')}</p>{errors.officeId && <p className="mt-1 text-xs text-red-600">{errors.officeId}</p>}</div>
                         {editingRow && <Field label="Account Status" error={errors.status}><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full rounded-md border-slate-300"><option value="1">Active</option><option value="0">Inactive</option></select></Field>}
                         {editingRow && <Field label="Login Status" error={errors.isLocked}><select value={form.isLocked} onChange={(e) => setForm({ ...form, isLocked: e.target.value })} className="w-full rounded-md border-slate-300"><option value="N">Unlocked</option><option value="Y">Locked</option></select></Field>}
-                        <Field label={editingRow ? 'New password (optional)' : 'Password'} error={errors.password}><input required={!editingRow} type="password" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
-                        <Field label="Confirm password" error={errors.password_confirmation}><input required={!editingRow && !!form.password} type="password" value={form.password_confirmation} onChange={(e) => setForm({ ...form, password_confirmation: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
                     </div>
+                    {employeeLookup && <section className="rounded-xl border border-sky-100 bg-sky-50/70 p-4" aria-label="Employee directory details">
+                        <h4 className="mb-3 text-sm font-semibold text-sky-900">Employee directory details</h4>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-4">
+                            <LookupDetail label="Employee ID" value={employeeLookup.employee.employee_id} />
+                            <LookupDetail label="Employee Code" value={employeeLookup.employee.employee_code} />
+                            <LookupDetail label="Agency Employee No." value={employeeLookup.employee.agency_employee_no} />
+                            <LookupDetail label="Division Code" value={employeeLookup.employee.division_code} />
+                            <LookupDetail label="Division" value={employeeLookup.employee.division} />
+                        </div>
+                        {employeeLookup.offices.map((office, index) => <div key={`${office.office_code}-${index}`} className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-sky-100 pt-3 text-sm sm:grid-cols-4">
+                            <LookupDetail label="Region Code" value={office.region_code} />
+                            <LookupDetail label="Region" value={office.region_name} />
+                            <LookupDetail label="Office Code" value={office.office_code} />
+                            <LookupDetail label="Office" value={office.office_name} />
+                        </div>)}
+                    </section>}
                     {errors.user && <p className="text-sm text-red-600">{errors.user}</p>}
                     <div className="flex justify-end gap-2 border-t pt-4"><button type="button" onClick={closeModal} className="rounded-md border px-4 py-2 text-sm">Cancel</button><button disabled={processing} className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{processing ? 'Saving...' : 'Save account'}</button></div>
                 </form>
@@ -203,4 +286,8 @@ export default function UserAccountsIndex({
 
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
     return <label className="space-y-1 text-sm text-slate-700"><span className="block">{label}</span>{children}{error && <span className="block text-xs text-red-600">{error}</span>}</label>;
+}
+
+function LookupDetail({ label, value }: { label: string; value: string | number | null | undefined }) {
+    return <div className="min-w-0"><p className="text-xs text-slate-500">{label}</p><p className="truncate font-medium text-slate-800">{value || '—'}</p></div>;
 }
