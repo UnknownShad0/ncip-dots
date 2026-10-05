@@ -12,24 +12,26 @@ type OfficeRow = {
     location?: string;
     parentOfficeId?: number | null;
     parent_name?: string | null;
+    division_code?: string | null;
     range_id?: number | null;
     range_name?: string | null;
     range_is_active?: boolean | number | null;
+    is_active?: boolean | number;
     source?: string;
 };
 
-type OfficeOption = { id: number; name: string };
-type RangeOption = { id: number; name: string; is_active: boolean | number };
+type DirectoryDivisionOption = { code: string; name: string };
+type RangeOption = { value: string; name: string; source: 'SQLite' | 'Legacy'; is_active: boolean };
 
 type SortKey = 'name' | 'short_name' | 'code' | 'email' | 'location';
 
 export default function OfficesIndex({
     offices = [],
-    parentOffices = [],
+    directoryDivisions = [],
     ranges = [],
 }: {
     offices?: OfficeRow[];
-    parentOffices?: OfficeOption[];
+    directoryDivisions?: DirectoryDivisionOption[];
     ranges?: RangeOption[];
 }) {
     const [editingRow, setEditingRow] = useState<OfficeRow | null>(null);
@@ -40,25 +42,25 @@ export default function OfficesIndex({
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
     const [page, setPage] = useState(1);
     const [perPage, setPerPage] = useState(10);
+    const [divisionPickerOpen, setDivisionPickerOpen] = useState(false);
+    const [divisionSearch, setDivisionSearch] = useState('');
     const [form, setForm] = useState({
-        name: '',
-        short_name: '',
-        code: '',
+        division_code: '',
         email: '',
-        parentOfficeId: '',
-        range_id: '',
+        is_active: '1',
+        range: '',
     });
 
     const closeModal = () => {
         setEditingRow(null);
         setIsCreateOpen(false);
+        setDivisionPickerOpen(false);
+        setDivisionSearch('');
         setForm({
-            name: '',
-            short_name: '',
-            code: '',
+            division_code: '',
             email: '',
-            parentOfficeId: '',
-            range_id: '',
+            is_active: '1',
+            range: '',
         });
     };
 
@@ -68,26 +70,28 @@ export default function OfficesIndex({
         }
 
         setEditingRow(row);
+        setDivisionPickerOpen(false);
+        setDivisionSearch('');
         setForm({
-            name: row.name ?? '',
-            short_name: row.short_name ?? '',
-            code: row.code ?? '',
+            division_code: row.division_code ?? row.code ?? '',
             email: row.email ?? '',
-            parentOfficeId: row.parentOfficeId == null ? '' : String(row.parentOfficeId),
-            range_id: row.range_id == null ? '' : String(row.range_id),
+            is_active: String(Number(row.is_active ?? 1)),
+            range: row.range_id != null
+                ? `sqlite:${row.range_id}`
+                : ranges.find((range) => range.source === 'Legacy' && range.name === row.location)?.value ?? '',
         });
     };
 
     const openCreate = () => {
         setEditingRow(null);
         setIsCreateOpen(true);
+        setDivisionPickerOpen(false);
+        setDivisionSearch('');
         setForm({
-            name: '',
-            short_name: '',
-            code: '',
+            division_code: '',
             email: '',
-            parentOfficeId: '',
-            range_id: '',
+            is_active: '1',
+            range: '',
         });
     };
 
@@ -181,12 +185,11 @@ export default function OfficesIndex({
     }, [page, totalPages]);
 
     const paginatedOffices = sortedOffices.slice((page - 1) * perPage, page * perPage);
-    const parentOfficeOptions = editingRow?.parentOfficeId != null && !parentOffices.some((office) => String(office.id) === String(editingRow.parentOfficeId))
-        ? [...parentOffices, { id: Number(editingRow.parentOfficeId), name: `${editingRow.parent_name || `Office ${editingRow.parentOfficeId}`} (Inactive)` }]
-        : parentOffices;
-    const rangeOptions = editingRow?.range_id != null && !ranges.some((range) => String(range.id) === String(editingRow.range_id))
-        ? [...ranges, { id: Number(editingRow.range_id), name: `${editingRow.range_name || 'Current range'} (Inactive)`, is_active: false }]
-        : ranges;
+    const directoryDivisionOptions = editingRow?.code && !directoryDivisions.some((division) => division.code === (editingRow.division_code ?? editingRow.code))
+        ? [...directoryDivisions, { code: editingRow.division_code ?? editingRow.code ?? '', name: editingRow.name }]
+        : directoryDivisions;
+    const selectedDivision = directoryDivisionOptions.find((division) => division.code === form.division_code);
+    const filteredDivisionOptions = directoryDivisionOptions.filter((division) => `${division.name} ${division.code}`.toLowerCase().includes(divisionSearch.toLowerCase()));
 
     return (
         <AuthenticatedLayout header={<div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Library management</p><h1 className="text-2xl font-bold tracking-tight text-[#171717] sm:text-3xl">Offices</h1></div>}>
@@ -264,6 +267,7 @@ export default function OfficesIndex({
                                         Location {sortKey === 'location' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
                                     </button>
                                 </th>
+                                <th className="px-4 py-3 font-semibold">Status</th>
                                 <th className="px-4 py-3 font-semibold no-print">Actions</th>
                             </tr>
                         </thead>
@@ -271,7 +275,7 @@ export default function OfficesIndex({
                         <tbody>
                             {paginatedOffices.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                                    <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
                                         No offices found.
                                     </td>
                                 </tr>
@@ -286,6 +290,7 @@ export default function OfficesIndex({
                                             <td className="px-4 py-3 text-slate-600">{row.code || '—'}</td>
                                             <td className="px-4 py-3 text-slate-600">{row.email || '—'}</td>
                                             <td className="px-4 py-3 text-slate-600">{row.location || '—'}</td>
+                                            <td className="px-4 py-3 text-slate-600">{Boolean(Number(row.is_active)) ? 'Active' : 'Inactive'}</td>
                                             <td className="px-4 py-3 no-print">
                                                 <button
                                                     type="button"
@@ -359,59 +364,55 @@ export default function OfficesIndex({
                         </div>
 
                         <form onSubmit={editingRow ? handleUpdate : handleCreate} className="space-y-4">
-                            <div>
-                                <label className="mb-1 block text-sm font-medium text-slate-700">Name</label>
-                                <input
-                                    value={form.name}
-                                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                                    required
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                                />
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <div>
+                                    <label htmlFor="division-search" className="mb-1 block text-sm font-medium text-slate-700">Office</label>
+                                    <input id="division-search" value={divisionPickerOpen ? divisionSearch : (selectedDivision?.name ?? '')} onFocus={() => { setDivisionPickerOpen(true); setDivisionSearch(''); }} onChange={(e) => { setDivisionSearch(e.target.value); setDivisionPickerOpen(true); }} placeholder="Search divisions..." autoComplete="off" className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+                                    {divisionPickerOpen && (
+                                        <div className="mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-300 bg-white shadow-lg" role="listbox" aria-label="Office divisions">
+                                            {form.division_code && (
+                                                <button type="button" role="option" aria-selected="false" onClick={() => { setForm({ ...form, division_code: '' }); setDivisionPickerOpen(false); setDivisionSearch(''); }} className="block w-full border-b border-slate-200 px-3 py-2 text-left text-sm text-slate-500 hover:bg-slate-50">
+                                                    Clear selection
+                                                </button>
+                                            )}
+                                            {filteredDivisionOptions.length ? filteredDivisionOptions.map((division) => (
+                                                <button key={division.code} type="button" role="option" aria-selected={form.division_code === division.code} onClick={() => { setForm({ ...form, division_code: division.code }); setDivisionPickerOpen(false); setDivisionSearch(''); }} className="block w-full px-3 py-2 text-left text-sm hover:bg-blue-50">
+                                                    {division.name}
+                                                </button>
+                                            )) : <p className="px-3 py-2 text-sm text-slate-500">No matching divisions.</p>}
+                                        </div>
+                                    )}
+                                </div>
+                                <div>
+                                    <label htmlFor="range" className="mb-1 block text-sm font-medium text-slate-700">Range</label>
+                                    <select id="range" value={form.range} onChange={(e) => setForm({ ...form, range: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                                        <option value="">Select range</option>
+                                        {ranges.map((range) => <option key={range.value} value={range.value}>{range.name}{!range.is_active ? ' (Inactive)' : ''}</option>)}
+                                    </select>
+                                </div>
                             </div>
 
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <div>
-                                    <label htmlFor="parentOfficeId" className="mb-1 block text-sm font-medium text-slate-700">Under</label>
-                                    <select id="parentOfficeId" value={form.parentOfficeId} onChange={(e) => setForm({ ...form, parentOfficeId: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
-                                        <option value="">Select parent office</option>
-                                        {parentOfficeOptions.filter((office) => String(office.id) !== String(editingRow?.id ?? '')).map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}
+                                    <label className="mb-1 block text-sm font-medium text-slate-700">Office Code</label>
+                                    <input value={form.division_code} readOnly aria-readonly="true" required className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-slate-600" />
+                                </div>
+                                <div>
+                                    <label htmlFor="is_active" className="mb-1 block text-sm font-medium text-slate-700">Status</label>
+                                    <select id="is_active" value={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                                        <option value="1">Active</option>
+                                        <option value="0">Inactive</option>
                                     </select>
-                                </div>
-                                <div>
-                                    <label htmlFor="range_id" className="mb-1 block text-sm font-medium text-slate-700">Range</label>
-                                    <select id="range_id" value={form.range_id} onChange={(e) => setForm({ ...form, range_id: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
-                                        <option value="">Select range</option>
-                                        {rangeOptions.filter((range) => Boolean(Number(range.is_active)) || String(range.id) === form.range_id).map((range) => <option key={range.id} value={range.id}>{range.name}{!Boolean(Number(range.is_active)) && !range.name.includes('(Inactive)') ? ' (Inactive, current)' : ''}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="mb-1 block text-sm font-medium text-slate-700">Short Name</label>
-                                    <input
-                                        value={form.short_name}
-                                        onChange={(e) => setForm({ ...form, short_name: e.target.value })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="mb-1 block text-sm font-medium text-slate-700">Code</label>
-                                    <input
-                                        value={form.code}
-                                        onChange={(e) => setForm({ ...form, code: e.target.value })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                                    />
                                 </div>
                             </div>
 
                             <div>
-                                <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+                                <label className="mb-1 block text-sm font-medium text-slate-700">Office Email</label>
                                 <input
                                     type="email"
                                     value={form.email}
                                     onChange={(e) => setForm({ ...form, email: e.target.value })}
+                                    required
                                     className="w-full rounded-lg border border-slate-300 px-3 py-2"
                                 />
                             </div>

@@ -14,11 +14,17 @@ class Office extends Model
     protected $fillable = [
         'parent_id',
         'range_id',
+        'division_code',
         'name',
         'short_name',
         'code',
         'email',
         'location',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
     ];
 
     public function parent(): BelongsTo
