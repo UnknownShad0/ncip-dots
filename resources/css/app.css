@@ -1,3 +1,21 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.dots-guest {
+    min-height: 100dvh;
+    width: 100%;
+    background-color: #e8f5ec;
+    background-image: linear-gradient(90deg, rgb(242 250 237 / 42%), rgb(230 248 246 / 16%)), url('/images/login/october2025.jpg');
+    background-position: center center, center top;
+    background-size: 100% 100%, cover;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+}
+
+@media (max-width: 640px) {
+    .dots-guest {
+        background-position: center center, center top;
+        background-attachment: scroll;
+    }
+}

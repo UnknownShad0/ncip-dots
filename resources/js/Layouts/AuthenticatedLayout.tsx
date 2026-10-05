@@ -49,14 +49,14 @@ export default function AuthenticatedLayout({
     );
 
     return (
-        <div className="min-h-screen bg-[#f8f8f6] p-2.5 text-[#171717]">
-            <div className="flex min-h-[calc(100vh-20px)] overflow-hidden rounded-[20px] border border-[#e2e2df] bg-[#fafaf8]">
+        <div className="min-h-screen bg-[#eef3f9] p-2.5 text-[#171717]">
+            <div className="flex min-h-[calc(100vh-20px)] overflow-hidden rounded-[20px] border border-[#dce5f0] bg-[#f8fafd] shadow-sm">
                 {mobileOpen && <button aria-label="Close navigation" onClick={() => setMobileOpen(false)} className="fixed inset-0 z-30 bg-black/30 lg:hidden" />}
                 <aside className={`${mobileOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-40 flex w-[290px] flex-col border-r border-[#e2e2df] bg-white transition-transform lg:static lg:w-[320px] lg:translate-x-0`}>
-                    <div className="flex h-[88px] shrink-0 items-center justify-between border-b border-[#e2e2df] px-6">
-                        <Link href={route('dashboard')} className="flex items-center gap-3 text-[21px] font-semibold tracking-tight">
-                            <span className="flex h-12 w-12 items-center justify-center rounded-[14px] bg-blue-600 text-white"><FileText size={25} strokeWidth={2.2} /></span>
-                            DOTS
+                    <div className="flex h-[88px] shrink-0 items-center justify-between border-b border-[#e2e8f0] border-b-2 border-b-[#eabf45] bg-[#f8fafd] px-6">
+                        <Link href={route('dashboard')} className="flex items-center gap-3 text-[21px] font-semibold tracking-tight text-[#164f98]">
+                            <img src="/images/logo/ncip-logo.png" alt="NCIP logo" className="h-12 w-12 object-contain" />
+                            <span>DOTS</span>
                         </Link>
                         <button className="lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Close menu"><X size={20} /></button>
                     </div>
@@ -88,7 +88,7 @@ export default function AuthenticatedLayout({
                 </aside>
 
                 <div className="flex min-w-0 flex-1 flex-col">
-                    <header className="flex min-h-[92px] items-center gap-4 px-5 sm:px-8 lg:px-10">
+                    <header className="flex min-h-[92px] items-center gap-4 border-b border-[#e5ebf3] bg-white/70 px-5 sm:px-8 lg:px-10">
                         <button className="rounded-lg p-2 hover:bg-slate-100 lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={22} /></button>
                         <div className="min-w-0 flex-1">{header}</div>
                         <DropdownMenu as="div" className="relative hidden sm:block">
