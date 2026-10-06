@@ -2,6 +2,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import CrudAlertModal from '@/Components/CrudAlertModal';
 import { Head, router } from '@inertiajs/react';
 import { useEffect, useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Plus, Printer, Search } from 'lucide-react';
 
 type OfficeRow = {
     id: number | string | null;
@@ -204,64 +205,77 @@ export default function OfficesIndex({
                 }
             `}</style>
 
-            <div className="mx-auto max-w-[1440px] overflow-hidden rounded-2xl border border-[#e2e2df] bg-white shadow-sm print-table-only">
-                <div className="flex flex-col gap-4 border-b border-[#e2e2df] bg-white px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 no-print">
-                    <div><h2 className="text-xl font-semibold tracking-tight text-[#171717]">Office register</h2><p className="mt-1 text-sm text-[#73736e]">Manage offices and their organizational relationships.</p></div>
+            <div className="mx-auto flex max-w-[1440px] flex-col gap-5 print-table-only">
+                <section className="rounded-2xl border border-[#e2e2df] bg-white p-5 shadow-sm sm:p-6 no-print">
+                    <div className="mb-5">
+                        <h2 className="mt-1 text-xl font-semibold tracking-tight text-[#171717]">Office register</h2>
+                        <p className="mt-1 text-sm text-[#73736e]">Manage offices and their organizational relationships.</p>
+                    </div>
 
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search by name, code, email, or location"
-                            className="h-11 rounded-xl border border-[#deded9] bg-[#fafaf8] px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                        />
+                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                        <label className="relative block">
+                            <span className="sr-only">Search offices</span>
+                            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="text"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                placeholder="Search by name, code, email, or location"
+                                className="h-11 w-full rounded-xl border border-[#deded9] bg-[#fafaf8] pl-10 pr-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                            />
+                        </label>
 
                         <button
                             type="button"
                             onClick={handlePrint}
-                            className="h-11 rounded-xl border border-[#deded9] bg-white px-4 text-sm font-semibold text-[#444] transition hover:bg-[#f6f6f3]"
+                            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#deded9] bg-white px-4 text-sm font-semibold text-[#444] transition hover:bg-[#f6f6f3]"
                         >
+                            <Printer aria-hidden="true" className="h-4 w-4" />
                             Print
                         </button>
 
                         <button
                             type="button"
                             onClick={openCreate}
-                            className="h-11 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700"
+                            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700"
                         >
+                            <Plus aria-hidden="true" className="h-4 w-4" />
                             New Office
                         </button>
                     </div>
-                </div>
+                </section>
 
-                <div className="overflow-x-auto">
+                <section className="overflow-hidden rounded-2xl border border-[#e2e2df] bg-white shadow-sm">
+                    <div className="flex items-center justify-between border-b border-[#e8e8e4] bg-[#fafaf8] px-5 py-3 text-sm text-slate-600">
+                        <span>{sortedOffices.length} {sortedOffices.length === 1 ? 'office' : 'offices'}</span>
+                    </div>
+                    <div className="overflow-x-auto">
                     <table className="min-w-full text-left text-sm">
                         <thead className="bg-[#f7f8fa] text-[#555752]">
                             <tr>
                                 <th className="px-4 py-3 font-semibold">
                                     <button type="button" onClick={() => handleSort('name')} className="flex items-center gap-1">
-                                        Name {sortKey === 'name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                                        Name {sortKey === 'name' ? (sortDirection === 'asc' ? <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" />) : <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" />}
                                     </button>
                                 </th>
-                                <th className="px-4 py-3 font-semibold">
+                                {/* <th className="px-4 py-3 font-semibold">
                                     <button type="button" onClick={() => handleSort('short_name')} className="flex items-center gap-1">
-                                        Short Name {sortKey === 'short_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                                        Short Name {sortKey === 'short_name' ? (sortDirection === 'asc' ? <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" />) : <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" />}
                                     </button>
-                                </th>
+                                </th> */}
                                 <th className="px-4 py-3 font-semibold">
                                     <button type="button" onClick={() => handleSort('code')} className="flex items-center gap-1">
-                                        Code {sortKey === 'code' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                                        Code {sortKey === 'code' ? (sortDirection === 'asc' ? <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" />) : <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" />}
                                     </button>
                                 </th>
                                 <th className="px-4 py-3 font-semibold">
                                     <button type="button" onClick={() => handleSort('email')} className="flex items-center gap-1">
-                                        Email {sortKey === 'email' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                                        Email {sortKey === 'email' ? (sortDirection === 'asc' ? <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" />) : <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" />}
                                     </button>
                                 </th>
                                 <th className="px-4 py-3 font-semibold">
                                     <button type="button" onClick={() => handleSort('location')} className="flex items-center gap-1">
-                                        Location {sortKey === 'location' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                                        Range {sortKey === 'location' ? (sortDirection === 'asc' ? <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" />) : <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" />}
                                     </button>
                                 </th>
                                 <th className="px-4 py-3 font-semibold no-print">Actions</th>
@@ -282,10 +296,15 @@ export default function OfficesIndex({
                                     return (
                                         <tr key={`${row.id ?? 'row'}-${index}`} className="border-t border-[#eeeeeb] transition-colors hover:bg-[#fafaf8]">
                                             <td className="px-4 py-3 font-medium text-slate-800">{row.name}</td>
-                                            <td className="px-4 py-3 text-slate-600">{row.short_name || '—'}</td>
+                                            {/* <td className="px-4 py-3 text-slate-600">{row.short_name || '—'}</td> */}
                                             <td className="px-4 py-3 text-slate-600">{row.code || '—'}</td>
                                             <td className="px-4 py-3 text-slate-600">{row.email || '—'}</td>
                                             <td className="px-4 py-3 text-slate-600">{row.location || '—'}</td>
+                                            <td className="px-4 py-3">
+                                                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${Boolean(Number(row.is_active)) ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200' : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'}`}>
+                                                    {Boolean(Number(row.is_active)) ? 'Active' : 'Inactive'}
+                                                </span>
+                                            </td>
                                             <td className="px-4 py-3 no-print">
                                                 <button
                                                     type="button"
@@ -310,7 +329,7 @@ export default function OfficesIndex({
                         <select
                             value={perPage}
                             onChange={(e) => setPerPage(Number(e.target.value))}
-                            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+                            className="min-w-[4.5rem] rounded-md border border-slate-300 bg-white py-1 pl-2 pr-9 text-sm"
                         >
                             <option value={5}>5</option>
                             <option value={10}>10</option>
@@ -343,6 +362,7 @@ export default function OfficesIndex({
                         </button>
                     </div>
                 </div>
+                </section>
             </div>
 
             {(isCreateOpen || editingRow) && (
@@ -359,14 +379,32 @@ export default function OfficesIndex({
                         </div>
 
                         <form onSubmit={editingRow ? handleUpdate : handleCreate} className="space-y-4">
-                            <div>
-                                <label className="mb-1 block text-sm font-medium text-slate-700">Name</label>
-                                <input
-                                    value={form.name}
-                                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                                    required
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                                />
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <div>
+                                    <label htmlFor="division-search" className="mb-1 block text-sm font-medium text-slate-700">Office</label>
+                                    <input id="division-search" value={divisionPickerOpen ? divisionSearch : (selectedDivision?.name ?? '')} onFocus={() => { setDivisionPickerOpen(true); setDivisionSearch(''); }} onChange={(e) => { setDivisionSearch(e.target.value); setDivisionPickerOpen(true); }} placeholder="Search divisions..." autoComplete="off" className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+                                    {divisionPickerOpen && (
+                                        <div className="mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-300 bg-white shadow-lg" role="listbox" aria-label="Office divisions">
+                                            {form.division_code && (
+                                                <button type="button" role="option" aria-selected="false" onClick={() => { setForm({ ...form, division_code: '' }); setDivisionPickerOpen(false); setDivisionSearch(''); }} className="block w-full border-b border-slate-200 px-3 py-2 text-left text-sm text-slate-500 hover:bg-slate-50">
+                                                    Clear selection
+                                                </button>
+                                            )}
+                                            {filteredDivisionOptions.length ? filteredDivisionOptions.map((division) => (
+                                                <button key={division.code} type="button" role="option" aria-selected={form.division_code === division.code} onClick={() => { setForm({ ...form, division_code: division.code }); setDivisionPickerOpen(false); setDivisionSearch(''); }} className="block w-full px-3 py-2 text-left text-sm hover:bg-blue-50">
+                                                    {division.name}
+                                                </button>
+                                            )) : <p className="px-3 py-2 text-sm text-slate-500">No matching divisions.</p>}
+                                        </div>
+                                    )}
+                                </div>
+                                <div>
+                                    <label htmlFor="range" className="mb-1 block text-sm font-medium text-slate-700">Range</label>
+                                    <select id="range" value={form.range} onChange={(e) => setForm({ ...form, range: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm">
+                                        <option value="">Select range</option>
+                                        {ranges.map((range) => <option key={range.value} value={range.value}>{range.name}{!range.is_active ? ' (Inactive)' : ''}</option>)}
+                                    </select>
+                                </div>
                             </div>
 
                             <div className="grid gap-4 sm:grid-cols-2">
@@ -378,10 +416,10 @@ export default function OfficesIndex({
                                     </select>
                                 </div>
                                 <div>
-                                    <label htmlFor="range_id" className="mb-1 block text-sm font-medium text-slate-700">Range</label>
-                                    <select id="range_id" value={form.range_id} onChange={(e) => setForm({ ...form, range_id: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
-                                        <option value="">Select range</option>
-                                        {rangeOptions.filter((range) => Boolean(Number(range.is_active)) || String(range.id) === form.range_id).map((range) => <option key={range.id} value={range.id}>{range.name}{!Boolean(Number(range.is_active)) && !range.name.includes('(Inactive)') ? ' (Inactive, current)' : ''}</option>)}
+                                    <label htmlFor="is_active" className="mb-1 block text-sm font-medium text-slate-700">Status</label>
+                                    <select id="is_active" value={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm">
+                                        <option value="1">Active</option>
+                                        <option value="0">Inactive</option>
                                     </select>
                                 </div>
                             </div>

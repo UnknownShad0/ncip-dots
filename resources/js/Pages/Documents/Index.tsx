@@ -456,7 +456,7 @@ export default function DocumentsIndex({
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value)}
                             aria-label="Filter documents by status"
-                            className="col-span-2 h-11 min-w-0 rounded-xl border border-[#deded9] bg-[#fafaf8] pl-3 pr-8 text-sm text-[#333] outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:col-span-1"
+                            className="col-span-2 h-11 min-w-0 rounded-xl border border-[#deded9] bg-[#fafaf8] pl-3 pr-10 text-sm text-[#333] outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:col-span-1"
                         >
                             <option value="all">All Status</option>
                             <option value="ongoing">Ongoing</option>
@@ -601,7 +601,7 @@ export default function DocumentsIndex({
                         <select
                             value={perPage}
                             onChange={(e) => setPerPage(Number(e.target.value))}
-                            className="rounded-lg border border-[#deded9] bg-white py-1.5 pl-2 pr-8 text-sm"
+                            className="min-w-[4.5rem] rounded-lg border border-[#deded9] bg-white py-1.5 pl-2 pr-10 text-sm"
                         >
                             <option value={5}>5</option>
                             <option value={10}>10</option>
@@ -707,7 +707,7 @@ export default function DocumentsIndex({
                             <section className="grid gap-4 sm:grid-cols-2" aria-label="Release details">
                                 <div>
                                     <label htmlFor="release-action-type" className="mb-1 block text-sm font-medium text-slate-700">Required Action <span className="text-rose-600">*</span></label>
-                                    <select id="release-action-type" required value={releaseForm.actionTypeId} onChange={(event) => { setReleaseForm({ ...releaseForm, actionTypeId: event.target.value, otherAction: '' }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                                    <select id="release-action-type" required value={releaseForm.actionTypeId} onChange={(event) => { setReleaseForm({ ...releaseForm, actionTypeId: event.target.value, otherAction: '' }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm">
                                         <option value="">Select action</option>
                                         {actionTypes.map((action) => <option key={`${action.source ?? 'new'}-${action.id}`} value={action.id}>{action.name}</option>)}
                                     </select>
@@ -720,7 +720,7 @@ export default function DocumentsIndex({
                                 )}
                                 <div>
                                     <label htmlFor="release-office" className="mb-1 block text-sm font-medium text-slate-700">Required Receiving Office <span className="text-rose-600">*</span></label>
-                                    <select id="release-office" required value={releaseForm.officeId} onChange={(event) => { setReleaseForm({ ...releaseForm, officeId: event.target.value }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                                    <select id="release-office" required value={releaseForm.officeId} onChange={(event) => { setReleaseForm({ ...releaseForm, officeId: event.target.value }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm">
                                         <option value="">Select receiving office</option>
                                         {offices.map((office) => <option key={office.id} value={office.id} disabled={office.disabled}>{office.name}</option>)}
                                     </select>
@@ -784,7 +784,7 @@ export default function DocumentsIndex({
                                     <select id="approved-document-select" required value={form.approved_draft_id} onChange={(event) => {
                                         const selected = approvedDocuments.find((document) => String(document.id) === event.target.value);
                                         setForm({ ...form, approved_draft_id: event.target.value, title: selected?.title ?? form.title, document_type_id: selected ? String(selected.document_type_id) : form.document_type_id });
-                                    }} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                                    }} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10">
                                         <option value="">Select an approved document</option>
                                         {approvedDocuments.map((document) => <option key={document.id} value={document.id} disabled={document.disabled}>{document.title} · {document.document_type ?? 'Document'}{document.status === 'registered' ? ' (Registered document)' : ''}</option>)}
                                     </select>
@@ -802,7 +802,7 @@ export default function DocumentsIndex({
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <div>
                                     <label className="mb-1 block text-sm font-medium text-slate-700">Action Type</label>
-                                    <select value={form.action_type_id} onChange={(event) => setForm({ ...form, action_type_id: event.target.value, other_action: '' })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                                    <select value={form.action_type_id} onChange={(event) => setForm({ ...form, action_type_id: event.target.value, other_action: '' })} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10">
                                         <option value="">Select action type</option>
                                         {actionTypes.map((action) => <option key={`${action.source ?? 'new'}-${action.id}`} value={action.id}>{action.name}</option>)}
                                     </select>
@@ -815,7 +815,7 @@ export default function DocumentsIndex({
                                 )}
                                 <div>
                                     <label htmlFor="document-type-select" className="mb-1 block text-sm font-medium text-slate-700">Document Type</label>
-                                    <select id="document-type-select" value={form.document_type_id} onChange={(event) => setForm({ ...form, document_type_id: event.target.value, other_document_type: '' })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                                    <select id="document-type-select" value={form.document_type_id} onChange={(event) => setForm({ ...form, document_type_id: event.target.value, other_document_type: '' })} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10">
                                         <option value="">Select document type</option>
                                         {documentTypes.map((option) => <option key={`${option.source ?? 'new'}-${option.id}`} value={option.id}>{option.name}</option>)}
                                     </select>
@@ -828,7 +828,7 @@ export default function DocumentsIndex({
                                 )}
                                 <div>
                                     <label className="mb-1 block text-sm font-medium text-slate-700">Origin Type</label>
-                                    <select value={form.origin_type} onChange={(e) => setForm({ ...form, origin_type: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                                    <select value={form.origin_type} onChange={(e) => setForm({ ...form, origin_type: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10">
                                         <option value="">Select origin type</option>
                                         <option value="Internal">Internal</option>
                                         <option value="External">External</option>
@@ -836,7 +836,7 @@ export default function DocumentsIndex({
                                 </div>
                                 <div>
                                     <label htmlFor="purpose-type-select" className="mb-1 block text-sm font-medium text-slate-700">Purpose</label>
-                                    <select id="purpose-type-select" value={form.purpose_type_id} onChange={(event) => setForm({ ...form, purpose_type_id: event.target.value, other_purpose: '' })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                                    <select id="purpose-type-select" value={form.purpose_type_id} onChange={(event) => setForm({ ...form, purpose_type_id: event.target.value, other_purpose: '' })} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10">
                                         <option value="">Select purpose</option>
                                         {purposeTypes.map((option) => <option key={`${option.source ?? 'new'}-${option.id}`} value={option.id}>{option.name}</option>)}
                                     </select>
@@ -1008,7 +1008,7 @@ function LibrarySelect({
     return (
         <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
-            <select value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+            <select value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10">
                 <option value="">Select {label.toLowerCase()}</option>
                 {options.map((option) => <option key={`${option.source ?? 'new'}-${option.id}`} value={option.id}>{option.name}</option>)}
             </select>

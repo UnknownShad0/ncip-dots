@@ -2,6 +2,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import CrudAlertModal from '@/Components/CrudAlertModal';
 import { Head, router } from '@inertiajs/react';
 import { useEffect, useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Plus, Printer, Search } from 'lucide-react';
 
 type DocumentTypeRow = {
     id: number | string | null;
@@ -171,59 +172,69 @@ export default function DocumentTypesIndex({
                 }
             `}</style>
 
-            <div className="mx-auto max-w-[1440px] overflow-hidden rounded-2xl border border-[#e2e2df] bg-white shadow-sm print-table-only">
-                <div className="flex flex-col gap-4 border-b border-[#e2e2df] bg-white px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 no-print">
+            <div className="mx-auto flex max-w-[1440px] flex-col gap-5 print-table-only">
+                <section className="rounded-2xl border border-[#e2e2df] bg-white p-5 shadow-sm sm:p-6 no-print">
                     <div><h2 className="text-xl font-semibold tracking-tight text-[#171717]">Document type register</h2><p className="mt-1 text-sm text-[#73736e]">Maintain the document categories used by the registry.</p></div>
 
-                    <div className="flex flex-col gap-2 sm:flex-row">
+                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                        <label className="relative block">
+                        <span className="sr-only">Search document types</span>
+                        <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                         <input
                             type="text"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             placeholder="Search by name, code, or description"
-                            className="h-11 rounded-xl border border-[#deded9] bg-[#fafaf8] px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                            className="h-11 w-full rounded-xl border border-[#deded9] bg-[#fafaf8] pl-10 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                         />
+                        </label>
 
                         <button
                             type="button"
                             onClick={handlePrint}
-                            className="h-11 rounded-xl border border-[#deded9] bg-white px-4 text-sm font-semibold text-[#444] transition hover:bg-[#f6f6f3]"
+                            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#deded9] bg-white px-4 text-sm font-semibold text-[#444] transition hover:bg-[#f6f6f3]"
                         >
+                            <Printer aria-hidden="true" className="h-4 w-4" />
                             Print
                         </button>
 
                         <button
                             type="button"
                             onClick={openCreate}
-                            className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+                            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700"
                         >
+                            <Plus aria-hidden="true" className="h-4 w-4" />
                             New Document Type
                         </button>
                     </div>
-                </div>
+                </section>
 
-                <div className="overflow-x-auto">
+                <section className="overflow-hidden rounded-2xl border border-[#e2e2df] bg-white shadow-sm">
+                    <div className="flex items-center justify-between border-b border-[#e8e8e4] bg-[#fafaf8] px-5 py-3 text-sm text-slate-600">
+                        <span>{sortedDocumentTypes.length} {sortedDocumentTypes.length === 1 ? 'document type' : 'document types'}</span>
+                    </div>
+                    <div className="overflow-x-auto">
                     <table className="min-w-full text-left text-sm">
                         <thead className="bg-[#f7f8fa] text-[#555752]">
                             <tr>
                                 <th className="px-4 py-3 font-semibold">
                                     <button type="button" onClick={() => handleSort('name')} className="flex items-center gap-1">
-                                        Name {sortKey === 'name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                                        Name {sortKey === 'name' ? (sortDirection === 'asc' ? <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" />) : <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" />}
                                     </button>
                                 </th>
                                 <th className="px-4 py-3 font-semibold">
                                     <button type="button" onClick={() => handleSort('code')} className="flex items-center gap-1">
-                                        Code {sortKey === 'code' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                                        Code {sortKey === 'code' ? (sortDirection === 'asc' ? <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" />) : <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" />}
                                     </button>
                                 </th>
                                 <th className="px-4 py-3 font-semibold">
                                     <button type="button" onClick={() => handleSort('description')} className="flex items-center gap-1">
-                                        Description {sortKey === 'description' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                                        Description {sortKey === 'description' ? (sortDirection === 'asc' ? <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" />) : <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" />}
                                     </button>
                                 </th>
                                 <th className="px-4 py-3 font-semibold">
                                     <button type="button" onClick={() => handleSort('is_active')} className="flex items-center gap-1">
-                                        Status {sortKey === 'is_active' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                                        Status {sortKey === 'is_active' ? (sortDirection === 'asc' ? <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" />) : <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" />}
                                     </button>
                                 </th>
                                 <th className="px-4 py-3 font-semibold no-print">Actions</th>
@@ -247,7 +258,7 @@ export default function DocumentTypesIndex({
                                             <td className="px-4 py-3 text-slate-600">{row.code || '—'}</td>
                                             <td className="px-4 py-3 text-slate-600">{row.description || '—'}</td>
                                             <td className="px-4 py-3">
-                                                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${Number(row.is_active) === 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${Number(row.is_active) === 1 ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200' : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'}`}>
                                                     {Number(row.is_active) === 1 ? 'Active' : 'Inactive'}
                                                 </span>
                                             </td>
@@ -275,7 +286,7 @@ export default function DocumentTypesIndex({
                         <select
                             value={perPage}
                             onChange={(e) => setPerPage(Number(e.target.value))}
-                            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+                            className="min-w-[4.5rem] rounded-md border border-slate-300 bg-white py-1 pl-2 pr-9 text-sm"
                         >
                             <option value={5}>5</option>
                             <option value={10}>10</option>
@@ -308,6 +319,7 @@ export default function DocumentTypesIndex({
                         </button>
                     </div>
                 </div>
+                </section>
             </div>
 
             {(isCreateOpen || editingRow) && (

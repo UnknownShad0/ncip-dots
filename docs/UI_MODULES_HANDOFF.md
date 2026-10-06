@@ -1,6 +1,6 @@
-# Dashboard and Documents UI implementation guide
+# Dashboard, Documents, and Library UI implementation guide
 
-This document describes the current implementation of the **Dashboard** and **Documents** modules. Use it as the reference when adapting these modules to another project or asking an AI coding assistant to reproduce the implementation.
+This document describes the current implementation of the **Dashboard**, **Documents**, and **Library management** modules. Use it as the reference when adapting these modules to another project or asking an AI coding assistant to reproduce the implementation.
 
 ## Instructions for an AI implementing this elsewhere
 
@@ -17,11 +17,16 @@ Keep the Dashboard and Documents pages consistent with one another. Use the exis
 | Dashboard data | `app/Http/Controllers/DashboardController.php` |
 | Documents page, shared by latest and all views | `resources/js/Pages/Documents/Index.tsx` |
 | Documents data and mutations | `app/Http/Controllers/DocumentController.php` |
+| Offices page | `resources/js/Pages/Offices/Index.tsx` |
+| Ranges page | `resources/js/Pages/Ranges/Index.tsx` |
+| Document Types page | `resources/js/Pages/DocumentTypes/Index.tsx` |
+| Action Types page | `resources/js/Pages/ActionTypes/Index.tsx` |
+| Purpose Types page | `resources/js/Pages/PurposeTypes/Index.tsx` |
 | Dashboard route | `dashboard` |
 | Latest Documents route | `documents.latest` (`/documents/latest`) |
 | All Documents route | `documents.index` (`/documents`) |
 
-The application uses Laravel, Inertia React, TypeScript, Tailwind CSS, Lucide React, and Headless UI. The shared authenticated layout is used by both modules.
+The application uses Laravel, Inertia React, TypeScript, Tailwind CSS, Lucide React, and Headless UI. The shared authenticated layout is used by these pages.
 
 ## Shared visual language
 
@@ -98,6 +103,16 @@ Current controller behavior differs by route:
 
 The create/edit dialog uses a dim page backdrop, centered placement, rounded white surface, and a bounded width. Constrain its height to the viewport (`max-height: calc(100vh - 2rem)`) and place vertical scrolling inside the dialog (`overflow-y: auto`) so long forms do not extend past the screen. Add dialog semantics (`role="dialog"`, `aria-modal="true"`, and a labelled heading). Do not make the form itself stretch to full viewport height.
 
+## Library management modules
+
+The Offices, Ranges, Document Types, Action Types, and Purpose Types pages use the same authenticated shell and warm white / gray / blue visual language as Documents.
+
+- Each page has a **Library management** header and a separate toolbar card with a brief description, search field, Print action, and blue create action. Search, Print, create, and sort controls use Lucide icons with consistent sizing and spacing.
+- The table sits in its own white card with a filtered-record count, thin warm-gray borders, subtle row separators, sortable headings, status pills, and horizontal scrolling on narrow screens. Legacy rows remain read-only.
+- Keep pagination controls aligned and responsive. Rows-per-page selects need enough right padding (at least `2.25rem`) so their native arrow does not overlap the selected value.
+- Office create/edit forms include an office division picker, range selector, generated office code, email, and active state. The range selector also needs sufficient right padding for its arrow.
+- Preserve each module's existing search, sorting, pagination, print, create, edit, legacy-row restrictions, and server routes when updating its appearance.
+
 ## Reproduction checklist
 
 When copying the implementation to another codebase:
@@ -111,3 +126,4 @@ When copying the implementation to another codebase:
 7. Mark legacy rows if useful, but keep backend source identifiers out of dropdown option labels.
 8. Bound long dialogs to viewport height and allow the dialog body to scroll.
 9. Check JSX/TypeScript compilation and production build after changes; verify both desktop and narrow-screen layouts.
+10. Keep Offices, Ranges, Document Types, Action Types, and Purpose Types consistent with the shared library register style, including clear select-arrow spacing and read-only legacy behavior.
