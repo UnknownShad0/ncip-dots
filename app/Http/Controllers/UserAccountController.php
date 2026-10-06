@@ -92,7 +92,7 @@ class UserAccountController extends Controller
 
         return Inertia::render('UserAccounts/Index', [
             'users' => $legacyUsers->concat($localUsers)->values(),
-            'offices' => $offices,
+            // 'offices' => $offices,
             'roles' => $roleOptions,
         ]);
     }
