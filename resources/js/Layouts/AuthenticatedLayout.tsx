@@ -88,7 +88,7 @@ export default function AuthenticatedLayout({
                 </aside>
 
                 <div className="flex min-w-0 flex-1 flex-col">
-                    <header className="flex min-h-[92px] items-center gap-4 border-b border-[#e5ebf3] bg-white/70 px-5 sm:px-8 lg:px-10">
+                    <header className="flex min-h-[92px] items-center gap-4 border-b border-[#e5ebf3] bg-white/70 px-5 mb-5 lg:mb-10 sm:px-8 lg:px-10">
                         <button className="rounded-lg p-2 hover:bg-slate-100 lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={22} /></button>
                         <div className="min-w-0 flex-1">{header}</div>
                         <DropdownMenu as="div" className="relative hidden sm:block">
