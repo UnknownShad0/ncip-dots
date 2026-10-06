@@ -1,0 +1,1970 @@
+[
+    {
+        "code": "BSO-275",
+        "name": "OFFICE OF THE EXECUTIVE DIRECTOR",
+        "region": {
+            "code": "13",
+            "name": "Central Office"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4645",
+                "name": "OFFICE OF THE EXECUTIVE DIRECTOR"
+            }
+        ]
+    },
+    {
+        "code": "BSO-284",
+        "name": "CORDILLERA ADMINISTRATIVE REGION (CAR) - OFFICE OF THE REGIONAL DIRECTOR",
+        "region": {
+            "code": "14",
+            "name": "CAR"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4894",
+                "name": "CAR - ADMINISTRATIVE AND FINANCIAL SERVICES DIVISION"
+            },
+            {
+                "code": "DIV-4896",
+                "name": "CAR - OFFICE OF THE REGIONAL DIRECTOR"
+            },
+            {
+                "code": "DIV-4898",
+                "name": "CAR - TECHNICAL MANAGEMENT SERVICES DIVISION"
+            },
+            {
+                "code": "DIV-4901",
+                "name": "CAR - REGIONAL HEARING OFFICE"
+            }
+        ]
+    },
+    {
+        "code": "BSO-287",
+        "name": "PROVINCIAL OFFICE, ABRA",
+        "region": {
+            "code": "14",
+            "name": "CAR"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4904",
+                "name": "CAR - PROVINCIAL OFFICE, ABRA"
+            },
+            {
+                "code": "DIV-4906",
+                "name": "CAR - COMMUNITY SERVICE CENTER, MANABO"
+            },
+            {
+                "code": "DIV-4908",
+                "name": "CAR - COMMUNITY SERVICE CENTER, BAAY-LICUAN"
+            },
+            {
+                "code": "DIV-4910",
+                "name": "CAR - COMMUNITY SERVICE CENTER, SAN GREGORGIO"
+            }
+        ]
+    },
+    {
+        "code": "BSO-289",
+        "name": "PROVINCIAL OFFICE, APAYAO",
+        "region": {
+            "code": "14",
+            "name": "CAR"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4912",
+                "name": "CAR - PROVINCIAL OFFICE, APAYAO"
+            },
+            {
+                "code": "DIV-4914",
+                "name": "CAR - COMMUNITY SERVICE CENTER, CONNER"
+            },
+            {
+                "code": "DIV-4916",
+                "name": "CAR - COMMUNITY SERVICE CENTER, KABUGAO"
+            },
+            {
+                "code": "DIV-4918",
+                "name": "CAR - COMMUNITY SERVICE CENTER, LUNA"
+            }
+        ]
+    },
+    {
+        "code": "BSO-291",
+        "name": "PROVINCIAL OFFICE, BENGUET",
+        "region": {
+            "code": "14",
+            "name": "CAR"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4936",
+                "name": "CAR - PROVINCIAL OFFICE, BENGUET"
+            },
+            {
+                "code": "DIV-4938",
+                "name": "CAR - COMMUNITY SERVICE CENTER, BOKOD"
+            },
+            {
+                "code": "DIV-4940",
+                "name": "CAR - COMMUNITY SERVICE CENTER, SABLAN"
+            },
+            {
+                "code": "DIV-4942",
+                "name": "CAR - COMMUNITY SERVICE CENTER, ITOGON"
+            },
+            {
+                "code": "DIV-4944",
+                "name": "CAR - COMMUNITY SERVICE CENTER, ATOK"
+            }
+        ]
+    },
+    {
+        "code": "BSO-293",
+        "name": "PROVINCIAL OFFICE, IFUGAO",
+        "region": {
+            "code": "14",
+            "name": "CAR"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4928",
+                "name": "CAR - PROVINCIAL OFFICE, IFUGAO"
+            },
+            {
+                "code": "DIV-4930",
+                "name": "CAR - COMMUNITY SERVICE CENTER, BANAUE"
+            },
+            {
+                "code": "DIV-4932",
+                "name": "CAR - COMMUNITY SERVICE CENTER, TINOC"
+            },
+            {
+                "code": "DIV-4934",
+                "name": "CAR - COMMUNITY SERVICE CENTER, AGUINALDO"
+            }
+        ]
+    },
+    {
+        "code": "BSO-295",
+        "name": "PROVINCIAL OFFICE, KALINGA",
+        "region": {
+            "code": "14",
+            "name": "CAR"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4920",
+                "name": "CAR - PROVINCIAL OFFICE, KALINGA"
+            },
+            {
+                "code": "DIV-4922",
+                "name": "CAR - COMMUNITY SERVICE CENTER, TINGLAYAN"
+            },
+            {
+                "code": "DIV-4924",
+                "name": "CAR - COMMUNITY SERVICE CENTER, TANUDAN"
+            },
+            {
+                "code": "DIV-4926",
+                "name": "CAR - COMMUNITY SERVICE CENTER, BALBALAN"
+            }
+        ]
+    },
+    {
+        "code": "BSO-297",
+        "name": "PROVINCIAL OFFICE, MT. PROVINCE",
+        "region": {
+            "code": "14",
+            "name": "CAR"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4946",
+                "name": "CAR - PROVINCIAL OFFICE, MT. PROVINCE"
+            },
+            {
+                "code": "DIV-4948",
+                "name": "CAR - COMMUNITY SERVICE CENTER, SABANGAN"
+            },
+            {
+                "code": "DIV-4950",
+                "name": "CAR - COMMUNITY SERVICE CENTER, TADIAN-BAUKO"
+            },
+            {
+                "code": "DIV-4952",
+                "name": "CAR - COMMUNITY SERVICE CENTER, SADANGA"
+            }
+        ]
+    },
+    {
+        "code": "BSO-299",
+        "name": "PROVINCIAL OFFICE, BAGUIO",
+        "region": {
+            "code": "14",
+            "name": "CAR"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4954",
+                "name": "CAR - PROVINCIAL OFFICE, BAGUIO"
+            },
+            {
+                "code": "DIV-4956",
+                "name": "CAR - COMMUNITY SERVICE CENTER, BAGUIO"
+            }
+        ]
+    },
+    {
+        "code": "BSO-301",
+        "name": "REGION I - OFFICE OF THE REGIONAL DIRECTOR",
+        "region": {
+            "code": "01",
+            "name": "Region 1"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4958",
+                "name": "I - ADMINISTRATIVE AND FINANCIAL SERVICES DIVISION"
+            },
+            {
+                "code": "DIV-4960",
+                "name": "I - OFFICE OF THE REGIONAL DIRECTOR"
+            },
+            {
+                "code": "DIV-4962",
+                "name": "I - REGIONAL HEARING OFFICE"
+            },
+            {
+                "code": "DIV-4964",
+                "name": "I - TECHNICAL MANAGEMENT SERVICES DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-303",
+        "name": "PROVINCIAL OFFICE, ILOCOS NORTE",
+        "region": {
+            "code": "01",
+            "name": "Region 1"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4973",
+                "name": "I - PROVINCIAL OFFICE, ILOCOS NORTE"
+            },
+            {
+                "code": "DIV-4975",
+                "name": "I - COMMUNITY SERVICE CENTER, NUEVA ERA"
+            }
+        ]
+    },
+    {
+        "code": "BSO-305",
+        "name": "PROVINCIAL OFFICE, ILOCOS SUR",
+        "region": {
+            "code": "01",
+            "name": "Region 1"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4967",
+                "name": "I - PROVINCIAL OFFICE, ILOCOS SUR"
+            },
+            {
+                "code": "DIV-4969",
+                "name": "I - COMMUNITY SERVICE CENTER, BANAYOYO"
+            },
+            {
+                "code": "DIV-4971",
+                "name": "I - COMMUNITY SERVICE CENTER, TAGUDIN"
+            }
+        ]
+    },
+    {
+        "code": "BSO-307",
+        "name": "PROVINCIAL OFFICE, PANGASINAN",
+        "region": {
+            "code": "01",
+            "name": "Region 1"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4983",
+                "name": "I - PROVINCIAL OFFICE, PANGASINAN"
+            },
+            {
+                "code": "DIV-4985",
+                "name": "I - COMMUNITY SERVICE CENTER, SISON"
+            },
+            {
+                "code": "DIV-4987",
+                "name": "I - COMMUNITY SERVICE CENTER, SAN NICOLAS"
+            }
+        ]
+    },
+    {
+        "code": "BSO-308",
+        "name": "REGION II - OFFICE OF THE REGIONAL DIRECTOR",
+        "region": {
+            "code": "02",
+            "name": "Region 2"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4989",
+                "name": "II - ADMINISTRATIVE AND FINANCIAL SERVICES DIVISION"
+            },
+            {
+                "code": "DIV-4991",
+                "name": "II - OFFICE OF THE REGIONAL DIRECTOR"
+            },
+            {
+                "code": "DIV-4993",
+                "name": "II - REGIONAL HEARING OFFICE"
+            },
+            {
+                "code": "DIV-4995",
+                "name": "II - TECHNICAL MANAGEMENT SERVICES DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-309",
+        "name": "PROVINCIAL OFFICE, BATANES",
+        "region": {
+            "code": "02",
+            "name": "Region 2"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4999",
+                "name": "II - PROVINCIAL OFFICE, BATANES"
+            },
+            {
+                "code": "DIV-5001",
+                "name": "II - COMMUNITY SERVICE CENTER, SABTANG"
+            },
+            {
+                "code": "DIV-5003",
+                "name": "II - COMMUNITY SERVICE CENTER, ITBAYAT"
+            }
+        ]
+    },
+    {
+        "code": "BSO-312",
+        "name": "PROVINCIAL OFFICE, ISABELA",
+        "region": {
+            "code": "02",
+            "name": "Region 2"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5009",
+                "name": "II - PROVINCIAL OFFICE, ISABELA"
+            },
+            {
+                "code": "DIV-5011",
+                "name": "II - COMMUNITY SERVICE CENTER, SAN MARIANO"
+            },
+            {
+                "code": "DIV-5013",
+                "name": "II - COMMUNITY SERVICE CENTER, CAUAYAN"
+            },
+            {
+                "code": "DIV-5015",
+                "name": "II - COMMUNITY SERVICE CENTER, ILAGAN"
+            }
+        ]
+    },
+    {
+        "code": "BSO-314",
+        "name": "PROVINCIAL OFFICE, NUEVA VIZCAYA",
+        "region": {
+            "code": "02",
+            "name": "Region 2"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5017",
+                "name": "II - PROVINCIAL OFFICE, NUEVA VIZCAYA"
+            },
+            {
+                "code": "DIV-5019",
+                "name": "II - COMMUNITY SERVICE CENTER, BAMBANG"
+            },
+            {
+                "code": "DIV-5021",
+                "name": "II - COMMUNITY SERVICE CENTER, DUPAX DEL SUR"
+            },
+            {
+                "code": "DIV-5023",
+                "name": "II - COMMUNITY SERVICE CENTER, KAYAPA"
+            }
+        ]
+    },
+    {
+        "code": "BSO-315",
+        "name": "PROVINCIAL OFFICE, QUIRINO",
+        "region": {
+            "code": "02",
+            "name": "Region 2"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5025",
+                "name": "II - PROVINCIAL OFFICE, QUIRINO"
+            },
+            {
+                "code": "DIV-5027",
+                "name": "II - COMMUNITY SERVICE CENTER, DIPANTAN"
+            },
+            {
+                "code": "DIV-5029",
+                "name": "II - COMMUNITY SERVICE CENTER, DIFFUN"
+            }
+        ]
+    },
+    {
+        "code": "BSO-317",
+        "name": "REGION III - OFFICE OF THE REGIONAL DIRECTOR",
+        "region": {
+            "code": "03",
+            "name": "Region 3"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5031",
+                "name": "III - OFFICE OF THE REGIONAL DIRECTOR"
+            },
+            {
+                "code": "DIV-5359",
+                "name": "III - ADMINISTRATIVE AND FINANCIAL SERVICES DIVISION"
+            },
+            {
+                "code": "DIV-5361",
+                "name": "III - TECHNICAL MANAGEMENT SERVICES DIVISION"
+            },
+            {
+                "code": "DIV-5363",
+                "name": "III - REGIONAL HEARING OFFICE"
+            }
+        ]
+    },
+    {
+        "code": "BSO-318",
+        "name": "PROVINCIAL OFFICE, AURORA",
+        "region": {
+            "code": "03",
+            "name": "Region 3"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5062",
+                "name": "III - PROVINCIAL OFFICE, AURORA"
+            },
+            {
+                "code": "DIV-5064",
+                "name": "III - COMMUNITY SERVICE CENTER, CALABGAN"
+            },
+            {
+                "code": "DIV-5066",
+                "name": "III - COMMUNITY SERVICE CENTER, DINGALAN"
+            }
+        ]
+    },
+    {
+        "code": "BSO-320",
+        "name": "PROVINCIAL OFFICE, BATAAN",
+        "region": {
+            "code": "03",
+            "name": "Region 3"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5033",
+                "name": "III - PROVINCIAL OFFICE, BATAAN"
+            },
+            {
+                "code": "DIV-5036",
+                "name": "III - COMMUNITY SERVICE CENTER, BANGKAL"
+            }
+        ]
+    },
+    {
+        "code": "BSO-323",
+        "name": "PROVINCIAL OFFICE, NUEVA ECIJA",
+        "region": {
+            "code": "03",
+            "name": "Region 3"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5044",
+                "name": "III - PROVINCIAL OFFICE, NUEVA ECIJA"
+            },
+            {
+                "code": "DIV-5046",
+                "name": "III - COMMUNITY SERVICE CENTER, CARRANGLAN"
+            }
+        ]
+    },
+    {
+        "code": "BSO-325",
+        "name": "PROVINCIAL OFFICE, TARLAC",
+        "region": {
+            "code": "03",
+            "name": "Region 3"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5048",
+                "name": "III - PROVINCIAL OFFICE, TARLAC"
+            },
+            {
+                "code": "DIV-5050",
+                "name": "III - COMMUNITY SERVICE CENTER, DAPDAP"
+            }
+        ]
+    },
+    {
+        "code": "BSO-327",
+        "name": "PROVINCIAL OFFICE, ZAMBALES",
+        "region": {
+            "code": "03",
+            "name": "Region 3"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5052",
+                "name": "III - PROVINCIAL OFFICE, ZAMBALES"
+            },
+            {
+                "code": "DIV-5054",
+                "name": "III - COMMUNITY SERVICE CENTER, CABANGAN"
+            },
+            {
+                "code": "DIV-5056",
+                "name": "III - COMMUNITY SERVICE CENTER, SAN MARCELINO"
+            }
+        ]
+    },
+    {
+        "code": "BSO-330",
+        "name": "REGION IV-A - OFFICE OF THE REGIONAL DIRECTOR",
+        "region": {
+            "code": "04",
+            "name": "Region 4-A"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5068",
+                "name": "IV-A - ADMINISTRATIVE AND FINANCIAL SERVICES DIVISION"
+            },
+            {
+                "code": "DIV-5070",
+                "name": "IV-A - OFFICE OF THE REGIONAL DIRECTOR"
+            },
+            {
+                "code": "DIV-5072",
+                "name": "IV-A - REGIONAL HEARING OFFICE"
+            },
+            {
+                "code": "DIV-5074",
+                "name": "IV-A - TECHNICAL MANAGEMENT SERVICES DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-331",
+        "name": "PROVINCIAL OFFICE, QUEZON",
+        "region": {
+            "code": "04",
+            "name": "Region 4-A"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5076",
+                "name": "IV-A - PROVINCIAL OFFICE, QUEZON"
+            },
+            {
+                "code": "DIV-5078",
+                "name": "IV-A - COMMUNITY SERVICE CENTER, CATANAUAN"
+            }
+        ]
+    },
+    {
+        "code": "BSO-334",
+        "name": "REGION V - OFFICE OF THE REGIONAL DIRECTOR",
+        "region": {
+            "code": "05",
+            "name": "Region 5"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5115",
+                "name": "V - ADMINISTRATIVE AND FINANCIAL SERVICES DIVISION"
+            },
+            {
+                "code": "DIV-5117",
+                "name": "V - OFFICE OF THE REGIONAL DIRECTOR"
+            },
+            {
+                "code": "DIV-5119",
+                "name": "V - REGIONAL HEARING OFFICE"
+            },
+            {
+                "code": "DIV-5121",
+                "name": "V - TECHNICAL MANAGEMENT SERVICES DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-337",
+        "name": "PROVINCIAL OFFICE, CAMARINES NORTE",
+        "region": {
+            "code": "05",
+            "name": "Region 5"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5128",
+                "name": "V - PROVINCIAL OFFICE, CAMARINES NORTE"
+            },
+            {
+                "code": "DIV-5130",
+                "name": "V - COMMUNITY SERVICE CENTER, LABO"
+            }
+        ]
+    },
+    {
+        "code": "BSO-339",
+        "name": "PROVINCIAL OFFICE, CAMARINES SUR",
+        "region": {
+            "code": "05",
+            "name": "Region 5"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5132",
+                "name": "V - PROVINCIAL OFFICE, CAMARINES SUR"
+            },
+            {
+                "code": "DIV-5134",
+                "name": "V - COMMUNITY SERVICE CENTER, BUHI"
+            }
+        ]
+    },
+    {
+        "code": "BSO-342",
+        "name": "REGION VI - OFFICE OF THE REGIONAL DIRECTOR",
+        "region": {
+            "code": "06",
+            "name": "Region 6"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5140",
+                "name": "VI/VII - ADMINISTRATIVE AND FINANCIAL SERVICES DIVISION"
+            },
+            {
+                "code": "DIV-5142",
+                "name": "VI/VII - OFFICE OF THE REGIONAL DIRECTOR"
+            },
+            {
+                "code": "DIV-5144",
+                "name": "VI/VII - REGIONAL HEARING OFFICE"
+            },
+            {
+                "code": "DIV-5146",
+                "name": "VI/VII - TECHNICAL MANAGEMENT SERVICES DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-345",
+        "name": "PROVINCIAL OFFICE, CEBU",
+        "region": {
+            "code": "07",
+            "name": "Region 7"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5156",
+                "name": "VI/VII - PROVINCIAL OFFICE, CEBU"
+            },
+            {
+                "code": "DIV-5158",
+                "name": "VI/VII - COMMUNITY SERVICE CENTER, CEBU"
+            }
+        ]
+    },
+    {
+        "code": "BSO-346",
+        "name": "PROVINCIAL OFFICE, NEGROS ORIENTAL",
+        "region": {
+            "code": "07",
+            "name": "Region 7"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5176",
+                "name": "VI/VII - PROVINCIAL OFFICE, NEGROS ORIENTAL"
+            },
+            {
+                "code": "DIV-5178",
+                "name": "VI/VII - COMMUNITY SERVICE CENTER, GUIHULNGAN"
+            }
+        ]
+    },
+    {
+        "code": "BSO-348",
+        "name": "REGION IX - OFFICE OF THE REGIONAL DIRECTOR",
+        "region": {
+            "code": "09",
+            "name": "Region 9"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5181",
+                "name": "IX - ADMINISTRATIVE AND FINANCIAL SERVICES DIVISION"
+            },
+            {
+                "code": "DIV-5183",
+                "name": "IX - OFFICE OF THE REGIONAL DIRECTOR"
+            },
+            {
+                "code": "DIV-5185",
+                "name": "IX - REGIONAL HEARING OFFICE"
+            },
+            {
+                "code": "DIV-5187",
+                "name": "IX - TECHNICAL MANAGEMENT SERVICES DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-349",
+        "name": "PROVINCIAL OFFICE, BASILAN",
+        "region": {
+            "code": "09",
+            "name": "Region 9"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5189",
+                "name": "IX - PROVINCIAL OFFICE, BASILAN"
+            },
+            {
+                "code": "DIV-5191",
+                "name": "IX - COMMUNITY SERVICE CENTER, LAMITAN"
+            }
+        ]
+    },
+    {
+        "code": "BSO-351",
+        "name": "PROVINCIAL OFFICE, ZAMBOANGA DEL NORTE",
+        "region": {
+            "code": "09",
+            "name": "Region 9"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5193",
+                "name": "IX - PROVINCIAL OFFICE, ZAMBOANGA DEL NORTE"
+            },
+            {
+                "code": "DIV-5195",
+                "name": "IX - COMMUNITY SERVICE CENTER, LABASON/LILOY"
+            },
+            {
+                "code": "DIV-5197",
+                "name": "IX - COMMUNITY SERVICE CENTER, SINDANGAN"
+            },
+            {
+                "code": "DIV-5199",
+                "name": "IX - COMMUNITY SERVICE CENTER, PIÑAN"
+            }
+        ]
+    },
+    {
+        "code": "BSO-353",
+        "name": "PROVINCIAL OFFICE, ZAMBOANGA DEL SUR",
+        "region": {
+            "code": "09",
+            "name": "Region 9"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5201",
+                "name": "IX - PROVINCIAL OFFICE, ZAMBOANGA DEL SUR"
+            },
+            {
+                "code": "DIV-5203",
+                "name": "IX - COMMUNITY SERVICE CENTER, GUIPOS"
+            },
+            {
+                "code": "DIV-5205",
+                "name": "IX - COMMUNITY SERVICE CENTER, LABANGAN"
+            }
+        ]
+    },
+    {
+        "code": "BSO-355",
+        "name": "REGION X - OFFICE OF THE REGIONAL DIRECTOR",
+        "region": {
+            "code": "10",
+            "name": "Region 10"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5213",
+                "name": "X - ADMINISTRATIVE AND FINANCIAL SERVICES DIVISION"
+            },
+            {
+                "code": "DIV-5215",
+                "name": "X - OFFICE OF THE REGIONAL DIRECTOR"
+            },
+            {
+                "code": "DIV-5217",
+                "name": "X - REGIONAL HEARING OFFICE"
+            },
+            {
+                "code": "DIV-5219",
+                "name": "X - TECHNICAL MANAGEMENT SERVICES DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-356",
+        "name": "PROVINCIAL OFFICE, MISAMIS ORIENTAL",
+        "region": {
+            "code": "10",
+            "name": "Region 10"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5234",
+                "name": "X - PROVINCIAL OFFICE, MISAMIS ORIENTAL"
+            },
+            {
+                "code": "DIV-5236",
+                "name": "X - COMMUNITY SERVICE CENTER, GINGOOG"
+            },
+            {
+                "code": "DIV-5238",
+                "name": "X - COMMUNITY SERVICE CENTER, INITAO"
+            }
+        ]
+    },
+    {
+        "code": "BSO-358",
+        "name": "PROVINCIAL OFFICE, MISAMIS OCCIDENTAL",
+        "region": {
+            "code": "10",
+            "name": "Region 10"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5244",
+                "name": "X - PROVINCIAL OFFICE, MISAMIS OCCIDENTAL"
+            },
+            {
+                "code": "DIV-5246",
+                "name": "X - COMMUNITY SERVICE CENTER, OZAMIZ"
+            },
+            {
+                "code": "DIV-5248",
+                "name": "X - COMMUNITY SERVICE CENTER, DON VICTORIANO (CALAMBA)"
+            }
+        ]
+    },
+    {
+        "code": "BSO-360",
+        "name": "PROVINCIAL OFFICE, BUKIDNON",
+        "region": {
+            "code": "10",
+            "name": "Region 10"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5221",
+                "name": "X - PROVINCIAL OFFICE, BUKIDNON"
+            },
+            {
+                "code": "DIV-5223",
+                "name": "X - COMMUNITY SERVICE CENTER, MANOLO FORTICH"
+            },
+            {
+                "code": "DIV-5225",
+                "name": "X - COMMUNITY SERVICE CENTER, MARAMAG"
+            },
+            {
+                "code": "DIV-5227",
+                "name": "X - COMMUNITY SERVICE CENTER, TALAKAG"
+            }
+        ]
+    },
+    {
+        "code": "BSO-363",
+        "name": "PROVINCIAL OFFICE, LANAO DEL NORTE",
+        "region": {
+            "code": "10",
+            "name": "Region 10"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5240",
+                "name": "X - PROVINCIAL OFFICE, LANAO DEL NORTE"
+            },
+            {
+                "code": "DIV-5242",
+                "name": "X - COMMUNITY SERVICE CENTER, ROGONGON"
+            }
+        ]
+    },
+    {
+        "code": "BSO-365",
+        "name": "REGION XI - OFFICE OF THE REGIONAL DIRECTOR",
+        "region": {
+            "code": "11",
+            "name": "Region 11"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5250",
+                "name": "XI - ADMINISTRATIVE AND FINANCIAL SERVICES DIVISION"
+            },
+            {
+                "code": "DIV-5252",
+                "name": "XI - OFFICE OF THE REGIONAL DIRECTOR"
+            },
+            {
+                "code": "DIV-5254",
+                "name": "XI - REGIONAL HEARING OFFICE"
+            },
+            {
+                "code": "DIV-5256",
+                "name": "XI - TECHNICAL MANAGEMENT SERVICES DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-366",
+        "name": "PROVINCIAL OFFICE, DAVAO DEL NORTE",
+        "region": {
+            "code": "11",
+            "name": "Region 11"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5268",
+                "name": "XI - PROVINCIAL OFFICE, DAVAO DEL NORTE"
+            },
+            {
+                "code": "DIV-5270",
+                "name": "XI - COMMUNITY SERVICE CENTER, TALAINGOD"
+            },
+            {
+                "code": "DIV-5272",
+                "name": "XI - COMMUNITY SERVICE CENTER, NEW CORELLA"
+            }
+        ]
+    },
+    {
+        "code": "BSO-368",
+        "name": "PROVINCIAL OFFICE, DAVAO DEL SUR",
+        "region": {
+            "code": "11",
+            "name": "Region 11"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5274",
+                "name": "XI - PROVINCIAL OFFICE, DAVAO DEL SUR"
+            },
+            {
+                "code": "DIV-5276",
+                "name": "XI - COMMUNITY SERVICE CENTER, STA. MARIA"
+            },
+            {
+                "code": "DIV-5278",
+                "name": "XI - COMMUNITY SERVICE CENTER, MATANAO"
+            }
+        ]
+    },
+    {
+        "code": "BSO-370",
+        "name": "PROVINCIAL OFFICE, DAVAO ORIENTAL",
+        "region": {
+            "code": "11",
+            "name": "Region 11"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5280",
+                "name": "XI - PROVINCIAL OFFICE, DAVAO ORIENTAL"
+            },
+            {
+                "code": "DIV-5282",
+                "name": "XI - COMMUNITY SERVICE CENTER, MANAY"
+            },
+            {
+                "code": "DIV-5284",
+                "name": "XI - COMMUNITY SERVICE CENTER, CATEEL"
+            }
+        ]
+    },
+    {
+        "code": "BSO-372",
+        "name": "CITY OFFICE, DAVAO CITY",
+        "region": {
+            "code": "11",
+            "name": "Region 11"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5264",
+                "name": "XI - PROVINCIAL OFFICE, DAVAO CITY"
+            },
+            {
+                "code": "DIV-5266",
+                "name": "XI - COMMUNITY SERVICE CENTER, CALINAN"
+            }
+        ]
+    },
+    {
+        "code": "BSO-375",
+        "name": "REGION XII - OFFICE OF THE REGIONAL DIRECTOR",
+        "region": {
+            "code": "12",
+            "name": "Region 12"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5292",
+                "name": "XII - ADMINISTRATIVE AND FINANCIAL SERVICES DIVISION"
+            },
+            {
+                "code": "DIV-5294",
+                "name": "XII - OFFICE OF THE REGIONAL DIRECTOR"
+            },
+            {
+                "code": "DIV-5296",
+                "name": "XII - REGIONAL HEARING OFFICE"
+            },
+            {
+                "code": "DIV-5298",
+                "name": "XII - TECHNICAL MANAGEMENT SERVICES DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-376",
+        "name": "PROVINCIAL OFFICE, NORTH COTABATO",
+        "region": {
+            "code": "12",
+            "name": "Region 12"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5300",
+                "name": "XII - PROVINCIAL OFFICE, NORTH COTABATO"
+            },
+            {
+                "code": "DIV-5302",
+                "name": "XII - COMMUNITY SERVICE CENTER, LIBUNGAN"
+            }
+        ]
+    },
+    {
+        "code": "BSO-378",
+        "name": "PROVINCIAL OFFICE, SULTAN KUDARAT",
+        "region": {
+            "code": "12",
+            "name": "Region 12"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5304",
+                "name": "XII - PROVINCIAL OFFICE, SULTAN KUDARAT"
+            },
+            {
+                "code": "DIV-5306",
+                "name": "XII - COMMUNITY SERVICE CENTER, COLUMBIO"
+            },
+            {
+                "code": "DIV-5308",
+                "name": "XII - COMMUNITY SERVICE CENTER, KULAMAN (SEN. NINOY AQUINO)"
+            }
+        ]
+    },
+    {
+        "code": "BSO-380",
+        "name": "PROVINCIAL OFFICE, SOUTH COTABATO",
+        "region": {
+            "code": "12",
+            "name": "Region 12"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5310",
+                "name": "XII - PROVINCIAL OFFICE, SOUTH COTABATO"
+            },
+            {
+                "code": "DIV-5312",
+                "name": "XII - COMMUNITY SERVICE CENTER, T'BOLI"
+            },
+            {
+                "code": "DIV-5314",
+                "name": "XII - COMMUNITY SERVICE CENTER, POLOMOLOK"
+            },
+            {
+                "code": "DIV-5316",
+                "name": "XII - COMMUNITY SERVICE CENTER, LAKE SEBU"
+            }
+        ]
+    },
+    {
+        "code": "BSO-383",
+        "name": "PROVINCIAL OFFICE, SARANGANI",
+        "region": {
+            "code": "12",
+            "name": "Region 12"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5319",
+                "name": "XII - PROVINCIAL OFFICE, SARANGANI"
+            },
+            {
+                "code": "DIV-5321",
+                "name": "XII - COMMUNITY SERVICE CENTER, MAASIM (MAITUM)"
+            },
+            {
+                "code": "DIV-5323",
+                "name": "XII - COMMUNITY SERVICE CENTER, ALABEL"
+            }
+        ]
+    },
+    {
+        "code": "BSO-384",
+        "name": "CARAGA - OFFICE OF THE REGIONAL DIRECTOR",
+        "region": {
+            "code": "16",
+            "name": "CARAGA"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5325",
+                "name": "XIII - ADMINISTRATIVE AND FINANCIAL SERVICES DIVISION"
+            },
+            {
+                "code": "DIV-5327",
+                "name": "XIII - OFFICE OF THE REGIONAL DIRECTOR"
+            },
+            {
+                "code": "DIV-5329",
+                "name": "XIII - REGIONAL HEARING OFFICE"
+            },
+            {
+                "code": "DIV-5331",
+                "name": "XIII - TECHNICAL MANAGEMENT SERVICES DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-385",
+        "name": "PROVINCIAL OFFICE, AGUSAN DEL NORTE",
+        "region": {
+            "code": "16",
+            "name": "CARAGA"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5333",
+                "name": "XIII - PROVINCIAL OFFICE, AGUSAN DEL NORTE"
+            },
+            {
+                "code": "DIV-5335",
+                "name": "XIII - COMMUNITY SERVICE CENTER, SANTIAGO"
+            },
+            {
+                "code": "DIV-5337",
+                "name": "XIII - COMMUNITY SERVICE CENTER, LAS NIEVES/BUENAVISTA"
+            }
+        ]
+    },
+    {
+        "code": "BSO-387",
+        "name": "PROVINCIAL OFFICE, AGUSAN DEL SUR",
+        "region": {
+            "code": "16",
+            "name": "CARAGA"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5340",
+                "name": "XIII - PROVINCIAL OFFICE, AGUSAN DEL SUR"
+            },
+            {
+                "code": "DIV-5342",
+                "name": "XIII - COMMUNITY SERVICE CENTER, LA PAZ"
+            },
+            {
+                "code": "DIV-5344",
+                "name": "XIII - COMMUNITY SERVICE CENTER, SAN LUIS"
+            }
+        ]
+    },
+    {
+        "code": "BSO-389",
+        "name": "PROVINCIAL OFFICE, SURIGAO DEL NORTE",
+        "region": {
+            "code": "16",
+            "name": "CARAGA"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5346",
+                "name": "XIII - PROVINCIAL OFFICE, SURIGAO DEL NORTE"
+            },
+            {
+                "code": "DIV-5348",
+                "name": "XIII - COMMUNITY SERVICE CENTER, BACUAG"
+            },
+            {
+                "code": "DIV-5350",
+                "name": "XIII - COMMUNITY SERVICE CENTER, MALIMONO"
+            }
+        ]
+    },
+    {
+        "code": "BSO-391",
+        "name": "PROVINCIAL OFFICE, SURIGAO DEL SUR",
+        "region": {
+            "code": "16",
+            "name": "CARAGA"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5352",
+                "name": "XIII - PROVINCIAL OFFICE, SURIGAO DEL SUR"
+            },
+            {
+                "code": "DIV-5354",
+                "name": "XIII - COMMUNITY SERVICE CENTER, CANTILAN"
+            },
+            {
+                "code": "DIV-5356",
+                "name": "XIII - COMMUNITY SERVICE CENTER, BISLIG"
+            }
+        ]
+    },
+    {
+        "code": "BSO-420",
+        "name": "PROVINCIAL OFFICE, ILOILO",
+        "region": {
+            "code": "06",
+            "name": "Region 6"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5160",
+                "name": "VI/VII - PROVINCIAL OFFICE, ILOILO"
+            },
+            {
+                "code": "DIV-5162",
+                "name": "VI/VII - COMMUNITY SERVICE CENTER, ILOILO"
+            }
+        ]
+    },
+    {
+        "code": "BSO-421",
+        "name": "PROVINCIAL OFFICE, DAVAO OCCIDENTAL",
+        "region": {
+            "code": "11",
+            "name": "Region 11"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5286",
+                "name": "XI - PROVINCIAL OFFICE, DAVAO OCCIDENTAL"
+            },
+            {
+                "code": "DIV-5288",
+                "name": "XI - COMMUNITY SERVICE CENTER, SARANGANI"
+            },
+            {
+                "code": "DIV-5290",
+                "name": "XI - COMMUNITY SERVICE CENTER, MALALAG"
+            }
+        ]
+    },
+    {
+        "code": "BSO-422",
+        "name": "PROVINCIAL OFFICE, MINDORO ORIENTAL",
+        "region": {
+            "code": "17",
+            "name": "Region 4-B"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5099",
+                "name": "IV-B - PROVINCIAL OFFICE, MINDORO ORIENTAL"
+            },
+            {
+                "code": "DIV-5101",
+                "name": "IV-B - COMMUNITY SERVICE CENTER, BULALACAO"
+            }
+        ]
+    },
+    {
+        "code": "BSO-424",
+        "name": "PROVINCIAL OFFICE, MINDORO OCCIDENTAL",
+        "region": {
+            "code": "17",
+            "name": "Region 4-B"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5093",
+                "name": "IV-B - PROVINCIAL OFFICE, MINDORO OCCIDENTAL"
+            },
+            {
+                "code": "DIV-5095",
+                "name": "IV-B - COMMUNITY SERVICE CENTER, SABLAYAN"
+            },
+            {
+                "code": "DIV-5097",
+                "name": "IV-B - COMMUNITY SERVICE CENTER, SAN JOSE"
+            }
+        ]
+    },
+    {
+        "code": "BSO-426",
+        "name": "PROVINCIAL OFFICE, PALAWAN",
+        "region": {
+            "code": "17",
+            "name": "Region 4-B"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5103",
+                "name": "IV-B - PROVINCIAL OFFICE, PALAWAN"
+            },
+            {
+                "code": "DIV-5105",
+                "name": "IV-B - COMMUNITY SERVICE CENTER, ROXAS"
+            },
+            {
+                "code": "DIV-5107",
+                "name": "IV-B - COMMUNITY SERVICE CENTER, BROOKE'S POINT"
+            }
+        ]
+    },
+    {
+        "code": "BSO-428",
+        "name": "PROVINCIAL OFFICE, ROMBLON",
+        "region": {
+            "code": "17",
+            "name": "Region 4-B"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5109",
+                "name": "IV-B - PROVINCIAL OFFICE, ROMBLON"
+            },
+            {
+                "code": "DIV-5111",
+                "name": "IV-B - COMMUNITY SERVICE CENTER, ODIONGAN"
+            },
+            {
+                "code": "DIV-5113",
+                "name": "IV-B - COMMUNITY SERVICE CENTER, SIBUYAN"
+            }
+        ]
+    },
+    {
+        "code": "BSO-433",
+        "name": "ANCESTRAL DOMAINS OFFICE",
+        "region": {
+            "code": "13",
+            "name": "Central Office"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4812",
+                "name": "ADO - OFFICE OF THE DIRECTOR"
+            },
+            {
+                "code": "DIV-4814",
+                "name": "ADO - RECOGNITION DIVISION"
+            },
+            {
+                "code": "DIV-4816",
+                "name": "ADO - RESOURCE MANAGEMENT DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-434",
+        "name": "OFFICE ON POLICY, PLANNING AND RESEARCH",
+        "region": {
+            "code": "13",
+            "name": "Central Office"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4818",
+                "name": "OPPR - OFFICE OF THE DIRECTOR"
+            },
+            {
+                "code": "DIV-4820",
+                "name": "OPPR - POLICY AND PLANNING DIVISION"
+            },
+            {
+                "code": "DIV-4822",
+                "name": "OPPR - INFORMATION AND RESEARCH DIVISION"
+            },
+            {
+                "code": "DIV-4824",
+                "name": "OPPR - INFORMATION AND COMMUNICATIONS TECHNOLOGY DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-435",
+        "name": "OFFICE OF EDUCATION, CULTURE AND HEALTH",
+        "region": {
+            "code": "13",
+            "name": "Central Office"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4826",
+                "name": "OECH - OFFICE OF THE DIRECTOR"
+            },
+            {
+                "code": "DIV-4828",
+                "name": "OECH - EDUCATION AND CULTURE DEVELOPMENT DIVISION"
+            },
+            {
+                "code": "DIV-4830",
+                "name": "OECH - HEALTH DEVELOPMENT DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-436",
+        "name": "OFFICE OF SOCIO-ECONOMIC SERVICES AND SPECIAL CONCERNS",
+        "region": {
+            "code": "13",
+            "name": "Central Office"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4832",
+                "name": "OSESSC - OFFICE OF THE DIRECTOR"
+            },
+            {
+                "code": "DIV-4834",
+                "name": "OSESSC - SOCIO-ECONOMIC DEVELOPMENT DIVISION"
+            },
+            {
+                "code": "DIV-4836",
+                "name": "OSESSC - SPECIAL CONCERNS DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-437",
+        "name": "OFFICE OF EMPOWERMENT AND HUMAN RIGHTS",
+        "region": {
+            "code": "13",
+            "name": "Central Office"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4838",
+                "name": "OEHR - OFFICE OF THE DIRECTOR"
+            },
+            {
+                "code": "DIV-4840",
+                "name": "OEHR - EMPOWERMENT DIVISION"
+            },
+            {
+                "code": "DIV-4842",
+                "name": "OEHR - HUMAN RIGHTS DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-438",
+        "name": "LEGAL AFFAIRS OFFICE",
+        "region": {
+            "code": "13",
+            "name": "Central Office"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4844",
+                "name": "LAO - OFFICE OF THE DIRECTOR"
+            },
+            {
+                "code": "DIV-4846",
+                "name": "LAO - PUBLIC ASSISTANCE DIVISION"
+            },
+            {
+                "code": "DIV-4848",
+                "name": "LAO - LITIGATION AND ADJUDICATION DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-439",
+        "name": "ADMINISTRATIVE SERVICE",
+        "region": {
+            "code": "13",
+            "name": "Central Office"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4850",
+                "name": "AS - OFFICE OF THE DIRECTOR"
+            },
+            {
+                "code": "DIV-4852",
+                "name": "AS - HUMAN RESOURCE MANAGEMENT DIVISION"
+            },
+            {
+                "code": "DIV-4854",
+                "name": "AS - GENERAL SERVICES DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-440",
+        "name": "FINANCE SERVICE",
+        "region": {
+            "code": "13",
+            "name": "Central Office"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4856",
+                "name": "FS - OFFICE OF THE DIRECTOR"
+            },
+            {
+                "code": "DIV-4858",
+                "name": "FS - ACCOUNTING DIVISION"
+            },
+            {
+                "code": "DIV-4860",
+                "name": "FS - BUDGET DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-441",
+        "name": "FOREIGN ASSISTED PROGRAMS AND INTERNATIONAL RELATIONS OFFICE",
+        "region": {
+            "code": "13",
+            "name": "Central Office"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4862",
+                "name": "FAPIRO - OFFICE OF THE DIRECTOR"
+            },
+            {
+                "code": "DIV-4864",
+                "name": "FAPIRO - PROJECT MANAGEMENT, MONITORING, AND EVALUATION DIVISION"
+            },
+            {
+                "code": "DIV-4866",
+                "name": "FAPIRO - EXTERNAL AFFAIRS AND COMMUNICATION DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-442",
+        "name": "OFFICE OF THE CHAIRPERSON",
+        "region": {
+            "code": "13",
+            "name": "Central Office"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4868",
+                "name": "OC - OFFICE OF THE CLERK OF THE COMMISSION"
+            },
+            {
+                "code": "DIV-4870",
+                "name": "OC - INTERNAL AUDIT SERVICE (MANAGEMENT AUDIT UNIT)"
+            },
+            {
+                "code": "DIV-4887",
+                "name": "OFFICE OF THE CHAIRPERSON"
+            }
+        ]
+    },
+    {
+        "code": "BSO-443",
+        "name": "OFFICE OF THE COMMISSIONERS",
+        "region": {
+            "code": "13",
+            "name": "Central Office"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4874",
+                "name": "OFFICE OF THE COMMISSIONER FOR CORDILLERA ADMINISTRATIVE REGION AND REGION I"
+            },
+            {
+                "code": "DIV-4877",
+                "name": "OFFICE OF THE COMMISSIONER FOR REGION II"
+            },
+            {
+                "code": "DIV-4879",
+                "name": "OFFICE OF THE COMMISSIONER FOR ISLAND GROUP AND THE REST OF THE VISAYAS"
+            },
+            {
+                "code": "DIV-4881",
+                "name": "OFFICE OF THE COMMISSIONER FOR REGION III AND REST OF LUZON"
+            },
+            {
+                "code": "DIV-4883",
+                "name": "OFFICE OF THE COMMISSIONER FOR NORTHERN AND WESTERN MINDANAO"
+            },
+            {
+                "code": "DIV-4885",
+                "name": "OFFICE OF THE COMMISSIONER FOR CENTRAL MINDANAO"
+            },
+            {
+                "code": "DIV-4892",
+                "name": "OFFICE OF THE COMMISSIONER FOR SOUTHERN AND EASTERN MINDANAO"
+            }
+        ]
+    },
+    {
+        "code": "BSO-445",
+        "name": "PROVINCIAL OFFICE, LA UNION",
+        "region": {
+            "code": "01",
+            "name": "Region 1"
+        },
+        "divisions": [
+            {
+                "code": "DIV-4977",
+                "name": "I - PROVINCIAL OFFICE, LA UNION"
+            },
+            {
+                "code": "DIV-4979",
+                "name": "I - COMMUNITY SERVICE CENTER, SUDIPEN"
+            },
+            {
+                "code": "DIV-4981",
+                "name": "I - COMMUNITY SERVICE CENTER, PUGO"
+            }
+        ]
+    },
+    {
+        "code": "BSO-446",
+        "name": "PROVINCIAL OFFICE, CAGAYAN",
+        "region": {
+            "code": "02",
+            "name": "Region 2"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5005",
+                "name": "II - PROVINCIAL OFFICE, CAGAYAN"
+            },
+            {
+                "code": "DIV-5007",
+                "name": "II - COMMUNITY SERVICE CENTER, LASAM"
+            }
+        ]
+    },
+    {
+        "code": "BSO-447",
+        "name": "PROVINCIAL OFFICE, BULACAN",
+        "region": {
+            "code": "03",
+            "name": "Region 3"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5040",
+                "name": "III - PROVINCIAL OFFICE, BULACAN"
+            },
+            {
+                "code": "DIV-5042",
+                "name": "III - COMMUNITY SERVICE CENTER, DOÑA REMEDIOS TRINIDAD"
+            }
+        ]
+    },
+    {
+        "code": "BSO-448",
+        "name": "PROVINCIAL OFFICE, PAMPANGA",
+        "region": {
+            "code": "03",
+            "name": "Region 3"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5058",
+                "name": "III - PROVINCIAL OFFICE, PAMPANGA"
+            },
+            {
+                "code": "DIV-5060",
+                "name": "III - COMMUNITY SERVICE CENTER, FLORIDABLANCA"
+            }
+        ]
+    },
+    {
+        "code": "BSO-449",
+        "name": "PROVINCIAL OFFICE, RIZAL",
+        "region": {
+            "code": "04",
+            "name": "Region 4-A"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5080",
+                "name": "IV-A - PROVINCIAL OFFICE, RIZAL"
+            },
+            {
+                "code": "DIV-5082",
+                "name": "IV-A - COMMUNITY SERVICE CENTER, TANAY"
+            }
+        ]
+    },
+    {
+        "code": "BSO-450",
+        "name": "REGION IV-B - OFFICE OF THE REGIONAL DIRECTOR",
+        "region": {
+            "code": "17",
+            "name": "Region 4-B"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5084",
+                "name": "IV-B - ADMINISTRATIVE AND FINANCIAL SERVICES DIVISION"
+            },
+            {
+                "code": "DIV-5086",
+                "name": "IV-B - OFFICE OF THE REGIONAL DIRECTOR"
+            },
+            {
+                "code": "DIV-5088",
+                "name": "IV-B - REGIONAL HEARING OFFICE"
+            },
+            {
+                "code": "DIV-5090",
+                "name": "IV-B - TECHNICAL MANAGEMENT SERVICES DIVISION"
+            }
+        ]
+    },
+    {
+        "code": "BSO-451",
+        "name": "PROVINCIAL OFFICE, ALBAY",
+        "region": {
+            "code": "05",
+            "name": "Region 5"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5124",
+                "name": "V - PROVINCIAL OFFICE, ALBAY"
+            },
+            {
+                "code": "DIV-5126",
+                "name": "V - COMMUNITY SERVICE CENTER, POLANGUI"
+            }
+        ]
+    },
+    {
+        "code": "BSO-452",
+        "name": "PROVINCIAL OFFICE, SORSOGON / MASBATE",
+        "region": {
+            "code": "05",
+            "name": "Region 5"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5136",
+                "name": "V - PROVINCIAL OFFICE, SORSOGON / MASBATE"
+            },
+            {
+                "code": "DIV-5138",
+                "name": "V - COMMUNITY SERVICE CENTER, SORSOGON"
+            }
+        ]
+    },
+    {
+        "code": "BSO-453",
+        "name": "PROVINCIAL OFFICE, ANTIQUE/AKLAN",
+        "region": {
+            "code": "06",
+            "name": "Region 6"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5148",
+                "name": "VI/VII - PROVINCIAL OFFICE, ANTIQUE/AKLAN"
+            },
+            {
+                "code": "DIV-5150",
+                "name": "VI/VII - COMMUNITY SERVICE CENTER, ANTIQUE/AKLAN"
+            }
+        ]
+    },
+    {
+        "code": "BSO-454",
+        "name": "PROVINCIAL OFFICE, CAPIZ",
+        "region": {
+            "code": "06",
+            "name": "Region 6"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5152",
+                "name": "VI/VII - PROVINCIAL OFFICE, CAPIZ"
+            },
+            {
+                "code": "DIV-5154",
+                "name": "VI/VII - COMMUNITY SERVICE CENTER, CAPIZ"
+            }
+        ]
+    },
+    {
+        "code": "BSO-455",
+        "name": "PROVINCIAL OFFICE, NEGROS OCCIDENTAL",
+        "region": {
+            "code": "06",
+            "name": "Region 6"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5164",
+                "name": "VI/VII - PROVINCIAL OFFICE, NEGROS OCCIDENTAL"
+            },
+            {
+                "code": "DIV-5166",
+                "name": "VI/VII - COMMUNITY SERVICE CENTER, NEGROS OCCIDENTAL"
+            }
+        ]
+    },
+    {
+        "code": "BSO-456",
+        "name": "PROVINCIAL OFFICE, GUIMARAS",
+        "region": {
+            "code": "06",
+            "name": "Region 6"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5168",
+                "name": "VI/VII - PROVINCIAL OFFICE, GUIMARAS"
+            },
+            {
+                "code": "DIV-5170",
+                "name": "VI/VII - COMMUNITY SERVICE CENTER, GUIMARAS"
+            }
+        ]
+    },
+    {
+        "code": "BSO-457",
+        "name": "PROVINCIAL OFFICE, BOHOL",
+        "region": {
+            "code": "07",
+            "name": "Region 7"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5172",
+                "name": "VI/VII - PROVINCIAL OFFICE, BOHOL"
+            },
+            {
+                "code": "DIV-5174",
+                "name": "VI/VII - COMMUNITY SERVICE CENTER, TAGBILARAN"
+            }
+        ]
+    },
+    {
+        "code": "BSO-458",
+        "name": "PROVINCIAL OFFICE, ZAMBOANGA SIBUGAY",
+        "region": {
+            "code": "09",
+            "name": "Region 9"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5207",
+                "name": "IX - PROVINCIAL OFFICE, ZAMBOANGA SIBUGAY"
+            },
+            {
+                "code": "DIV-5209",
+                "name": "IX - COMMUNITY SERVICE CENTER, DIPLAHAN"
+            }
+        ]
+    },
+    {
+        "code": "BSO-459",
+        "name": "CITY OFFICE, ZAMBOANGA CITY",
+        "region": {
+            "code": "09",
+            "name": "Region 9"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5211",
+                "name": "IX - CITY OFFICE, ZAMBOANGA CITY"
+            }
+        ]
+    },
+    {
+        "code": "BSO-460",
+        "name": "PROVINCIAL OFFICE, CAMIGUIN",
+        "region": {
+            "code": "10",
+            "name": "Region 10"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5230",
+                "name": "X - PROVINCIAL OFFICE, CAMIGUIN"
+            },
+            {
+                "code": "DIV-5232",
+                "name": "X - COMMUNITY SERVICE CENTER, SAGAY"
+            }
+        ]
+    },
+    {
+        "code": "BSO-461",
+        "name": "PROVINCIAL OFFICE, DAVAO DE ORO",
+        "region": {
+            "code": "11",
+            "name": "Region 11"
+        },
+        "divisions": [
+            {
+                "code": "DIV-5258",
+                "name": "XI - PROVINCIAL OFFICE, DAVAO DE ORO"
+            },
+            {
+                "code": "DIV-5260",
+                "name": "XI - COMMUNITY SERVICE CENTER, MABINI"
+            },
+            {
+                "code": "DIV-5262",
+                "name": "XI - COMMUNITY SERVICE CENTER, MARAGUSAN"
+            }
+        ]
+    }
+]
