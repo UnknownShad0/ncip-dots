@@ -75,6 +75,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/purpose-types', [PurposeTypeController::class, 'storePurposeType'])->name('purpose-types.store');
         Route::put('/purpose-types/{id}', [PurposeTypeController::class, 'updatePurposeType'])->name('purpose-types.update');
         Route::get('/user-accounts', [UserAccountController::class, 'index'])->name('user-accounts.index');
+        Route::post('/user-accounts/lookup-employee', [UserAccountController::class, 'lookupEmployee'])->middleware('throttle:20,1')->name('user-accounts.lookup-employee');
         Route::post('/user-accounts', [UserAccountController::class, 'store'])->name('user-accounts.store');
         Route::put('/user-accounts/{id}', [UserAccountController::class, 'update'])->name('user-accounts.update');
     });

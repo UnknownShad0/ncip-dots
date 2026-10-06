@@ -28,6 +28,10 @@ class User extends Authenticatable
         'lastname',
         'middlename',
         'extensionname',
+        'agency_employee_no',
+        'division_code',
+        'region_code',
+        'office_code',
         'email',
         'password',
         'role',
@@ -71,6 +75,11 @@ class User extends Authenticatable
     public function office(): BelongsTo
     {
         return $this->belongsTo(Office::class);
+    }
+
+    public function officeByCode(): BelongsTo
+    {
+        return $this->belongsTo(Office::class, 'office_code', 'code');
     }
 
     public function isAdministrator(): bool

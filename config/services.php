@@ -14,6 +14,13 @@ return [
     |
     */
 
+    'hris' => [
+        'url' => env('HRIS_API_URL'),
+        'token' => env('HRIS_API_TOKEN'),
+        'employee_path' => env('HRIS_EMPLOYEE_PATH', '/employee'),
+        'office_path' => env('HRIS_OFFICE_PATH', '/office'),
+    ],
+
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
     ],
