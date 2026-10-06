@@ -13,7 +13,9 @@ type UserRow = {
     extensionname: string;
     agency_employee_no: string;
     division_code?: string;
+    division?: string;
     region_code?: string;
+    region_name?: string;
     office_code?: string;
     role_id: string;
     role: string;
@@ -29,8 +31,11 @@ type RoleOption = { id: number; name: string };
 type FormState = {
     agency_employee_no: string;
     division_code: string;
+    division: string;
     region_code: string;
+    region_name: string;
     office_code: string;
+    office_name: string;
     firstname: string;
     middlename: string;
     lastname: string;
@@ -58,10 +63,10 @@ type EmployeeLookup = {
     };
     offices: { region_code: string; region_name: string; office_code: string; office_name: string; office_id: number | null }[];
 };
-type SortKey = 'name' | 'email' | 'role' | 'office_name' | 'is_active';
+type SortKey = 'name' | 'username' | 'email' | 'role' | 'region_name' | 'office_name' | 'division' | 'is_active';
 
 const emptyForm: FormState = {
-    agency_employee_no: '', division_code: '', region_code: '', office_code: '', firstname: '', middlename: '', lastname: '', extensionname: '', username: '', email: '', role_id: '', officeId: '',
+    agency_employee_no: '', division_code: '', division: '', region_code: '', region_name: '', office_code: '', office_name: '', firstname: '', middlename: '', lastname: '', extensionname: '', username: '', email: '', role_id: '', officeId: '',
     status: '1', isLocked: 'N',
 };
 
@@ -84,7 +89,7 @@ export default function UserAccountsIndex({
 
     const visibleUsers = useMemo(() => {
         const term = search.toLowerCase();
-        const filtered = users.filter((user) => [user.name, user.email, user.username, user.role, user.office_name]
+        const filtered = users.filter((user) => [user.name, user.email, user.username, user.role, user.region_name, user.office_name, user.division]
             .join(' ').toLowerCase().includes(term));
         return [...filtered].sort((a, b) => {
             const left = String(a[sortKey] ?? '').toLowerCase();
@@ -108,7 +113,7 @@ export default function UserAccountsIndex({
         setEditingRow(user);
         setForm({
             agency_employee_no: user.agency_employee_no ?? '',
-            division_code: user.division_code ?? '', region_code: user.region_code ?? '', office_code: user.office_code ?? '',
+            division_code: user.division_code ?? '', division: user.division ?? '', region_code: user.region_code ?? '', region_name: user.region_name ?? '', office_code: user.office_code ?? '', office_name: user.office_name ?? '',
             firstname: user.firstname ?? '', middlename: user.middlename ?? '',
             lastname: user.lastname ?? '', extensionname: user.extensionname ?? '',
             username: user.username ?? '', email: user.email ?? '', role_id: user.role_id ?? '',
@@ -143,22 +148,27 @@ export default function UserAccountsIndex({
             if (!response.ok) throw new Error(result.message ?? 'Employee lookup failed.');
 
             const details = result as EmployeeLookup;
-            const matchedOffice = details.offices.find((office) => office.office_id !== null);
-            const directoryOffice = details.offices[0];
+            const directoryOffice = details.offices.find((office) => office.office_id != null) ?? details.offices[0];
             setEmployeeLookup(details);
+            if (!directoryOffice) {
+                setLookupError('Employee details loaded, but the directory returned no office for this employee.');
+            }
             setForm((current) => ({
                 ...current,
                 agency_employee_no: details.employee.agency_employee_no || employeeNumber,
                 division_code: details.employee.division_code || '',
+                division: details.employee.division || '',
                 region_code: directoryOffice?.region_code || '',
+                region_name: directoryOffice?.region_name || '',
                 office_code: directoryOffice?.office_code || '',
+                office_name: directoryOffice?.office_name || '',
                 firstname: details.employee.first_name || '',
                 middlename: details.employee.middle_name || '',
                 lastname: details.employee.last_name || '',
                 extensionname: details.employee.ext_name || '',
                 username: details.employee.username || '',
                 email: details.employee.email_address || '',
-                officeId: matchedOffice ? String(matchedOffice.office_id) : '',
+                officeId: directoryOffice?.office_id != null ? String(directoryOffice.office_id) : '',
             }));
         } catch (error) {
             setLookupError(error instanceof Error ? error.message : 'Employee lookup failed.');
@@ -176,8 +186,6 @@ export default function UserAccountsIndex({
             status: editingRow ? form.status : undefined,
             isLocked: editingRow ? form.isLocked : undefined,
         };
-        // console.log('User account payload:', payload);
-        // return false;
         const options = {
             onSuccess: closeModal,
             onError: (validationErrors: Record<string, string>) => setErrors(validationErrors),
@@ -226,24 +234,35 @@ export default function UserAccountsIndex({
                     <table className="min-w-full divide-y divide-[#e8e8e4] text-left text-sm">
                         <thead className="bg-[#f7f8fa] text-[#555752]"><tr>
                             <th className="px-4 py-3">{sortButton('Name', 'name')}</th>
+                            <th className="px-4 py-3">{sortButton('Username', 'username')}</th>
                             <th className="px-4 py-3">{sortButton('Email', 'email')}</th>
+                            <th className="px-4 py-3">{sortButton('Role', 'role')}</th>
+                            <th className="px-4 py-3">{sortButton('Region', 'region_name')}</th>
                             <th className="px-4 py-3">{sortButton('Office', 'office_name')}</th>
+                            <th className="px-4 py-3">{sortButton('Division', 'division')}</th>
                             <th className="px-4 py-3">{sortButton('Status', 'is_active')}</th>
                             <th className="px-4 py-3 print:hidden">Action</th>
                         </tr></thead>
                         <tbody className="divide-y divide-slate-100">
-                            {pageUsers.length === 0 ? <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No users found.</td></tr> : pageUsers.map((user) => (
+                            {pageUsers.length === 0 ? <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">No users found.</td></tr> : pageUsers.map((user) => (
                                 <tr key={`${user.source}:${user.id}`} className="transition-colors hover:bg-[#fafaf8]">
                                     <td className="px-4 py-3 font-medium text-slate-800">{user.name}</td>
+                                    <td className="px-4 py-3 text-slate-600">{user.username || '—'}</td>
                                     <td className="px-4 py-3 text-slate-600">{user.email}</td>
-                                    <td className="px-4 py-3 text-slate-600">{user.office_name || 'No office'}</td>
+                                    <td className="px-4 py-3 text-slate-600">{user.role || '—'}</td>
+                                    <td className="px-4 py-3 text-slate-600">{user.region_name || user.region_code || '—'}</td>
+                                    <td className="px-4 py-3 text-slate-600">{user.office_name || user.office_code || 'No office'}</td>
+                                    <td className="px-4 py-3 text-slate-600">{user.division || '—'}</td>
                                     <td className="px-4 py-3"><span className={user.is_active ? 'text-emerald-700' : 'text-slate-500'}>{user.is_active ? 'Active' : 'Inactive'}</span></td>
                                     <td className="px-4 py-3 print:hidden">
-                                        {user.source === 'Legacy DB' ? (
-                                            <button type="button" disabled title="Legacy accounts are read-only" className="cursor-not-allowed rounded-md bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500">Read-only</button>
-                                        ) : (
-                                            <button type="button" onClick={() => openEdit(user)} className="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-700">Edit</button>
-                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => openEdit(user)}
+                                            disabled={user.source === 'Legacy DB'}
+                                            className="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+                                        >
+                                            Edit
+                                        </button>
                                     </td>
                                 </tr>
                             ))}
@@ -269,7 +288,12 @@ export default function UserAccountsIndex({
                         <Field label="Username" error={errors.username}><input required maxLength={50} readOnly value={form.username} className="w-full rounded-md border-slate-300 read-only:bg-slate-100" /></Field>
                         <Field label="Email" error={errors.email}><input required type="email" maxLength={255} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
                         <Field label="Role" error={errors.role_id}><select required value={form.role_id} onChange={(e) => setForm({ ...form, role_id: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></Field>
-                        <div className="sm:col-span-2"><p className="text-sm text-slate-700">Office</p><p className="mt-1 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800">{editingRow?.office_name || employeeLookup?.offices.find((office) => office.office_id !== null)?.office_name || employeeLookup?.offices[0]?.office_name || (employeeLookup ? 'No office returned by the employee directory' : 'Look up the employee to assign an office')}</p>{errors.officeId && <p className="mt-1 text-xs text-red-600">{errors.officeId}</p>}</div>
+                        <div className="sm:col-span-2 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3">
+                            <LookupDetail label="Region" value={editingRow?.region_name || editingRow?.region_code || employeeLookup?.offices.find((office) => office.office_id !== null)?.region_name || employeeLookup?.offices.find((office) => office.office_id !== null)?.region_code || employeeLookup?.offices[0]?.region_name || employeeLookup?.offices[0]?.region_code} />
+                            <LookupDetail label="Office" value={editingRow?.office_name || employeeLookup?.offices.find((office) => office.office_id !== null)?.office_name || employeeLookup?.offices[0]?.office_name || (employeeLookup ? 'No office returned by the employee directory' : 'Look up the employee to assign an office')} />
+                            <LookupDetail label="Division" value={editingRow?.division || employeeLookup?.employee.division} />
+                            {errors.officeId && <p className="text-xs text-red-600 sm:col-span-3">{errors.officeId}</p>}
+                        </div>
                         {editingRow && <Field label="Account Status" error={errors.status}><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full rounded-md border-slate-300"><option value="1">Active</option><option value="0">Inactive</option></select></Field>}
                         {editingRow && <Field label="Login Status" error={errors.isLocked}><select value={form.isLocked} onChange={(e) => setForm({ ...form, isLocked: e.target.value })} className="w-full rounded-md border-slate-300"><option value="N">Unlocked</option><option value="Y">Locked</option></select></Field>}
                     </div>

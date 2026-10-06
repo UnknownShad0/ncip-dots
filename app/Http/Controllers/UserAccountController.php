@@ -79,21 +79,23 @@ class UserAccountController extends Controller
                 ->values()
                 ->all();
 
-            $localOffices = Office::query()->get(['id', 'code', 'name']);
+            $localOffices = Office::query()->get(['id', 'code', 'name', 'region_code']);
             $offices = collect($officeRecords)->map(function (array $office) use ($localOffices) {
                 $region = is_array($office['region'] ?? null) ? $office['region'] : [];
                 $officeCode = (string) $this->apiValue($office, ['office_code', 'officeCode', 'code']);
                 $officeName = $this->apiValue($office, ['office_name', 'officeName', 'name']);
-                $localOffice = $localOffices->first(function (Office $candidate) use ($officeCode, $officeName) {
+                $regionCode = $this->apiValue($office, ['region_code', 'regionCode']) ?: $this->apiValue($region, ['code', 'region_code']);
+                $regionName = $this->apiValue($office, ['region_name', 'regionName']) ?: $this->apiValue($region, ['name', 'region_name']);
+                $localOffice = $localOffices->first(function (Office $candidate) use ($officeCode, $regionCode) {
                     $matchesCode = filled($officeCode) && strcasecmp(trim((string) $candidate->code), trim($officeCode)) === 0;
-                    $matchesName = filled($officeName) && strcasecmp(trim((string) $candidate->name), trim($officeName)) === 0;
+                    $matchesRegion = filled($regionCode) && strcasecmp(trim((string) $candidate->region_code), trim($regionCode)) === 0;
 
-                    return $matchesCode || $matchesName;
+                    return $matchesCode && $matchesRegion;
                 });
 
                 return [
-                    'region_code' => $this->apiValue($office, ['region_code', 'regionCode']) ?: $this->apiValue($region, ['code', 'region_code']),
-                    'region_name' => $this->apiValue($office, ['region_name', 'regionName']) ?: $this->apiValue($region, ['name', 'region_name']),
+                    'region_code' => $regionCode,
+                    'region_name' => $regionName,
                     'office_code' => $officeCode,
                     'office_name' => $officeName,
                     'office_id' => $localOffice?->id,
@@ -112,7 +114,7 @@ class UserAccountController extends Controller
                     'ext_name' => $employee['ext_name'] ?? '',
                     'agency_employee_no' => $employee['agency_employee_no'] ?? $validated['agency_employee_no'],
                     'division_code' => $divisionCode ?? '',
-                    'division' => $employee['division'] ?? '',
+                    'division' => $this->apiValue($employee, ['division', 'division_name', 'divisionName']),
                 ],
                 'offices' => $offices,
             ]);
@@ -209,6 +211,8 @@ class UserAccountController extends Controller
                     'lastname' => $user->lastname ?? '',
                     'extensionname' => $user->extensionname ?? '',
                     'agency_employee_no' => '',
+                    'division' => '',
+                    'region_name' => '',
                     'email' => $user->emailAddress ?? '',
                     'username' => $user->username ?? '',
                     'role_id' => $roleId,
@@ -224,12 +228,13 @@ class UserAccountController extends Controller
             });
 
         $localUsers = User::query()
-            ->with(['office:id,name,code', 'officeByCode:id,name,code'])
+            ->with(['office:id,name,code', 'division:id,name,division_name,code'])
             ->orderBy('name')
             ->get()
             ->map(function (User $user) use ($officeNames, $roleOptions) {
                 $roleId = (int) ($user->role_id ?? 0);
                 $roleName = $roleOptions->firstWhere('id', $roleId)['name'] ?? ($user->role ?: 'User');
+                $divisionRecord = $user->getRelation('division');
 
                 return [
                     'id' => (string) $user->id,
@@ -239,6 +244,7 @@ class UserAccountController extends Controller
                     'lastname' => $user->lastname ?? '',
                     'extensionname' => $user->extensionname ?? '',
                     'agency_employee_no' => $user->agency_employee_no ?? '',
+                    'division' => $user->getAttribute('division') ?: $divisionRecord?->division_name ?: $divisionRecord?->name ?: '',
                     'email' => $user->email,
                     'username' => $user->username ?? '',
                     'role_id' => $user->role_id === null ? '' : (string) $user->role_id,
@@ -246,8 +252,9 @@ class UserAccountController extends Controller
                     'office_id' => $user->office_id,
                     'division_code' => $user->division_code ?? '',
                     'region_code' => $user->region_code ?? '',
+                    'region_name' => $user->region_name ?? '',
                     'office_code' => $user->office_code ?? '',
-                    'office_name' => $user->officeByCode?->name ?? $user->office?->name ?? $user->office_code ?? '',
+                    'office_name' => $user->office?->name ?? $user->office_name ?? $user->office_code ?? '',
                     'is_active' => (bool) $user->is_active,
                     'is_locked' => (bool) $user->is_locked,
                     'logged_in_status' => 'N',
@@ -269,15 +276,18 @@ class UserAccountController extends Controller
             'username' => ['required', 'string', 'max:50', 'unique:users,username'],
             'agency_employee_no' => ['required', 'string', 'max:100', 'unique:users,agency_employee_no'],
             'division_code' => ['required', 'string', 'max:100'],
+            'division' => ['required', 'string', 'max:255'],
             'region_code' => ['nullable', 'string', 'max:100'],
+            'region_name' => ['nullable', 'string', 'max:255'],
             'office_code' => ['required', 'string', 'max:100'],
+            'office_name' => ['nullable', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'firstname' => ['required', 'string', 'max:100'],
             'middlename' => ['nullable', 'string', 'max:100'],
             'lastname' => ['required', 'string', 'max:100'],
             'extensionname' => ['nullable', 'string', 'max:100'],
             'role_id' => ['required', 'integer', Rule::in($this->roleIds())],
-            'officeId' => ['required', 'integer', Rule::exists('offices', 'id')],
+            'officeId' => ['nullable', 'integer', Rule::exists('offices', 'id')],
         ]);
 
         $role = DB::connection('legacy')->table('role')->where('roleId', $validated['role_id'])->value('rolename');
@@ -294,12 +304,15 @@ class UserAccountController extends Controller
             'extensionname' => $validated['extensionname'] ?? null,
             'agency_employee_no' => $validated['agency_employee_no'],
             'division_code' => $validated['division_code'] ?? null,
+            'division' => $validated['division'],
             'region_code' => $validated['region_code'] ?? null,
+            'region_name' => $validated['region_name'] ?? null,
             'office_code' => $validated['office_code'] ?? null,
+            'office_name' => $validated['office_name'] ?? null,
             'email' => $validated['email'],
             'role' => $role ?: 'user',
             'role_id' => (int) $validated['role_id'],
-            'office_id' => (int) $validated['officeId'],
+            'office_id' => filled($validated['officeId'] ?? null) ? (int) $validated['officeId'] : null,
             'division_id' => (int) $divisionId,
             'password' => Hash::make(Str::random(64)),
             'is_active' => true,
@@ -323,8 +336,11 @@ class UserAccountController extends Controller
             'role_id' => ['required', 'integer', Rule::in($this->roleIds())],
             'officeId' => ['nullable', 'integer', Rule::exists('offices', 'id')],
             'division_code' => ['nullable', 'string', 'max:100'],
+            'division' => ['nullable', 'string', 'max:255'],
             'region_code' => ['nullable', 'string', 'max:100'],
+            'region_name' => ['nullable', 'string', 'max:255'],
             'office_code' => ['nullable', 'string', 'max:100'],
+            'office_name' => ['nullable', 'string', 'max:255'],
             'status' => ['required', Rule::in(['1', '0'])],
             'isLocked' => ['required', Rule::in(['Y', 'N'])],
         ]);
@@ -347,8 +363,11 @@ class UserAccountController extends Controller
             'office_id' => isset($validated['officeId']) ? (int) $validated['officeId'] : $user->office_id,
             'division_id' => $divisionId,
             'division_code' => $validated['division_code'] ?? $user->division_code,
+            'division' => $validated['division'] ?? $user->getAttribute('division'),
             'region_code' => $validated['region_code'] ?? $user->region_code,
+            'region_name' => $validated['region_name'] ?? $user->region_name,
             'office_code' => $validated['office_code'] ?? $user->office_code,
+            'office_name' => $validated['office_name'] ?? $user->office_name,
             'is_active' => $validated['status'] === '1',
             'is_locked' => $validated['isLocked'] === 'Y',
         ]);

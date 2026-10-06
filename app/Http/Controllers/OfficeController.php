@@ -4,11 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Office;
 use App\Models\BureauLegacy;
+use App\Models\Division;
 use App\Models\Range;
 use App\Models\RangeLegacy;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
@@ -60,7 +59,7 @@ class OfficeController extends Controller
 
         $newOffices = Office::query()
             ->with(['parent:id,name', 'range:id,name,is_active'])
-            ->select(['id', 'name', 'short_name', 'code', 'email', 'location', 'parent_id', 'range_id', 'division_code', 'is_active'])
+            ->select(['id', 'name', 'short_name', 'code', 'email', 'location', 'parent_id', 'range_id', 'division_code', 'division_name', 'is_active'])
             ->orderBy('name')
             ->get()
             ->map(function ($office) {
@@ -74,6 +73,7 @@ class OfficeController extends Controller
                     'location' => $office->location ?? '',
                     'parentOfficeId' => $office->parent_id,
                     'division_code' => $office->division_code,
+                    'division_name' => $office->division_name,
                     'parent_name' => $office->parent?->name,
                     'range_id' => $office->range_id,
                     'range_name' => $office->range?->name,
@@ -92,7 +92,7 @@ class OfficeController extends Controller
             ->concat($legacyRanges)
             ->sortBy('name')
             ->values();
-        $directoryDivisions = $this->employeeDirectoryDivisions();
+        $directoryDivisions = $this->officeDivisionOptions();
 
         return Inertia::render('Offices/Index', [
             'offices' => [
@@ -104,45 +104,23 @@ class OfficeController extends Controller
         ]);
     }
 
-    private function employeeDirectoryDivisions(): array
+    private function officeDivisionOptions(): array
     {
-        $api = config('services.employee_directory');
-        if (blank($api['token'] ?? null)) return [];
-
-        return Cache::remember('employee-directory.divisions.v2', now()->addMinutes(15), function () use ($api) {
-            try {
-                $response = Http::acceptJson()
-                    ->withToken($api['token'])
-                    ->timeout(15)
-                    ->get(rtrim($api['url'] ?? '', '/').'/api/offices');
-
-                if (! $response->successful()) return null;
-
-                $payload = $response->json();
-                $offices = is_array($payload) && isset($payload['value']) && is_array($payload['value'])
-                    ? $payload['value']
-                    : $payload;
-                if (! is_array($offices)) return null;
-
-                return collect($offices)
-                    ->filter(fn ($office) => is_array($office))
-                    ->flatMap(fn (array $office) => is_array($office['divisions'] ?? null) ? $office['divisions'] : [])
-                    ->filter(fn ($division) => is_array($division) && filled($division['code'] ?? null) && filled($division['name'] ?? null))
-                    ->map(fn (array $division) => ['code' => (string) $division['code'], 'name' => (string) $division['name']])
-                    ->unique('code')->sortBy('name')
-                    ->values()
-                    ->all();
-            } catch (\Throwable $exception) {
-                report($exception);
-
-                return null;
-            }
-        }) ?? [];
+        return Division::query()
+            ->whereNotNull('code')
+            ->whereNotNull('division_name')
+            ->get(['code', 'division_name'])
+            ->filter(fn (Division $division) => filled($division->code) && filled($division->division_name))
+            ->map(fn (Division $division) => ['code' => (string) $division->code, 'name' => (string) $division->division_name])
+            ->unique('code')
+            ->sortBy('name')
+            ->values()
+            ->all();
     }
 
     private function directoryDivisionCodes(): array
     {
-        return collect($this->employeeDirectoryDivisions())
+        return collect($this->officeDivisionOptions())
             ->pluck('code')
             ->filter()
             ->values()
@@ -151,7 +129,7 @@ class OfficeController extends Controller
 
     private function directoryDivisionByCode(string $code): ?array
     {
-        return collect($this->employeeDirectoryDivisions())
+        return collect($this->officeDivisionOptions())
             ->first(fn (array $office) => strcasecmp($office['code'], $code) === 0);
     }
 
@@ -170,6 +148,7 @@ class OfficeController extends Controller
         [$rangeId, $rangeName] = $this->resolveRange($validated['range'] ?? null);
         Office::query()->create([
             'name' => $division['name'],
+            'division_name' => $division['name'],
             'short_name' => null,
             'code' => $division['code'],
             'division_code' => $division['code'],
@@ -197,6 +176,7 @@ class OfficeController extends Controller
         [$rangeId, $rangeName] = $this->resolveRange($validated['range'] ?? null);
         $office->update([
             'name' => $division['name'] ?? $office->name,
+            'division_name' => $division['name'] ?? $office->division_name,
             'code' => $division['code'] ?? $office->code,
             'division_code' => $division['code'] ?? $office->division_code,
             'email' => $validated['email'],

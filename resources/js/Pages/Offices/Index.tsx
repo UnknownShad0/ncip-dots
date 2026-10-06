@@ -14,6 +14,7 @@ type OfficeRow = {
     parentOfficeId?: number | null;
     parent_name?: string | null;
     division_code?: string | null;
+    division_name?: string | null;
     range_id?: number | null;
     range_name?: string | null;
     range_is_active?: boolean | number | null;
@@ -187,7 +188,7 @@ export default function OfficesIndex({
 
     const paginatedOffices = sortedOffices.slice((page - 1) * perPage, page * perPage);
     const directoryDivisionOptions = editingRow?.code && !directoryDivisions.some((division) => division.code === (editingRow.division_code ?? editingRow.code))
-        ? [...directoryDivisions, { code: editingRow.division_code ?? editingRow.code ?? '', name: editingRow.name }]
+        ? [...directoryDivisions, { code: editingRow.division_code ?? editingRow.code ?? '', name: editingRow.division_name ?? editingRow.name }]
         : directoryDivisions;
     const selectedDivision = directoryDivisionOptions.find((division) => division.code === form.division_code);
     const filteredDivisionOptions = directoryDivisionOptions.filter((division) => `${division.name} ${division.code}`.toLowerCase().includes(divisionSearch.toLowerCase()));
