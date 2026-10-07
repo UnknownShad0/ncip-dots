@@ -34,6 +34,8 @@ class DatabaseSeeder extends Seeder
             'code' => 'RM',
         ]);
 
+        $carTmsdOfficeId = Office::query()->where('code', 'CAR-TMSD')->value('id') ?? $office->id;
+
         $seedAccounts = [
             [
                 'name' => 'System Admin',
@@ -64,29 +66,92 @@ class DatabaseSeeder extends Seeder
                 'role_id' => 14,
             ],            
             [
-                'name' => 'JM Admin',
-                'username' => 'jm',
-                'email' => 'admin.sstaff@dots.locagl',
+                'name' => 'JOHN MARK BALEROSO ANUNCIADO',
+                'username' => 'jmbannunciado1',
+                'firstname' => 'JOHN MARK',
+                'middlename' => 'BALEROSO',
+                'lastname' => 'ANUNCIADO',
+                'extensionname' => null,
+                'email' => 'jmarkanunciado1@gmail.com',
+                'agency_employee_no' => 'EMP-78466',
+                'division_code' => 'DIV-4824',
+                'division' => null,
+                'region_code' => '13',
+                'office_code' => 'CAR-TMSD',
+                'office_id' => $carTmsdOfficeId,
+                'legacy_office_id' => 46,
+                'division_id' => null,
                 'role' => 'Admin Staff',
                 'role_id' => 3,
             ],            
             [
-                'name' => 'Jake Admin',
-                'username' => 'jake',
-                'email' => 'admin.staff@dots.locagl',
+                'name' => 'HASEL SUGOT DELMAS',
+                'username' => 'hsdelmas',
+                'firstname' => 'HASEL',
+                'middlename' => 'SUGOT',
+                'lastname' => 'DELMAS',
+                'extensionname' => null,
+                'email' => 'hsdelmas@dots.local',
+                'agency_employee_no' => 'EMP-2967',
+                'division_code' => 'DIV-4954',
+                'division' => 'CAR - PROVINCIAL OFFICE, BAGUIO',
+                'region_code' => '14',
+                'office_code' => 'BSO-299',
+                'role' => 'Super Admin',
+                'role_id' => 1,
+            ],
+            [
+                'name' => 'TANYA PAULA NORADA LAPITAN-CAMPUED',
+                'username' => 'tpnlapitancampued',
+                'firstname' => 'TANYA PAULA',
+                'middlename' => 'NORADA',
+                'lastname' => 'LAPITAN-CAMPUED',
+                'extensionname' => null,
+                'email' => 'tpnlapitancampued@dots.local',
+                'agency_employee_no' => 'EMP-2970',
+                'division_code' => 'DIV-4868',
+                'division' => 'OC - OFFICE OF THE CLERK OF THE COMMISSION',
+                'region_code' => '13',
+                'office_code' => 'BSO-442',
+                'role' => 'Executive',
+                'role_id' => 2,
+            ],
+            [
+                'name' => 'SHIELA GRACE ESCORA ANOG',
+                'username' => 'sgeanog',
+                'firstname' => 'SHIELA GRACE',
+                'middlename' => 'ESCORA',
+                'lastname' => 'ANOG',
+                'extensionname' => null,
+                'email' => 'sgeanog@dots.local',
+                'agency_employee_no' => 'EMP-2971',
+                'division_code' => 'DIV-4854',
+                'division' => 'AS - GENERAL SERVICES DIVISION',
+                'region_code' => '13',
+                'office_code' => 'BSO-439',
                 'role' => 'Admin Staff',
                 'role_id' => 3,
             ],
         ];
 
         $accounts = collect($seedAccounts)->mapWithKeys(function (array $account) use ($office, $division) {
+            $accountOfficeId = $account['office_id']
+                ?? Office::query()->where('code', $account['office_code'] ?? '')->value('id')
+                ?? $office->id;
+            $accountDivisionId = array_key_exists('division_id', $account) ? $account['division_id'] : $division->id;
+            $accountIdentity = filled($account['agency_employee_no'] ?? null)
+                ? ['agency_employee_no' => $account['agency_employee_no']]
+                : ['username' => $account['username']];
+
             $user = User::updateOrCreate(
-                ['email' => $account['email']],
+                $accountIdentity,
                 [
+                    ...[
+                        'office_id' => $accountOfficeId,
+                        'division_id' => $accountDivisionId,
+                    ],
                     ...$account,
                     'password' => Hash::make('password'),
-                    'office_id' => $office->id,
-                    'division_id' => $division->id,
                     'is_active' => true,
                     'is_locked' => false,
                 ],

@@ -478,9 +478,9 @@ class DocumentController extends Controller
         ]);
         $validated = $this->normalizeActionTypeDetails($validated);
         $targetOffice = Office::findOrFail($validated['to_office_id']);
-        if (!$this->officeIsInCurrentUserRange($targetOffice) || !$this->officeHasActiveUsers($targetOffice)) {
+        if (!$this->officeHasActiveUsers($targetOffice)) {
             throw ValidationException::withMessages([
-                'to_office_id' => 'Choose an active receiving office within your bureau range.',
+                'to_office_id' => 'Choose a receiving office with at least one active user.',
             ]);
         }
         $document = Document::with('latestTrail')->findOrFail($id);
@@ -701,12 +701,17 @@ class DocumentController extends Controller
                 PurposeType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
                 $this->legacyRows(fn () => PurposeTypeLegacy::query()->whereIn('status', ['active', 'Active', 'enabled', 'Enabled', '1', 'Y'])->orderBy('name')->get(['name']))
             ),
-            'offices' => $this->mergeOfficeOptions(
-                Office::query()->with('range:id,name')->orderBy('name')->get(['id', 'name', 'range_id'])
-                    ->filter(fn (Office $office) => $this->officeIsInCurrentUserRange($office)),
-                $this->legacyRows(fn () => BureauLegacy::query()->whereIn('status', ['active', 'Active', 'enabled', 'Enabled', '1', 'Y'])->orderBy('longName')->get(['bureauId', 'longName', 'range', 'status']))
-                    ->filter(fn (BureauLegacy $bureau) => $this->legacyBureauIsInCurrentUserRange($bureau))
-            ),
+            'offices' => Office::query()
+                ->orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn (Office $office) => [
+                    'id' => (string) $office->id,
+                    'name' => $office->name,
+                    'source' => 'New DB',
+                    'disabled' => ! $this->officeHasActiveUsers($office),
+                ])
+                ->values()
+                ->all(),
         ];
     }
 

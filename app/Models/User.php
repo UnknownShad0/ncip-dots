@@ -30,6 +30,7 @@ class User extends Authenticatable
         'extensionname',
         'agency_employee_no',
         'division_code',
+        'division',
         'region_code',
         'office_code',
         'email',

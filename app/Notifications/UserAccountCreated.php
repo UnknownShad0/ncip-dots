@@ -7,7 +7,7 @@ use Illuminate\Notifications\Notification;
 
 class UserAccountCreated extends Notification
 {
-    public function __construct(private readonly string $password) {}
+    public function __construct(private readonly string $setupUrl) {}
 
     public function via(object $notifiable): array
     {
@@ -21,8 +21,7 @@ class UserAccountCreated extends Notification
             ->greeting('Hello '.$notifiable->name.',')
             ->line('Your DOTS account has been created.')
             ->line('Username: '.$notifiable->username)
-            ->line('Password: '.$this->password)
-            ->action('Sign in', url('/login'))
-            ->line('Please change your password after signing in.');
+            ->line('Set a password to activate your account.')
+            ->action('Set password', $this->setupUrl);
     }
 }

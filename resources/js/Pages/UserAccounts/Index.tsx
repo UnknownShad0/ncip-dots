@@ -2,6 +2,7 @@ import axios from 'axios';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import { FormEvent, useMemo, useRef, useState } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 
 type UserRow = {
     id: string;
@@ -41,7 +42,7 @@ type EmployeeLookup = {
     employee: { agency_employee_no: string; first_name: string; middle_name?: string; last_name: string; ext_name?: string; username: string; email_address?: string; division_code?: string; division?: string };
     offices: { office_code: string; office_name: string; region_code: string; region_name: string }[];
 };
-type SortKey = 'name' | 'email' | 'role' | 'office_name' | 'is_active';
+type SortKey = 'name' | 'username' | 'email' | 'role' | 'office_name' | 'is_active';
 
 const emptyForm: FormState = {
     employee_role: '', firstname: '', lastname: '', username: '', email: '', role_id: '', officeId: '',
@@ -167,8 +168,8 @@ export default function UserAccountsIndex({
     };
 
     const sortButton = (label: string, key: SortKey) => (
-        <button type="button" onClick={() => toggleSort(key)} className="font-semibold hover:text-sky-700">
-            {label}{sortKey === key ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}
+        <button type="button" onClick={() => toggleSort(key)} className="flex items-center gap-1 font-semibold hover:text-sky-700">
+            {label}{sortKey === key ? (sortDirection === 'asc' ? <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" />) : <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" />}
         </button>
     );
 
@@ -198,38 +199,51 @@ export default function UserAccountsIndex({
                     </label>
                 </div>
 
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-[#e8e8e4] text-left text-sm">
+                <section className="overflow-hidden rounded-2xl border border-[#e2e2df] bg-white shadow-sm">
+                    <div className="flex items-center justify-between border-b border-[#e8e8e4] bg-[#fafaf8] px-5 py-3 text-sm text-slate-600">
+                        <span>{visibleUsers.length} {visibleUsers.length === 1 ? 'user' : 'users'}</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                    <table className="min-w-full text-left text-sm">
                         <thead className="bg-[#f7f8fa] text-[#555752]"><tr>
-                            <th className="px-4 py-3">{sortButton('Name', 'name')}</th>
-                            <th className="px-4 py-3">{sortButton('Email', 'email')}</th>
-                            <th className="px-4 py-3">{sortButton('Office', 'office_name')}</th>
-                            <th className="px-4 py-3">{sortButton('Status', 'is_active')}</th>
-                            <th className="px-4 py-3 print:hidden">Action</th>
+                            <th className="px-4 py-3 font-semibold">{sortButton('Name', 'name')}</th>
+                            <th className="px-4 py-3 font-semibold">{sortButton('Username', 'username')}</th>
+                            <th className="px-4 py-3 font-semibold">{sortButton('Email', 'email')}</th>
+                            <th className="px-4 py-3 font-semibold">{sortButton('Role', 'role')}</th>
+                            <th className="px-4 py-3 font-semibold">{sortButton('Office', 'office_name')}</th>
+                            <th className="px-4 py-3 font-semibold">{sortButton('Status', 'is_active')}</th>
+                            <th className="px-4 py-3 font-semibold print:hidden">Actions</th>
                         </tr></thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {pageUsers.length === 0 ? <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No users found.</td></tr> : pageUsers.map((user) => (
-                                <tr key={`${user.source}:${user.id}`} className="transition-colors hover:bg-[#fafaf8]">
+                        <tbody>
+                            {pageUsers.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">No users found.</td></tr> : pageUsers.map((user) => (
+                                <tr key={`${user.source}:${user.id}`} className="border-t border-[#eeeeeb] transition-colors hover:bg-[#fafaf8]">
                                     <td className="px-4 py-3 font-medium text-slate-800">{user.name}</td>
+                                    <td className="px-4 py-3 text-slate-600">{user.username || '—'}</td>
                                     <td className="px-4 py-3 text-slate-600">{user.email}</td>
+                                    <td className="px-4 py-3 text-slate-600">{user.role || '—'}</td>
                                     <td className="px-4 py-3 text-slate-600">{user.office_name || 'No office'}</td>
-                                    <td className="px-4 py-3"><span className={user.is_active ? 'text-emerald-700' : 'text-slate-500'}>{user.is_active ? 'Active' : 'Inactive'}</span></td>
+                                    <td className="px-4 py-3">
+                                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${user.is_active ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200' : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'}`}>
+                                            {user.is_active ? 'Active' : 'Inactive'}
+                                        </span>
+                                    </td>
                                     <td className="px-4 py-3 print:hidden">
-                                        {user.source === 'Legacy DB' ? (
-                                            <button type="button" disabled title="Legacy accounts are read-only" className="cursor-not-allowed rounded-md bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500">Read-only</button>
-                                        ) : (
-                                            <button type="button" onClick={() => openEdit(user)} className="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-700">Edit</button>
-                                        )}
+                                        <button type="button" onClick={() => openEdit(user)} disabled={user.source === 'Legacy DB'} title={user.source === 'Legacy DB' ? 'Legacy accounts are read-only' : undefined} className={`rounded-md px-3 py-1.5 text-xs font-medium ${user.source === 'Legacy DB' ? 'cursor-not-allowed bg-slate-300 text-slate-500' : 'bg-sky-600 text-white hover:bg-sky-700'}`}>Edit</button>
                                     </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
-                </div>
-                <div className="flex items-center justify-between text-sm text-slate-600 print:hidden">
-                    <span>{visibleUsers.length === 0 ? '0 users' : `${(page - 1) * perPage + 1}–${Math.min(page * perPage, visibleUsers.length)} of ${visibleUsers.length} users`}</span>
-                    <div className="flex gap-2"><button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)} className="rounded border px-3 py-1 disabled:opacity-40">Previous</button><button type="button" disabled={page >= pageCount} onClick={() => setPage(page + 1)} className="rounded border px-3 py-1 disabled:opacity-40">Next</button></div>
-                </div>
+                    </div>
+                    <div className="flex flex-col gap-3 border-t border-[#e8e8e4] bg-[#fafaf8] px-5 py-4 sm:flex-row sm:items-center sm:justify-between print:hidden">
+                        <span className="text-sm text-slate-600">{visibleUsers.length === 0 ? '0 users' : `${(page - 1) * perPage + 1}–${Math.min(page * perPage, visibleUsers.length)} of ${visibleUsers.length} users`}</span>
+                        <div className="flex items-center gap-2">
+                            <button type="button" disabled={page <= 1} onClick={() => setPage((prev) => Math.max(prev - 1, 1))} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                            <span className="text-sm text-slate-600">Page {page} of {pageCount}</span>
+                            <button type="button" disabled={page >= pageCount} onClick={() => setPage((prev) => Math.min(prev + 1, pageCount))} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+                        </div>
+                    </div>
+                </section>
             </div>
 
             {(isCreateOpen || editingRow) && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4 print:hidden" role="dialog" aria-modal="true" aria-labelledby="user-account-modal-title">
@@ -262,7 +276,7 @@ export default function UserAccountsIndex({
                                 <Field label="Email" error={errors.email}><input required type="email" maxLength={255} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
                                 <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option><option value="super admin">Super Admin</option><option value="executive">Executive</option><option value="admin staff">Admin Staff</option></select></Field>
                             </div>
-                            <p className="text-xs text-slate-500">Login details will be sent to this email.</p>
+                            {/* <p className="text-xs text-slate-500">Login details will be sent to this email.</p> */}
                         </>}
                     </div>}
                     {(editingRow || accountType === 'dots') && <div className="grid gap-4 sm:grid-cols-2">

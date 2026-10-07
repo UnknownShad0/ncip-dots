@@ -8,11 +8,11 @@ use App\Models\User;
 use App\Models\UserLegacy;
 use App\Services\HrisDirectory;
 use App\Notifications\UserAccountCreated;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
@@ -211,13 +211,12 @@ class UserAccountController extends Controller
                 'legacy_office_id' => (int) $validated['officeId'],
             ];
         }
-        $password = Str::password(16);
         $user = User::query()->create(array_merge($attributes, [
             'name' => trim(implode(' ', array_filter([
                 $attributes['firstname'], $attributes['middlename'] ?? null,
                 $attributes['lastname'], $attributes['extensionname'] ?? null,
             ]))),
-            'password' => Hash::make($password),
+            'password' => null,
             'is_active' => true, 'is_locked' => false,
         ]));
         if ($type === 'employee') {
@@ -225,13 +224,15 @@ class UserAccountController extends Controller
         }
 
         try {
-            $user->notify(new UserAccountCreated($password));
+            $token = Password::broker()->createToken($user);
+            $setupUrl = route('password.reset', ['token' => $token, 'email' => $user->email]);
+            $user->notify(new UserAccountCreated($setupUrl));
         } catch (\Throwable $exception) {
             report($exception);
-            return redirect()->route('user-accounts.index')->with('warning', 'Account created, but the password email could not be sent. Set a new password before this user signs in.');
+            return redirect()->route('user-accounts.index')->with('warning', 'Account created, but the password setup email could not be sent. Ask the user to use Forgot password to set a password.');
         }
 
-        return redirect()->route('user-accounts.index')->with('success', 'User account added. Login details sent by email.');
+        return redirect()->route('user-accounts.index')->with('success', 'User account added.');
     }
 
     public function update(Request $request, int $id)
