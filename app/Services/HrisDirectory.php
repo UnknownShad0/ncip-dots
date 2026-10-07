@@ -10,6 +10,10 @@ class HrisDirectory
 {
     public function verifyCredentials(string $username, string $password): bool
     {
+        if (config('services.hris.use_sample_data')) {
+            return true;
+        }
+
         $config = config('services.hris');
         if (blank($config['url'] ?? null)) {
             throw new RuntimeException('HRIS API URL is not configured.');
@@ -82,6 +86,10 @@ class HrisDirectory
 
     private function fetchEmployeeByCode(string $employeeCode): mixed
     {
+        if (config('services.hris.use_sample_data')) {
+            return $this->sampleRecords('get-employee.json');
+        }
+
         $config = config('services.hris');
         if (blank($config['url'] ?? null)) {
             throw new RuntimeException('HRIS API URL is not configured.');
@@ -113,6 +121,10 @@ class HrisDirectory
 
     private function fetch(string $path, array $query): mixed
     {
+        if (config('services.hris.use_sample_data') && $path === 'office_path') {
+            return $this->sampleRecords('get-office.json');
+        }
+
         $config = config('services.hris');
         if (blank($config['url'] ?? null)) {
             throw new RuntimeException('HRIS API URL is not configured.');
@@ -140,6 +152,21 @@ class HrisDirectory
         }
 
         return $response->throw()->json();
+    }
+
+    private function sampleRecords(string $filename): array
+    {
+        $path = base_path('tests/Fixtures/hris/'.$filename);
+        if (! is_readable($path)) {
+            throw new RuntimeException('HRIS sample file is missing or unreadable: '.$filename);
+        }
+
+        $payload = json_decode(file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+        if (! is_array($payload)) {
+            throw new RuntimeException('HRIS sample file must contain JSON records: '.$filename);
+        }
+
+        return $payload;
     }
 
     private function records(mixed $payload): array

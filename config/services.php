@@ -15,6 +15,7 @@ return [
     */
 
     'hris' => [
+        'use_sample_data' => env('HRIS_USE_SAMPLE_DATA', false),
         'url' => env('HRIS_API_URL'),
         'token' => env('HRIS_API_TOKEN'),
         'employee_path' => env('HRIS_EMPLOYEE_PATH', '/api/employees'),
