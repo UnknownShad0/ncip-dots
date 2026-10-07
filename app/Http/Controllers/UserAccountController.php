@@ -225,7 +225,7 @@ class UserAccountController extends Controller
 
         try {
             $token = Password::broker()->createToken($user);
-            $setupUrl = route('password.reset', ['token' => $token, 'email' => $user->email]);
+            $setupUrl = route('password.reset', ['token' => $token, 'username' => $user->username]);
             $user->notify(new UserAccountCreated($setupUrl));
         } catch (\Throwable $exception) {
             report($exception);

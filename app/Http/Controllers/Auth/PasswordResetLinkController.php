@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -30,7 +31,7 @@ class PasswordResetLinkController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
-            'email' => 'required|email',
+            'username' => 'required|string|max:255',
         ]);
 
         abort_if($this->usesLogMailer(config('mail.default')), 503, 'Password recovery email is not configured. Please contact support.');
@@ -39,12 +40,15 @@ class PasswordResetLinkController extends Controller
         // to send the link, we will examine the response then see the message we
         // need to show to the user. Finally, we'll send out a proper response.
         try {
-            Password::sendResetLink($request->only('email'));
+            $user = User::query()->where('username', $request->input('username'))->first();
+            if ($user) {
+                Password::sendResetLink(['email' => $user->email]);
+            }
         } catch (\Throwable) {
             Log::warning('Password recovery email delivery failed.');
         }
 
-        return back()->with('status', 'If an account matches that email address, we’ll send a password reset link shortly.');
+        return back()->with('status', 'If an account matches that username, we’ll send a password reset link shortly.');
     }
 
     private function usesLogMailer(string $mailer, array $checked = []): bool

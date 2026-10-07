@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,9 +22,15 @@ class NewPasswordController extends Controller
      */
     public function create(Request $request): Response
     {
+        $username = $request->query('username');
+        if (! filled($username) && filled($request->query('email'))) {
+            $username = User::query()->where('email', $request->query('email'))->value('username');
+        }
+
         return Inertia::render('Auth/ResetPassword', [
-            'email' => $request->email,
+            'username' => $username ?? '',
             'token' => $request->route('token'),
+            'status' => $request->session()->get('status'),
         ]);
     }
 
@@ -36,15 +43,27 @@ class NewPasswordController extends Controller
     {
         $request->validate([
             'token' => 'required',
-            'email' => 'required|email',
+            'username' => 'required|string|max:255',
             'password' => ['required', 'confirmed', Rules\Password::min(8)],
         ]);
+
+        $user = User::query()->where('username', $request->input('username'))->first();
+        if (! $user) {
+            throw ValidationException::withMessages([
+                'username' => [trans('passwords.token')],
+            ]);
+        }
 
         // Here we will attempt to reset the user's password. If it is successful we
         // will update the password on an actual user model and persist it to the
         // database. Otherwise we will parse the error and return the response.
         $status = Password::reset(
-            $request->only('email', 'password', 'password_confirmation', 'token'),
+            [
+                'email' => $user->email,
+                'password' => $request->input('password'),
+                'password_confirmation' => $request->input('password_confirmation'),
+                'token' => $request->input('token'),
+            ],
             function ($user) use ($request) {
                 $user->forceFill([
                     'password' => Hash::make($request->password),
@@ -63,7 +82,7 @@ class NewPasswordController extends Controller
         }
 
         throw ValidationException::withMessages([
-            'email' => [trans($status)],
+            'username' => [trans($status)],
         ]);
     }
 }

@@ -7,11 +7,11 @@ import { Head, useForm } from '@inertiajs/react';
 import { Eye, EyeOff } from 'lucide-react';
 import { FormEventHandler, useState } from 'react';
 
-export default function ResetPassword({ token, email }: { token: string; email: string }) {
+export default function ResetPassword({ token, username, status }: { token: string; username: string; status?: string }) {
     const [showPassword, setShowPassword] = useState(false);
     const { data, setData, post, processing, errors, reset } = useForm({
         token,
-        email: email ?? '',
+        username: username ?? '',
         password: '',
         password_confirmation: '',
     });
@@ -25,11 +25,12 @@ export default function ResetPassword({ token, email }: { token: string; email: 
             <Head title="Choose a new password" />
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Choose a new password</h1>
             <p className="mt-2 text-sm text-slate-600">Your password must be at least 8 characters long.</p>
+            {status && <p role="status" className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{status}</p>}
             <form onSubmit={submit} className="mt-7 space-y-5">
                 <div>
-                    <InputLabel htmlFor="email" value="Email address" />
-                    <TextInput id="email" type="email" name="email" value={data.email} className="mt-1.5 block w-full rounded-lg border-slate-300 py-3 focus:border-teal-700 focus:ring-teal-700" autoComplete="email" required onChange={(event) => setData('email', event.target.value)} />
-                    <InputError message={errors.email} className="mt-2" />
+                    <InputLabel htmlFor="username" value="Username" />
+                    <TextInput id="username" type="text" name="username" value={data.username} className="mt-1.5 block w-full rounded-lg border-slate-300 py-3 focus:border-teal-700 focus:ring-teal-700" autoComplete="username" readOnly required onChange={(event) => setData('username', event.target.value)} />
+                    <InputError message={errors.username} className="mt-2" />
                 </div>
                 <div>
                     <InputLabel htmlFor="password" value="New password" />

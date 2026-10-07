@@ -16,7 +16,7 @@ export default function Login({
 }) {
     const [showPassword, setShowPassword] = useState(false);
     const { data, setData, post, processing, errors, reset } = useForm({
-        email: '',
+        username: '',
         password: '',
         remember: false as boolean,
     });
@@ -30,26 +30,25 @@ export default function Login({
         <GuestLayout>
             <Head title="Login" />
             <h1 className="text-center text-2xl font-semibold tracking-tight text-slate-900">Good day. Please sign in.</h1>
-            {/* <p className="mt-2 text-sm text-slate-600">Use your DOTS username or registered email.</p> */}
 
             {status && <div role="status" className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{status}</div>}
 
             <form onSubmit={submit} className="mt-7 space-y-5">
                 <div>
-                    <InputLabel htmlFor="email" value="Username or email" />
+                    <InputLabel htmlFor="username" value="Username" />
                     <TextInput
-                        id="email"
+                        id="username"
                         type="text"
-                        name="email"
-                        value={data.email}
+                        name="username"
+                        value={data.username}
                         className="mt-1.5 block w-full rounded-lg border-slate-300 py-3 focus:border-teal-700 focus:ring-teal-700"
                         autoComplete="username"
                         autoCapitalize="none"
                         isFocused
                         required
-                        onChange={(event) => setData('email', event.target.value)}
+                        onChange={(event) => setData('username', event.target.value)}
                     />
-                    <InputError message={errors.email} className="mt-2" />
+                    <InputError message={errors.username} className="mt-2" />
                 </div>
 
                 <div>

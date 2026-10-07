@@ -7,8 +7,11 @@ use App\Models\UserLegacy;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -31,7 +34,7 @@ class LoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => ['required', 'string', 'max:255'],
+            'username' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string'],
         ];
     }
@@ -41,12 +44,12 @@ class LoginRequest extends FormRequest
      *
      * @throws ValidationException
      */
-    public function authenticate(): void
+    public function authenticate(): ?RedirectResponse
     {
         $this->ensureIsNotRateLimited();
 
-        $identifier = $this->string('email')->toString();
-        $loginField = filter_var($identifier, FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
+        $identifier = $this->string('username')->toString();
+        $loginField = 'username';
         $credentials = [
             $loginField => $identifier,
             'password' => $this->input('password'),
@@ -54,23 +57,60 @@ class LoginRequest extends FormRequest
             'is_locked' => false,
         ];
 
-        if (! Auth::attempt($credentials, $this->boolean('remember')) && ! $this->authenticateLegacy($identifier, $loginField)) {
+        $localUser = User::query()->where($loginField, $identifier)->first();
+        if ($localUser && $localUser->password === null) {
+            $verified = false;
+
+            if ($localUser->is_active && ! $localUser->is_locked && filled($localUser->username)) {
+                try {
+                    $verified = app(\App\Services\HrisDirectory::class)->verifyCredentials(
+                        $localUser->username,
+                        (string) $this->input('password'),
+                    );
+                } catch (\Throwable $exception) {
+                    Log::warning('HRIS credential verification unavailable.', [
+                        'exception_class' => $exception::class,
+                    ]);
+                }
+            }
+
+            if ($verified) {
+                $token = Password::broker()->createToken($localUser);
+
+                RateLimiter::clear($this->throttleKey());
+
+                return redirect()->route('password.reset', [
+                    'token' => $token,
+                    'username' => $localUser->username,
+                ])->with('status', 'HRIS credentials verified. Choose a new password to continue.');
+            }
+
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
-                'email' => trans('auth.failed'),
+                'username' => trans('auth.failed'),
+            ]);
+        }
+
+        if (! Auth::attempt($credentials, $this->boolean('remember')) && ! $this->authenticateLegacy($identifier)) {
+            RateLimiter::hit($this->throttleKey());
+
+            throw ValidationException::withMessages([
+                'username' => trans('auth.failed'),
             ]);
         }
 
         RateLimiter::clear($this->throttleKey());
+
+        return null;
     }
 
     /** Authenticate a legacy account and provision it locally for the web guard. */
-    private function authenticateLegacy(string $identifier, string $loginField): bool
+    private function authenticateLegacy(string $identifier): bool
     {
         try {
             $legacy = UserLegacy::query()
-                ->where($loginField === 'email' ? 'emailAddress' : 'username', $identifier)
+                ->where('username', $identifier)
                 ->first();
         } catch (\Throwable) {
             return false;
@@ -170,7 +210,7 @@ class LoginRequest extends FormRequest
         $seconds = RateLimiter::availableIn($this->throttleKey());
 
         throw ValidationException::withMessages([
-            'email' => trans('auth.throttle', [
+            'username' => trans('auth.throttle', [
                 'seconds' => $seconds,
                 'minutes' => ceil($seconds / 60),
             ]),
@@ -182,6 +222,6 @@ class LoginRequest extends FormRequest
      */
     public function throttleKey(): string
     {
-        return Str::transliterate(Str::lower($this->string('email')).'|'.$this->ip());
+        return Str::transliterate(Str::lower($this->string('username')).'|'.$this->ip());
     }
 }

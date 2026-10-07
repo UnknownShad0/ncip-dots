@@ -8,6 +8,40 @@ use RuntimeException;
 
 class HrisDirectory
 {
+    public function verifyCredentials(string $username, string $password): bool
+    {
+        $config = config('services.hris');
+        if (blank($config['url'] ?? null)) {
+            throw new RuntimeException('HRIS API URL is not configured.');
+        }
+
+        $request = Http::acceptJson()->asJson()->timeout(15);
+        if (filled($config['token'] ?? null)) {
+            $request = $request->withToken($config['token']);
+        }
+
+        $endpoint = rtrim($config['url'], '/').'/'.ltrim($config['credentials_path'], '/');
+        $response = $request->post($endpoint, [
+            'username' => $username,
+            'password' => $password,
+        ]);
+        $payload = $response->json();
+        $result = is_array($payload['data'] ?? null) ? $payload['data'] : $payload;
+
+        Log::debug('HRIS credential verification completed', [
+            'endpoint' => parse_url($endpoint, PHP_URL_PATH),
+            'status' => $response->status(),
+            'valid' => $response->successful() && ($result['valid'] ?? false) === true,
+            'response_fields' => is_array($result) ? array_keys($result) : [],
+        ]);
+
+        if ($response->serverError()) {
+            $response->throw();
+        }
+
+        return $response->successful() && ($result['valid'] ?? false) === true;
+    }
+
     public function lookup(string $employeeNumber): ?array
     {
         $employeeRecords = $this->records($this->fetch('employee_path', ['agency_employee_no' => $employeeNumber]));
