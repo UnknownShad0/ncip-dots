@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Office;
 use App\Models\BureauLegacy;
+use App\Models\Office;
+use App\Models\OfficeList;
+use App\Models\Range;
 use App\Models\RangeLegacy;
-use App\Models\UserLegacy;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class OfficeController extends Controller
@@ -52,14 +54,27 @@ class OfficeController extends Controller
                     'range_name' => $range?->name ?? $rangeValue,
                     'source' => 'Old DB',
                 ];
-            });
+            });    
 
+        $officeListOptions = OfficeList::query()
+            ->orderBy('division_name')
+            ->get(['id', 'division_code', 'division_name', 'long_name', 'short_name', 'email'])
+            ->map(fn (OfficeList $office) => [
+                'id' => $office->id,
+                'code' => $office->division_code,
+                'name' => $office->long_name ?: $office->division_name,
+                'division_name' => $office->division_name,
+                'short_name' => $office->short_name ?? '',
+                'email' => $office->email ?? '',
+            ])
+            ->values();
         $newOffices = Office::query()
             ->with(['parent:id,name', 'range:id,name,is_active'])
-            ->select(['id', 'name', 'short_name', 'code', 'email', 'location', 'parent_id', 'range_id'])
+            ->select(['id', 'name', 'short_name', 'code', 'email', 'location', 'parent_id', 'range_id', 'legacy_range_id'])
             ->orderBy('name')
             ->get()
-            ->map(function ($office) {
+            ->map(function ($office) use ($rangesById) {
+                $legacyRange = $office->legacy_range_id ? $rangesById->get((int) $office->legacy_range_id) : null;
                 return [
                     'id' => $office->id,
                     'name' => $office->name,
@@ -69,8 +84,8 @@ class OfficeController extends Controller
                     'location' => $office->location ?? '',
                     'parentOfficeId' => $office->parent_id,
                     'parent_name' => $office->parent?->name,
-                    'range_id' => $office->range_id,
-                    'range_name' => $office->range?->name,
+                    'range_id' => $legacyRange ? 'legacy-'.$legacyRange->id : $office->range_id,
+                    'range_name' => $legacyRange?->name ?? $office->range?->name,
                     'range_is_active' => $office->range?->is_active,
                     'source' => 'New DB',
                 ];
@@ -81,9 +96,27 @@ class OfficeController extends Controller
             ->orderBy('longName')
             ->get(['bureauId', 'longName'])
             ->map(fn (BureauLegacy $office) => ['id' => (int) $office->bureauId, 'name' => $office->longName]);
-        $ranges = $legacyRangeRows
+        $legacyRangeOptions = $legacyRangeRows
             ->filter(fn ($range) => in_array(strtolower((string) ($range->status ?? 'inactive')), ['1', 'active', 'enabled', 'yes', 'y'], true))
-            ->map(fn ($range) => ['id' => (int) $range->id, 'name' => $range->name, 'is_active' => true])
+            ->map(fn ($range) => [
+                'id' => 'legacy-'.$range->id,
+                'name' => $range->name,
+                'is_active' => true,
+                'source' => 'Old DB',
+            ]);
+        $newRangeOptions = Range::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'is_active'])
+            ->map(fn (Range $range) => [
+                'id' => (int) $range->id,
+                'name' => $range->name,
+                'is_active' => (bool) $range->is_active,
+                'source' => 'New DB',
+            ]);
+        $ranges = $legacyRangeOptions
+            ->concat($newRangeOptions)
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
             ->values();
 
         return Inertia::render('Offices/Index', [
@@ -93,35 +126,32 @@ class OfficeController extends Controller
             ],
             'parentOffices' => $parentOffices,
             'ranges' => $ranges,
+            'officeListOptions' => $officeListOptions,
         ]);
     }
 
     public function store(Request $request)
     {
-        $activeOfficeStatuses = ['1', 'active', 'Active', 'ACTIVE', 'enabled', 'Enabled', 'ENABLED', 'Y', 'y'];
-        $activeRangeStatuses = ['1', 'active', 'Active', 'ACTIVE', 'enabled', 'Enabled', 'ENABLED', 'yes', 'Yes', 'YES', 'Y', 'y'];
         $validated = $request->validate([
             'operation' => ['required', 'in:create'],
-            'name' => ['required', 'string', 'max:255'],
-            'short_name' => ['nullable', 'string', 'max:50'],
-            'code' => ['nullable', 'string', 'max:50'],
-            'email' => ['nullable', 'email', 'max:255'],
-            'parentOfficeId' => ['nullable', 'integer', Rule::exists('legacy.bureau', 'bureauId')->whereIn('status', $activeOfficeStatuses)],
-            'range_id' => ['nullable', 'integer', Rule::exists('legacy.rangeregion', 'id')->whereIn('status', $activeRangeStatuses)],
+            'division_code' => ['required', 'string', 'exists:office_lists,division_code', Rule::unique('offices', 'code')],
+            'range_id' => ['nullable', 'string'],
+            'email' => ['nullable', 'email', 'max:255', Rule::unique('offices', 'email')],
+        ], [
+            'division_code.unique' => 'Office already exists.',
         ]);
 
-        $this->ensureNoSelfParent($request, null);
-        $addedBy = UserLegacy::query()->where('emailAddress', auth()->user()?->email)->value('userUuid');
-        BureauLegacy::query()->create([
-            'longName' => $validated['name'],
-            'shortName' => $validated['short_name'] ?? null,
-            'officeCode' => $validated['code'] ?? null,
-            'officeEmail' => $validated['email'] ?? null,
-            'parentbureauId' => $validated['parentOfficeId'] ?? null,
-            'range' => $validated['range_id'] ?? null,
-            'status' => 'active',
-            'dateAdded' => now(),
-            'addedBy' => $addedBy,
+        [$rangeId, $legacyRangeId] = $this->resolveRangeSelection($validated['range_id'] ?? null);
+
+        $officeList = OfficeList::query()->where('division_code', $validated['division_code'])->firstOrFail();
+        Office::query()->create([
+            'name' => $officeList->long_name ?: $officeList->division_name,
+            'short_name' => $officeList->short_name,
+            'code' => $officeList->division_code,
+            'email' => $validated['email'] ?? null,
+            'location' => $officeList->office_address,
+            'range_id' => $rangeId,
+            'legacy_range_id' => $legacyRangeId,
         ]);
 
         return redirect()->route('offices.index')->with('success', 'Office added.');
@@ -129,58 +159,57 @@ class OfficeController extends Controller
 
     public function update(Request $request, $id)
     {
-        $office = BureauLegacy::query()->findOrFail($id);
-        $existingRangeIds = RangeLegacy::query()
-            ->where('id', $office->range)
-            ->orWhere('name', $office->range)
-            ->pluck('id')
-            ->map(fn ($rangeId) => (string) $rangeId)
-            ->all();
-        $activeOfficeStatuses = ['1', 'active', 'Active', 'ACTIVE', 'enabled', 'Enabled', 'ENABLED', 'Y', 'y'];
-        $activeRangeStatuses = ['1', 'active', 'Active', 'ACTIVE', 'enabled', 'Enabled', 'ENABLED', 'yes', 'Yes', 'YES', 'Y', 'y'];
+        $office = Office::query()->findOrFail($id);
         $validated = $request->validate([
             'operation' => ['required', 'in:update'],
-            'name' => ['required', 'string', 'max:255'],
-            'short_name' => ['nullable', 'string', 'max:50'],
-            'code' => ['nullable', 'string', 'max:50'],
-            'email' => ['nullable', 'email', 'max:255'],
-            'parentOfficeId' => [
-                'nullable', 'integer',
-                Rule::exists('legacy.bureau', 'bureauId')->where(function ($query) use ($office, $request, $activeOfficeStatuses) {
-                    if ((int) $request->input('parentOfficeId') === (int) $office->parentbureauId) {
-                        return $query;
-                    }
-
-                    return $query->whereIn('status', $activeOfficeStatuses);
-                }),
-            ],
-            'range_id' => [
-                'nullable', 'integer',
-                Rule::exists('legacy.rangeregion', 'id')->where(function ($query) use ($request, $existingRangeIds, $activeRangeStatuses) {
-                    if (in_array((string) $request->input('range_id'), $existingRangeIds, true)) {
-                        return $query;
-                    }
-
-                    return $query->whereIn('status', $activeRangeStatuses);
-                }),
-            ],
+            'division_code' => ['required', 'string', 'exists:office_lists,division_code', Rule::unique('offices', 'code')->ignore($office->id)],
+            'range_id' => ['nullable', 'string'],
+            'email' => ['nullable', 'email', 'max:255', Rule::unique('offices', 'email')->ignore($office->id)],
+        ], [
+            'division_code.unique' => 'Office already exists.',
         ]);
 
-        $this->ensureNoSelfParent($request, $office->id);
+        [$rangeId, $legacyRangeId] = $this->resolveRangeSelection($validated['range_id'] ?? null);
+
+        $officeList = OfficeList::query()->where('division_code', $validated['division_code'])->firstOrFail();
         $office->update([
-            'longName' => $validated['name'],
-            'shortName' => $validated['short_name'] ?? null,
-            'officeCode' => $validated['code'] ?? null,
-            'officeEmail' => $validated['email'] ?? null,
-            'parentbureauId' => $validated['parentOfficeId'] ?? null,
-            'range' => $validated['range_id'] ?? null,
+            'name' => $officeList->long_name ?: $officeList->division_name,
+            'short_name' => $officeList->short_name,
+            'code' => $officeList->division_code,
+            'email' => $validated['email'] ?? null,
+            'location' => $officeList->office_address,
+            'range_id' => $rangeId,
+            'legacy_range_id' => $legacyRangeId,
         ]);
 
         return redirect()->route('offices.index')->with('success', 'Office updated.');
     }
 
-    private function ensureNoSelfParent(Request $request, ?int $officeId): void
+    private function resolveRangeSelection(?string $selection): array
     {
-        abort_if($officeId !== null && (int) $request->input('parentOfficeId') === $officeId, 422, 'An office cannot be its own parent.');
+        if ($selection === null || $selection === '') {
+            return [null, null];
+        }
+
+        if (preg_match('/^legacy-(\d+)$/', $selection, $matches)) {
+            $legacyRangeId = (int) $matches[1];
+            $isActive = RangeLegacy::query()
+                ->whereKey($legacyRangeId)
+                ->whereIn('status', ['1', 'active', 'Active', 'ACTIVE', 'enabled', 'Enabled', 'ENABLED', 'yes', 'Yes', 'y', 'Y'])
+                ->exists();
+
+            if (! $isActive) {
+                throw ValidationException::withMessages(['range_id' => 'Please select a valid active range.']);
+            }
+
+            return [null, $legacyRangeId];
+        }
+
+        if (! ctype_digit($selection) || ! Range::query()->whereKey((int) $selection)->exists()) {
+            throw ValidationException::withMessages(['range_id' => 'Please select a valid range.']);
+        }
+
+        return [(int) $selection, null];
     }
+
 }

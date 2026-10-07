@@ -23,7 +23,7 @@ return new class extends Migration
             $table->string('role')->default('user');
             $table->unsignedInteger('role_id')->nullable()->index();
             $table->foreignId('office_id')->nullable();
-            $table->unsignedInteger('legacy_bureau_id')->nullable()->index();
+            $table->unsignedInteger('legacy_office_id')->nullable()->index();
             $table->foreignId('division_id')->nullable();
             $table->boolean('is_active')->default(true);
             $table->boolean('is_locked')->default(false);

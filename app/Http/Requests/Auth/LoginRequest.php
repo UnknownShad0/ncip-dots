@@ -119,7 +119,7 @@ class LoginRequest extends FormRequest
             'email' => $email,
             'role' => $roleName ?: 'user',
             'role_id' => $roleId,
-            'legacy_bureau_id' => $legacy->bureauId,
+            'legacy_office_id' => $legacy->bureauId,
             'division_id' => $legacy->divisionId,
             'is_active' => true,
             'is_locked' => false,

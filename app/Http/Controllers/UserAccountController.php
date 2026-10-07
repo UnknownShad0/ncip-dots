@@ -44,6 +44,25 @@ class UserAccountController extends Controller
             ->orderBy('longName')
             ->get(['bureauId', 'longName', 'officeEmail'])
             ->map(fn (BureauLegacy $office) => ['id' => (int) $office->bureauId, 'name' => $office->longName, 'email' => trim((string) $office->officeEmail)]);
+        $officeTableOptions = Office::query()
+            ->orderBy('name')
+            ->get(['id', 'code', 'name', 'email'])
+            ->map(fn (Office $office) => ['id' => 'new-'.$office->id, 'code' => $office->code, 'name' => $office->name, 'email' => $office->email, 'source' => 'New DB'])
+            ->values();
+        $legacyOfficeTableOptions = BureauLegacy::query()
+            ->whereIn('status', self::ACTIVE_OFFICE_STATUSES)
+            ->orderBy('longName')
+            ->get(['bureauId', 'officeCode', 'longName', 'officeEmail'])
+            ->map(fn (BureauLegacy $office) => [
+                'id' => 'legacy-'.$office->bureauId,
+                'code' => $office->officeCode,
+                'name' => $office->longName,
+                'email' => trim((string) $office->officeEmail),
+                'source' => 'Legacy DB',
+            ]);
+        $officeTableOptions = $legacyOfficeTableOptions->concat($officeTableOptions)
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
         $officeNames = BureauLegacy::query()->pluck('longName', 'bureauId');
 
         $roleOptions = DB::connection('legacy')->table('role')
@@ -102,8 +121,8 @@ class UserAccountController extends Controller
                     'role_id' => $user->role_id === null ? '' : (string) $user->role_id,
                     'role' => $roleName,
                     'agency_employee_no' => $user->agency_employee_no,
-                    'office_id' => $user->legacy_bureau_id,
-                    'office_name' => $user->officeByCode?->name ?? $user->office?->name ?? $officeNames->get($user->legacy_bureau_id) ?? '',
+                    'office_id' => $user->legacy_office_id,
+                    'office_name' => $user->officeByCode?->name ?? $user->office?->name ?? $officeNames->get($user->legacy_office_id) ?? '',
                     'is_active' => (bool) $user->is_active,
                     'is_locked' => (bool) $user->is_locked,
                     'logged_in_status' => 'N',
@@ -115,6 +134,7 @@ class UserAccountController extends Controller
         return Inertia::render('UserAccounts/Index', [
             'users' => $legacyUsers->concat($localUsers)->values(),
             'offices' => $offices,
+            'officeTableOptions' => $officeTableOptions,
             'roles' => $roleOptions,
         ]);
     }
@@ -128,7 +148,8 @@ class UserAccountController extends Controller
                 'agency_employee_no' => ['required', 'string', 'max:100', 'unique:users,agency_employee_no'],
                 'email' => ['required', 'email', 'max:255', 'unique:users,email'],
                 'office_code' => ['required', 'string', 'max:100'],
-                'employee_role' => ['required', Rule::in(['employee', 'chief'])],
+                'office_table_id' => ['required', 'string'],
+                'employee_role' => ['required', Rule::in(['super admin', 'executive', 'admin staff'])],
             ]);
             $lookup = $request->session()->get('hris_employee_lookup');
             if (! $lookup || ($lookup['employee']['agency_employee_no'] ?? null) !== $validated['agency_employee_no']) {
@@ -144,11 +165,13 @@ class UserAccountController extends Controller
                 'first_name' => ['required', 'string', 'max:100'],
                 'last_name' => ['required', 'string', 'max:100'],
             ])->validate();
-            $office = Office::query()->firstOrCreate(
-                ['code' => $directoryOffice['office_code']],
-                ['name' => $directoryOffice['office_name']],
-            );
-            $bureauId = BureauLegacy::query()->where('officeCode', $office->code)->value('bureauId');
+            [$office, $bureauId] = $this->resolveSelectedOffice($validated['office_table_id']);
+            if (! $office) {
+                throw ValidationException::withMessages([
+                    'office_table_id' => 'Select a valid office from the Office module.',
+                ]);
+            }
+            $bureauId ??= BureauLegacy::query()->where('officeCode', $office->code)->value('bureauId');
             $attributes = [
                 'firstname' => $employee['first_name'], 'lastname' => $employee['last_name'],
                 'middlename' => $employee['middle_name'] ?? null, 'extensionname' => $employee['ext_name'] ?? null,
@@ -156,7 +179,7 @@ class UserAccountController extends Controller
                 'username' => $employee['username'], 'email' => $validated['email'],
                 'division_code' => $employee['division_code'] ?? null,
                 'region_code' => $directoryOffice['region_code'], 'office_code' => $office->code,
-                'office_id' => $office->id, 'legacy_bureau_id' => $bureauId,
+                'office_id' => $office->id, 'legacy_office_id' => $bureauId,
                 'role' => $validated['employee_role'],
                 'role_id' => $this->employeeRoleId($validated['employee_role']),
             ];
@@ -185,7 +208,7 @@ class UserAccountController extends Controller
                 'username' => $validated['username'], 'email' => $email,
                 'role' => $role ?: 'user', 'role_id' => (int) $validated['role_id'],
                 'office_id' => $office->id, 'office_code' => $office->code,
-                'legacy_bureau_id' => (int) $validated['officeId'],
+                'legacy_office_id' => (int) $validated['officeId'],
             ];
         }
         $password = Str::password(16);
@@ -221,8 +244,8 @@ class UserAccountController extends Controller
             'firstname' => ['required', 'string', 'max:100'],
             'lastname' => ['required', 'string', 'max:100'],
             'role_id' => [Rule::requiredIf(! $user->agency_employee_no), 'nullable', 'integer', Rule::in($this->roleIds())],
-            'employee_role' => [Rule::requiredIf((bool) $user->agency_employee_no), 'nullable', Rule::in(['employee', 'chief'])],
-            'officeId' => [Rule::requiredIf(! $user->agency_employee_no || $user->legacy_bureau_id !== null), 'nullable', 'integer', Rule::exists('legacy.bureau', 'bureauId')->whereIn('status', self::ACTIVE_OFFICE_STATUSES)],
+            'employee_role' => [Rule::requiredIf((bool) $user->agency_employee_no), 'nullable', Rule::in(['super admin', 'executive', 'admin staff'])],
+            'officeId' => [Rule::requiredIf(! $user->agency_employee_no || $user->legacy_office_id !== null), 'nullable', 'integer', Rule::exists('legacy.bureau', 'bureauId')->whereIn('status', self::ACTIVE_OFFICE_STATUSES)],
             'status' => ['required', Rule::in(['1', '0'])],
             'isLocked' => ['required', Rule::in(['Y', 'N'])],
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
@@ -243,7 +266,7 @@ class UserAccountController extends Controller
             'role_id' => $roleId,
             'office_id' => $office?->id,
             'office_code' => $office?->code ?? $user->office_code,
-            'legacy_bureau_id' => $bureau?->bureauId ?? $user->legacy_bureau_id,
+            'legacy_office_id' => $bureau?->bureauId ?? $user->legacy_office_id,
             'is_active' => $validated['status'] === '1',
             'is_locked' => $validated['isLocked'] === 'Y',
         ]);
@@ -262,6 +285,37 @@ class UserAccountController extends Controller
         $id = DB::connection('legacy')->table('role')->whereRaw('LOWER(TRIM(rolename)) = ?', [$role])->value('roleId');
 
         return $id === null ? null : (int) $id;
+    }
+
+    private function resolveSelectedOffice(string $selection): array
+    {
+        if (preg_match('/^new-(\d+)$/', $selection, $matches)) {
+            return [Office::query()->find((int) $matches[1]), null];
+        }
+
+        if (! preg_match('/^legacy-(\d+)$/', $selection, $matches)) {
+            return [null, null];
+        }
+
+        $bureau = BureauLegacy::query()
+            ->where('bureauId', (int) $matches[1])
+            ->whereIn('status', self::ACTIVE_OFFICE_STATUSES)
+            ->first();
+
+        if (! $bureau) {
+            return [null, null];
+        }
+
+        $attributes = [
+            'short_name' => $bureau->shortName,
+            'code' => $bureau->officeCode,
+            'email' => $bureau->officeEmail,
+        ];
+        $office = filled($bureau->officeCode)
+            ? Office::query()->firstOrCreate(['code' => $bureau->officeCode], ['name' => $bureau->longName, ...$attributes])
+            : Office::query()->firstOrCreate(['name' => $bureau->longName], $attributes);
+
+        return [$office, (int) $bureau->bureauId];
     }
 
     private function roleIds(): array

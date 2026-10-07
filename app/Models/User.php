@@ -37,7 +37,7 @@ class User extends Authenticatable
         'role',
         'role_id',
         'office_id',
-        'legacy_bureau_id',
+        'legacy_office_id',
         'division_id',
         'is_active',
         'is_locked',
@@ -68,7 +68,7 @@ class User extends Authenticatable
             'is_active' => 'boolean',
             'is_locked' => 'boolean',
             'role_id' => 'integer',
-            'legacy_bureau_id' => 'integer',
+            'legacy_office_id' => 'integer',
         ];
     }
 

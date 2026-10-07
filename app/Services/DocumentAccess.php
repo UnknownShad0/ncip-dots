@@ -25,9 +25,9 @@ class DocumentAccess
     {
         $officeIds = collect([$user->office_id])->filter()->map(fn ($id) => (int) $id);
 
-        if ($user->legacy_bureau_id && !$user->office_id) {
+        if ($user->legacy_office_id && !$user->office_id) {
             try {
-                $officeName = BureauLegacy::query()->where('bureauId', $user->legacy_bureau_id)->value('longName');
+                $officeName = BureauLegacy::query()->where('bureauId', $user->legacy_office_id)->value('longName');
                 if ($officeName) {
                     $officeIds = $officeIds->merge(Office::query()->where('name', $officeName)->pluck('id'));
                 }
@@ -46,8 +46,8 @@ class DocumentAccess
 
     public function legacyBureauId(User $user): ?int
     {
-        if ($user->legacy_bureau_id) {
-            return (int) $user->legacy_bureau_id;
+        if ($user->legacy_office_id) {
+            return (int) $user->legacy_office_id;
         }
 
         $officeName = $user->office?->name;

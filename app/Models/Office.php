@@ -14,6 +14,7 @@ class Office extends Model
     protected $fillable = [
         'parent_id',
         'range_id',
+        'legacy_range_id',
         'name',
         'short_name',
         'code',

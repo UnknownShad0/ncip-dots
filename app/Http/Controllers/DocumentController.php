@@ -902,7 +902,7 @@ class DocumentController extends Controller
             ->whereIn('status', ['1', 'active', 'Active', 'y', 'Y'])
             ->exists();
         $hasLocalUser = User::query()
-            ->where('legacy_bureau_id', $bureau->bureauId)
+            ->where('legacy_office_id', $bureau->bureauId)
             ->where('is_active', true)
             ->exists();
         if (!$hasLocalUser) {

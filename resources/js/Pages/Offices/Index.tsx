@@ -13,25 +13,25 @@ type OfficeRow = {
     location?: string;
     parentOfficeId?: number | null;
     parent_name?: string | null;
-    range_id?: number | null;
+    range_id?: number | string | null;
     range_name?: string | null;
     range_is_active?: boolean | number | null;
     source?: string;
 };
 
-type OfficeOption = { id: number; name: string };
-type RangeOption = { id: number; name: string; is_active: boolean | number };
+type RangeOption = { id: number | string; name: string; is_active: boolean | number; source?: 'Old DB' | 'New DB' };
+type OfficeListOption = { id: number; code: string; name: string; division_name: string; short_name: string; email: string };
 
-type SortKey = 'name' | 'short_name' | 'code' | 'email' | 'location';
+type SortKey = 'name' | 'short_name' | 'code' | 'email' | 'location' | 'range_name';
 
 export default function OfficesIndex({
     offices = [],
-    parentOffices = [],
     ranges = [],
+    officeListOptions = [],
 }: {
     offices?: OfficeRow[];
-    parentOffices?: OfficeOption[];
     ranges?: RangeOption[];
+    officeListOptions?: OfficeListOption[];
 }) {
     const [editingRow, setEditingRow] = useState<OfficeRow | null>(null);
     const [crudAlert, setCrudAlert] = useState<{ title: string; message: string } | null>(null);
@@ -41,24 +41,36 @@ export default function OfficesIndex({
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
     const [page, setPage] = useState(1);
     const [perPage, setPerPage] = useState(10);
+    const [divisionSearch, setDivisionSearch] = useState('');
+    const [divisionPickerOpen, setDivisionPickerOpen] = useState(false);
+    const [emailError, setEmailError] = useState<string | null>(null);
+    const [codeError, setCodeError] = useState<string | null>(null);
     const [form, setForm] = useState({
+        division_code: '',
         name: '',
         short_name: '',
         code: '',
         email: '',
-        parentOfficeId: '',
         range_id: '',
     });
+    const selectedDivision = officeListOptions.find((office) => office.code === form.division_code);
+    const filteredDivisionOptions = officeListOptions.filter((office) =>
+        `${office.name} ${office.division_name} ${office.code}`.toLowerCase().includes(divisionSearch.toLowerCase()),
+    );
 
     const closeModal = () => {
         setEditingRow(null);
         setIsCreateOpen(false);
+        setDivisionPickerOpen(false);
+        setDivisionSearch('');
+        setEmailError(null);
+        setCodeError(null);
         setForm({
+            division_code: '',
             name: '',
             short_name: '',
             code: '',
             email: '',
-            parentOfficeId: '',
             range_id: '',
         });
     };
@@ -68,32 +80,38 @@ export default function OfficesIndex({
             return;
         }
 
+        setEmailError(null);
+        setCodeError(null);
         setEditingRow(row);
         setForm({
+            division_code: row.code ?? '',
             name: row.name ?? '',
             short_name: row.short_name ?? '',
             code: row.code ?? '',
             email: row.email ?? '',
-            parentOfficeId: row.parentOfficeId == null ? '' : String(row.parentOfficeId),
             range_id: row.range_id == null ? '' : String(row.range_id),
         });
     };
 
     const openCreate = () => {
+        setEmailError(null);
+        setCodeError(null);
         setEditingRow(null);
         setIsCreateOpen(true);
         setForm({
+            division_code: '',
             name: '',
             short_name: '',
             code: '',
             email: '',
-            parentOfficeId: '',
             range_id: '',
         });
     };
 
     const handleCreate = (e: React.FormEvent) => {
         e.preventDefault();
+        setEmailError(null);
+        setCodeError(null);
 
         router.post('/offices', {
             ...form,
@@ -103,11 +121,17 @@ export default function OfficesIndex({
                 closeModal();
                 setCrudAlert({ title: 'Office created', message: 'Office added successfully.' });
             },
+            onError: (errors) => {
+                setEmailError(errors.email ?? null);
+                setCodeError(errors.division_code ?? errors.code ?? null);
+            },
         });
     };
 
     const handleUpdate = (e: React.FormEvent) => {
         e.preventDefault();
+        setEmailError(null);
+        setCodeError(null);
 
         if (!editingRow || editingRow.id == null) {
             return;
@@ -120,6 +144,10 @@ export default function OfficesIndex({
             onSuccess: () => {
                 closeModal();
                 setCrudAlert({ title: 'Office updated', message: 'Office updated successfully.' });
+            },
+            onError: (errors) => {
+                setEmailError(errors.email ?? null);
+                setCodeError(errors.division_code ?? errors.code ?? null);
             },
         });
     };
@@ -146,6 +174,7 @@ export default function OfficesIndex({
                 row.code ?? '',
                 row.email ?? '',
                 row.location ?? '',
+                row.range_name ?? '',
             ]
                 .join(' ')
                 .toLowerCase();
@@ -182,11 +211,8 @@ export default function OfficesIndex({
     }, [page, totalPages]);
 
     const paginatedOffices = sortedOffices.slice((page - 1) * perPage, page * perPage);
-    const parentOfficeOptions = editingRow?.parentOfficeId != null && !parentOffices.some((office) => String(office.id) === String(editingRow.parentOfficeId))
-        ? [...parentOffices, { id: Number(editingRow.parentOfficeId), name: `${editingRow.parent_name || `Office ${editingRow.parentOfficeId}`} (Inactive)` }]
-        : parentOffices;
     const rangeOptions = editingRow?.range_id != null && !ranges.some((range) => String(range.id) === String(editingRow.range_id))
-        ? [...ranges, { id: Number(editingRow.range_id), name: `${editingRow.range_name || 'Current range'} (Inactive)`, is_active: false }]
+        ? [...ranges, { id: Number(editingRow.range_id), name: `${editingRow.range_name || 'Current range'} (Inactive)`, is_active: false, source: 'New DB' }]
         : ranges;
 
     return (
@@ -275,7 +301,12 @@ export default function OfficesIndex({
                                 </th>
                                 <th className="px-4 py-3 font-semibold">
                                     <button type="button" onClick={() => handleSort('location')} className="flex items-center gap-1">
-                                        Range {sortKey === 'location' ? (sortDirection === 'asc' ? <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" />) : <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" />}
+                                        Office Address {sortKey === 'location' ? (sortDirection === 'asc' ? <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" />) : <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" />}
+                                    </button>
+                                </th>
+                                <th className="px-4 py-3 font-semibold">
+                                    <button type="button" onClick={() => handleSort('range_name')} className="flex items-center gap-1">
+                                        Range {sortKey === 'range_name' ? (sortDirection === 'asc' ? <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" />) : <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" />}
                                     </button>
                                 </th>
                                 <th className="px-4 py-3 font-semibold no-print">Actions</th>
@@ -300,11 +331,7 @@ export default function OfficesIndex({
                                             <td className="px-4 py-3 text-slate-600">{row.code || '—'}</td>
                                             <td className="px-4 py-3 text-slate-600">{row.email || '—'}</td>
                                             <td className="px-4 py-3 text-slate-600">{row.location || '—'}</td>
-                                            <td className="px-4 py-3">
-                                                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${Boolean(Number(row.is_active)) ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200' : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'}`}>
-                                                    {Boolean(Number(row.is_active)) ? 'Active' : 'Inactive'}
-                                                </span>
-                                            </td>
+                                            <td className="px-4 py-3 text-slate-600">{row.range_name || '—'}</td>
                                             <td className="px-4 py-3 no-print">
                                                 <button
                                                     type="button"
@@ -382,45 +409,32 @@ export default function OfficesIndex({
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <div>
                                     <label htmlFor="division-search" className="mb-1 block text-sm font-medium text-slate-700">Office</label>
-                                    <input id="division-search" value={divisionPickerOpen ? divisionSearch : (selectedDivision?.name ?? '')} onFocus={() => { setDivisionPickerOpen(true); setDivisionSearch(''); }} onChange={(e) => { setDivisionSearch(e.target.value); setDivisionPickerOpen(true); }} placeholder="Search divisions..." autoComplete="off" className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+                                    <input id="division-search" value={divisionPickerOpen ? divisionSearch : (selectedDivision?.name ?? '')} onFocus={() => { setDivisionPickerOpen(true); setDivisionSearch(''); }} onChange={(e) => { setDivisionSearch(e.target.value); setDivisionPickerOpen(true); }} placeholder="Search offices..." autoComplete="off" className="w-full rounded-lg border border-slate-300 px-3 py-2" />
                                     {divisionPickerOpen && (
                                         <div className="mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-300 bg-white shadow-lg" role="listbox" aria-label="Office divisions">
                                             {form.division_code && (
-                                                <button type="button" role="option" aria-selected="false" onClick={() => { setForm({ ...form, division_code: '' }); setDivisionPickerOpen(false); setDivisionSearch(''); }} className="block w-full border-b border-slate-200 px-3 py-2 text-left text-sm text-slate-500 hover:bg-slate-50">
+                                                <button type="button" role="option" aria-selected="false" onClick={() => { setForm({ ...form, division_code: '', name: '', short_name: '', code: '', email: '' }); setDivisionPickerOpen(false); setDivisionSearch(''); }} className="block w-full border-b border-slate-200 px-3 py-2 text-left text-sm text-slate-500 hover:bg-slate-50">
                                                     Clear selection
                                                 </button>
                                             )}
                                             {filteredDivisionOptions.length ? filteredDivisionOptions.map((division) => (
-                                                <button key={division.code} type="button" role="option" aria-selected={form.division_code === division.code} onClick={() => { setForm({ ...form, division_code: division.code }); setDivisionPickerOpen(false); setDivisionSearch(''); }} className="block w-full px-3 py-2 text-left text-sm hover:bg-blue-50">
-                                                    {division.name}
+                                                <button key={division.id} type="button" role="option" aria-selected={form.division_code === division.code} onClick={() => { setForm({ ...form, division_code: division.code, name: division.name, short_name: division.short_name, code: division.code, email: division.email }); setEmailError(null); setCodeError(null); setDivisionPickerOpen(false); setDivisionSearch(''); }} className="block w-full px-3 py-2 text-left text-sm hover:bg-blue-50">
+                                                    {division.name} <span className="text-slate-500">({division.code})</span>
                                                 </button>
                                             )) : <p className="px-3 py-2 text-sm text-slate-500">No matching divisions.</p>}
                                         </div>
                                     )}
                                 </div>
                                 <div>
-                                    <label htmlFor="range" className="mb-1 block text-sm font-medium text-slate-700">Range</label>
-                                    <select id="range" value={form.range} onChange={(e) => setForm({ ...form, range: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm">
-                                        <option value="">Select range</option>
-                                        {ranges.map((range) => <option key={range.value} value={range.value}>{range.name}{!range.is_active ? ' (Inactive)' : ''}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <div>
-                                    <label htmlFor="parentOfficeId" className="mb-1 block text-sm font-medium text-slate-700">Under</label>
-                                    <select id="parentOfficeId" value={form.parentOfficeId} onChange={(e) => setForm({ ...form, parentOfficeId: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
-                                        <option value="">Select parent office</option>
-                                        {parentOfficeOptions.filter((office) => String(office.id) !== String(editingRow?.id ?? '')).map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label htmlFor="is_active" className="mb-1 block text-sm font-medium text-slate-700">Status</label>
-                                    <select id="is_active" value={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm">
-                                        <option value="1">Active</option>
-                                        <option value="0">Inactive</option>
-                                    </select>
+                                    <label className="mb-1 block text-sm font-medium text-slate-700">Code</label>
+                                    <input
+                                        value={form.code}
+                                        readOnly
+                                        aria-invalid={Boolean(codeError)}
+                                        aria-describedby={codeError ? 'office-code-error' : undefined}
+                                        className={`w-full rounded-lg border bg-slate-50 px-3 py-2 text-slate-600 ${codeError ? 'border-red-500' : 'border-slate-300'}`}
+                                    />
+                                    {codeError && <p id="office-code-error" role="alert" className="mt-1 text-sm text-red-600">{codeError}</p>}
                                 </div>
                             </div>
 
@@ -433,25 +447,26 @@ export default function OfficesIndex({
                                         className="w-full rounded-lg border border-slate-300 px-3 py-2"
                                     />
                                 </div>
-
                                 <div>
-                                    <label className="mb-1 block text-sm font-medium text-slate-700">Code</label>
-                                    <input
-                                        value={form.code}
-                                        onChange={(e) => setForm({ ...form, code: e.target.value })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                                    />
+                                    <label htmlFor="range" className="mb-1 block text-sm font-medium text-slate-700">Range</label>
+                                    <select id="range" value={form.range_id} onChange={(e) => setForm({ ...form, range_id: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm">
+                                        <option value="">Select range</option>
+                                        {rangeOptions.map((range) => <option key={`${range.source ?? 'range'}-${range.id}`} value={range.id}>{range.name}{!range.is_active ? ' (Inactive)' : ''}</option>)}
+                                    </select>
                                 </div>
                             </div>
 
                             <div>
                                 <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
-                                <input
+                                    <input
                                     type="email"
                                     value={form.email}
-                                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                                    onChange={(e) => { setForm({ ...form, email: e.target.value }); setEmailError(null); }}
+                                    aria-invalid={Boolean(emailError)}
+                                    aria-describedby={emailError ? 'office-email-error' : undefined}
+                                    className={`w-full rounded-lg border px-3 py-2 ${emailError ? 'border-red-500' : 'border-slate-300'}`}
                                 />
+                                {emailError && <p id="office-email-error" className="mt-1 text-sm text-red-600">{emailError}</p>}
                             </div>
 
                             <div className="flex justify-end gap-2">

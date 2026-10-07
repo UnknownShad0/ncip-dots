@@ -3,14 +3,22 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class HrisDirectory
 {
     public function lookup(string $employeeNumber): ?array
     {
-        $employee = collect($this->records($this->fetch('employee_path', ['agency_employee_no' => $employeeNumber])))
+        $employeeRecords = $this->records($this->fetch('employee_path', ['agency_employee_no' => $employeeNumber]));
+        $employee = collect($employeeRecords)
             ->first(fn (array $record) => strcasecmp(trim((string) ($record['agency_employee_no'] ?? '')), trim($employeeNumber)) === 0);
+
+        Log::debug('HRIS employee lookup evaluated', [
+            'records_received' => count($employeeRecords),
+            'match_found' => $employee !== null,
+            'response_fields' => $employee ? array_keys($employee) : [],
+        ]);
 
         if (! $employee) {
             return null;
@@ -50,7 +58,18 @@ class HrisDirectory
             $request = $request->withToken($config['token']);
         }
 
-        $response = $request->get(rtrim($config['url'], '/').'/'.ltrim($config[$path], '/'), $query);
+        $endpoint = rtrim($config['url'], '/').'/'.ltrim($config[$path], '/');
+        $response = $request->get($endpoint, $query);
+        $payload = $response->json();
+
+        Log::debug('HRIS API request completed', [
+            'endpoint' => parse_url($endpoint, PHP_URL_PATH),
+            'status' => $response->status(),
+            'response_type' => get_debug_type($payload),
+            'response_fields' => is_array($payload) && ! array_is_list($payload) ? array_slice(array_keys($payload), 0, 12) : [],
+            'record_count' => is_array($payload) && array_is_list($payload) ? count($payload) : null,
+        ]);
+
         if ($response->status() === 404) {
             return [];
         }

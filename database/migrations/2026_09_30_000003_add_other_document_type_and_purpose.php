@@ -9,10 +9,17 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('documents', function (Blueprint $table) {
-            $table->string('other_document_type')->nullable()->after('document_type_id');
-            $table->string('other_purpose')->nullable()->after('purpose_type_id');
-        });
+        if (! Schema::hasColumn('documents', 'other_document_type')) {
+            Schema::table('documents', function (Blueprint $table) {
+                $table->string('other_document_type')->nullable()->after('document_type_id');
+            });
+        }
+
+        if (! Schema::hasColumn('documents', 'other_purpose')) {
+            Schema::table('documents', function (Blueprint $table) {
+                $table->string('other_purpose')->nullable()->after('purpose_type_id');
+            });
+        }
 
         $this->addOthersOption('document_types', 'SYSTEM_OTHERS_DOCUMENT_TYPE');
         $this->addOthersOption('purpose_types', 'SYSTEM_OTHERS_PURPOSE');
@@ -20,9 +27,16 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('documents', function (Blueprint $table) {
-            $table->dropColumn(['other_document_type', 'other_purpose']);
-        });
+        $columnsToDrop = array_values(array_filter(
+            ['other_document_type', 'other_purpose'],
+            fn (string $column) => Schema::hasColumn('documents', $column),
+        ));
+
+        if ($columnsToDrop !== []) {
+            Schema::table('documents', function (Blueprint $table) use ($columnsToDrop) {
+                $table->dropColumn($columnsToDrop);
+            });
+        }
 
         $this->removeUnusedOthersOption('document_types', 'SYSTEM_OTHERS_DOCUMENT_TYPE', 'document_type_id');
         $this->removeUnusedOthersOption('purpose_types', 'SYSTEM_OTHERS_PURPOSE', 'purpose_type_id');

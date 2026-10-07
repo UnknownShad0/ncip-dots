@@ -22,6 +22,7 @@ type UserRow = {
     source: string;
 };
 type OfficeOption = { id: number; name: string; email?: string };
+type OfficeTableOption = { id: string; code: string | null; name: string; email?: string | null; source?: string };
 type RoleOption = { id: number; name: string };
 type FormState = {
     employee_role: string;
@@ -48,8 +49,8 @@ const emptyForm: FormState = {
 };
 
 export default function UserAccountsIndex({
-    users = [], offices = [], roles = [], flash = {},
-}: { users?: UserRow[]; offices?: OfficeOption[]; roles?: RoleOption[]; flash?: { success?: string; warning?: string } }) {
+    users = [], offices = [], officeTableOptions = [], roles = [], flash = {},
+}: { users?: UserRow[]; offices?: OfficeOption[]; officeTableOptions?: OfficeTableOption[]; roles?: RoleOption[]; flash?: { success?: string; warning?: string } }) {
     const [search, setSearch] = useState('');
     const [sortKey, setSortKey] = useState<SortKey>('name');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -67,27 +68,29 @@ export default function UserAccountsIndex({
     const [lookupBusy, setLookupBusy] = useState(false);
     const [lookupError, setLookupError] = useState('');
     const [officeCode, setOfficeCode] = useState('');
+    const [officeTableId, setOfficeTableId] = useState('');
     const lookupVersion = useRef(0);
 
     const resetLookup = () => {
         lookupVersion.current++;
         setLookup(null); setLookupOpen(false); setLookupBusy(false);
-        setLookupError(''); setEmployeeNumber(''); setOfficeCode('');
+        setLookupError(''); setEmployeeNumber(''); setOfficeCode(''); setOfficeTableId('');
     };
     const selectType = (type: 'dots' | 'employee') => {
         resetLookup(); setAccountType(type); setForm(emptyForm); setErrors({});
     };
     const searchEmployee = async () => {
         const version = ++lookupVersion.current;
-        setLookupBusy(true); setLookupError(''); setLookup(null); setForm(emptyForm); setOfficeCode('');
+        setLookupBusy(true); setLookupError(''); setLookup(null); setForm(emptyForm); setOfficeCode(''); setOfficeTableId('');
         try {
             const response = await axios.post<EmployeeLookup>('/user-accounts/lookup-employee', { agency_employee_no: employeeNumber.trim() });
             if (version !== lookupVersion.current) return;
             const result = response.data;
             setLookup(result); setLookupOpen(false);
             setOfficeCode(result.offices[0]?.office_code ?? '');
+            setOfficeTableId('');
             setForm({ ...emptyForm, firstname: result.employee.first_name, lastname: result.employee.last_name,
-                username: result.employee.username, email: result.employee.email_address ?? '' });
+                username: result.employee.username, email: '' });
         } catch (error) {
             if (version !== lookupVersion.current) return;
             setLookupError(axios.isAxiosError(error) ? error.response?.data?.errors?.agency_employee_no?.[0] || error.response?.data?.message || 'Employee lookup failed. Please try again.' : 'Employee lookup failed. Please try again.');
@@ -125,7 +128,7 @@ export default function UserAccountsIndex({
     const openEdit = (user: UserRow) => {
         setEditingRow(user);
         setForm({
-            employee_role: ['employee', 'chief'].includes(user.role.toLowerCase()) ? user.role.toLowerCase() : '',
+            employee_role: ['super admin', 'executive', 'admin staff'].includes(user.role.toLowerCase()) ? user.role.toLowerCase() : '',
             firstname: user.firstname ?? '', lastname: user.lastname ?? '',
             username: user.username ?? '', email: user.email ?? '', role_id: user.role_id ?? '',
             officeId: user.office_id == null ? '' : String(user.office_id),
@@ -144,6 +147,7 @@ export default function UserAccountsIndex({
             account_type: accountType,
             agency_employee_no: lookup?.employee.agency_employee_no,
             office_code: officeCode,
+            office_table_id: officeTableId,
             operation: editingRow ? 'update' : 'create',
             status: editingRow ? form.status : undefined,
             isLocked: editingRow ? form.isLocked : undefined,
@@ -181,7 +185,7 @@ export default function UserAccountsIndex({
                     </div>
                     <div className="flex gap-2 print:hidden">
                         <button type="button" onClick={() => window.print()} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">Print</button>
-                        <button type="button" onClick={() => { closeModal(); setIsCreateOpen(true); }} className="h-11 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700">New User</button>
+                        <button type="button" onClick={() => { closeModal(); setAccountType('employee'); setLookupOpen(true); setIsCreateOpen(true); }} className="h-11 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700">New User</button>
                     </div>
                 </div>
 
@@ -231,35 +235,33 @@ export default function UserAccountsIndex({
             {(isCreateOpen || editingRow) && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4 print:hidden" role="dialog" aria-modal="true" aria-labelledby="user-account-modal-title">
                 <form onSubmit={submit} className="my-8 max-h-[calc(100vh-2rem)] w-full max-w-2xl space-y-4 overflow-y-auto rounded-2xl border border-[#e2e2df] bg-white p-6 shadow-2xl">
                     <div className="flex items-center justify-between"><h3 id="user-account-modal-title" className="text-lg font-semibold text-slate-800">{editingRow ? 'Edit User Account' : 'New User Account'}</h3><button type="button" onClick={closeModal} className="text-slate-500">Close</button></div>
-                    {!editingRow && <div className="flex gap-2 rounded-xl bg-slate-100 p-1" aria-label="Account type">
-                        {(['dots', 'employee'] as const).map((type) => <button key={type} type="button" disabled={processing} aria-pressed={accountType === type} onClick={() => selectType(type)} className={`flex-1 rounded-lg px-4 py-3 text-sm font-semibold ${accountType === type ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:bg-white/60'}`}>{type === 'dots' ? 'DOTS' : 'Employee'}</button>)}
-                    </div>}
-                    {!editingRow && !accountType && <p className="text-sm text-slate-500">Choose an account type to continue.</p>}
                     {!editingRow && accountType === 'employee' && <div className="space-y-4">
-                        <button type="button" disabled={processing || lookupBusy} onClick={() => { setLookupOpen(true); setLookupError(''); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{lookup ? 'Search another employee' : 'Search Employee'}</button>
-                        {lookupOpen && <div className="space-y-3 rounded-xl border p-4">
-                            <Field label="Agency Employee Number"><input value={employeeNumber} onChange={(e) => setEmployeeNumber(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (employeeNumber.trim() && !lookupBusy) void searchEmployee(); } }} placeholder="Enter Agency Employee Number" className="w-full rounded-md border-slate-300" /></Field>
-                            <button type="button" disabled={lookupBusy || !employeeNumber.trim()} onClick={() => void searchEmployee()} className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{lookupBusy ? 'Searching...' : 'Search'}</button>
+                        {(!lookup || lookupOpen) && <div className="space-y-3 rounded-xl border p-4">
+                            <div className="flex items-end gap-2"><div className="flex-1"><Field label="Agency Employee Number"><input value={employeeNumber} onChange={(e) => setEmployeeNumber(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (employeeNumber.trim() && !lookupBusy) void searchEmployee(); } }} placeholder="Enter Agency Employee Number" className="w-full rounded-md border-slate-300" /></Field></div>
+                                <button type="button" disabled={lookupBusy || !employeeNumber.trim()} onClick={() => void searchEmployee()} className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{lookupBusy ? 'Searching...' : 'Search'}</button>
+                            </div>
                             {lookupError && <p role="alert" className="text-sm text-red-600">{lookupError}</p>}
                         </div>}
-                        {lookup && <>
+                        {lookup && !lookupOpen && <>
+                            <button type="button" disabled={processing || lookupBusy} onClick={() => { setLookupOpen(true); setLookupError(''); }} className="self-start rounded-lg border px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50">Search another employee</button>
                             <dl className="grid gap-3 rounded-xl bg-sky-50 p-4 text-sm sm:grid-cols-2">
                                 {[
                                     ['Agency Employee Number', lookup.employee.agency_employee_no],
                                     ['First Name', lookup.employee.first_name], ['Middle Name', lookup.employee.middle_name],
                                     ['Last Name', lookup.employee.last_name], ['Extension Name', lookup.employee.ext_name],
-                                    ['Username', lookup.employee.username], ['Division Code', lookup.employee.division_code],
-                                    ['Division', lookup.employee.division],
-                                    ['Office', lookup.offices.find((office) => office.office_code === officeCode)?.office_name],
-                                    ['Office Code', officeCode],
-                                    ['Region', lookup.offices.find((office) => office.office_code === officeCode)?.region_name],
-                                    ['Region Code', lookup.offices.find((office) => office.office_code === officeCode)?.region_code],
+                                    ['Username', lookup.employee.username],
                                 ].map(([label, value]) => <div key={label}><dt className="text-slate-500">{label}</dt><dd className="mt-1 font-medium text-slate-800">{value || '—'}</dd></div>)}
                             </dl>
-                            {lookup.offices.length > 1 && <Field label="Office" error={errors.office_code}><select value={officeCode} onChange={(e) => setOfficeCode(e.target.value)} className="w-full rounded-md border-slate-300">{lookup.offices.map((office) => <option key={office.office_code} value={office.office_code}>{office.office_name}</option>)}</select></Field>}
                             {lookup.offices.length === 0 && <p className="text-sm text-red-600">No office was found for this employee’s division. An office is required to create the account.</p>}
-                            <Field label="Email" error={errors.email}><input required type="email" maxLength={255} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
-                            <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option><option value="employee">Employee</option><option value="chief">Chief</option></select></Field>
+                            <div className="-mb-1">
+                                <Field label="Office" error={errors.office_table_id}><select required value={officeTableId} onChange={(e) => {
+                                setOfficeTableId(e.target.value);
+                                }} className="w-full rounded-md border-slate-300"><option value="">Select office</option>{officeTableOptions.map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}</select></Field>
+                            </div>
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <Field label="Email" error={errors.email}><input required type="email" maxLength={255} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
+                                <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option><option value="super admin">Super Admin</option><option value="executive">Executive</option><option value="admin staff">Admin Staff</option></select></Field>
+                            </div>
                             <p className="text-xs text-slate-500">Login details will be sent to this email.</p>
                         </>}
                     </div>}
@@ -268,7 +270,7 @@ export default function UserAccountsIndex({
                         <Field label="Last Name" error={errors.lastname}><input required value={form.lastname} onChange={(e) => setForm({ ...form, lastname: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
                         <Field label="Username" error={errors.username}><input required maxLength={50} disabled={!!editingRow?.username} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="w-full rounded-md border-slate-300 disabled:bg-slate-100" /></Field>
                         {editingRow && <Field label="Email" error={errors.email}><input required={!editingRow} type="email" maxLength={255} disabled={!!editingRow} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-md border-slate-300 disabled:bg-slate-100" /></Field>}
-                        {editingRow?.agency_employee_no ? <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option><option value="employee">Employee</option><option value="chief">Chief</option></select></Field> : <Field label="Role" error={errors.role_id}><select required value={form.role_id} onChange={(e) => setForm({ ...form, role_id: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></Field>}
+                        {editingRow?.agency_employee_no ? <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option><option value="super admin">Super Admin</option><option value="executive">Executive</option><option value="admin staff">Admin Staff</option></select></Field> : <Field label="Role" error={errors.role_id}><select required value={form.role_id} onChange={(e) => setForm({ ...form, role_id: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></Field>}
                         <Field label="Office" error={errors.officeId}>{editingRow?.agency_employee_no && !editingRow.office_id ? <p className="rounded-md border bg-slate-50 p-2">{editingRow.office_name}</p> : <select required value={form.officeId} onChange={(e) => { setErrors({}); setForm({ ...form, officeId: e.target.value, email: accountType === 'dots' ? offices.find((office) => String(office.id) === e.target.value)?.email ?? '' : form.email }); }} className="w-full rounded-md border-slate-300"><option value="">Select office</option>{officeOptions.map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}</select>}</Field>
                         {!editingRow && accountType === 'dots' && form.officeId && <p className="text-sm text-slate-600 sm:col-span-2">{form.email ? <>Login details will be sent to <span className="font-medium">{form.email}</span>.</> : <span className="text-red-600">The selected office has no email address. Update the office email before creating an account.</span>}</p>}
                         {editingRow && <Field label="Account Status" error={errors.status}><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full rounded-md border-slate-300"><option value="1">Active</option><option value="0">Inactive</option></select></Field>}
@@ -276,9 +278,9 @@ export default function UserAccountsIndex({
                         {editingRow && <><Field label="New password (optional)" error={errors.password}><input type="password" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
                         <Field label="Confirm password" error={errors.password_confirmation}><input type="password" value={form.password_confirmation} onChange={(e) => setForm({ ...form, password_confirmation: e.target.value })} className="w-full rounded-md border-slate-300" /></Field></>}
                     </div>}
-                    {Object.entries(errors).filter(([key]) => !['email', 'firstname', 'lastname', 'role_id', 'officeId', 'password', 'password_confirmation', 'status', 'isLocked', 'user'].includes(key)).map(([key, message]) => <p key={key} className="text-sm text-red-600">{message}</p>)}
+                    {Object.entries(errors).filter(([key]) => !['firstname', 'lastname', 'role_id', 'officeId', 'office_table_id', 'password', 'password_confirmation', 'status', 'isLocked', 'user'].includes(key)).map(([key, message]) => <p key={key} className="text-sm text-red-600">{message}</p>)}
                     {errors.user && <p className="text-sm text-red-600">{errors.user}</p>}
-                    <div className="flex justify-end gap-2 border-t pt-4"><button type="button" onClick={closeModal} className="rounded-md border px-4 py-2 text-sm">Cancel</button><button disabled={processing || (!editingRow && (!accountType || (accountType === 'dots' && !form.email) || (accountType === 'employee' && (!lookup || lookupOpen || lookupBusy || !officeCode || !form.employee_role))))} className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{processing ? 'Saving...' : 'Save account'}</button></div>
+                    <div className="flex justify-end gap-2 border-t pt-4"><button type="button" onClick={closeModal} className="rounded-md border px-4 py-2 text-sm">Cancel</button><button disabled={processing || (!editingRow && (!accountType || (accountType === 'dots' && !form.email) || (accountType === 'employee' && (!lookup || lookupOpen || lookupBusy || !officeCode || !officeTableId || !form.employee_role || !form.email))))} className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{processing ? 'Saving...' : 'Save account'}</button></div>
                 </form>
             </div>}
         </AuthenticatedLayout>
