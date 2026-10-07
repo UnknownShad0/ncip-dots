@@ -91,6 +91,16 @@ export default function AuthenticatedLayout({
                     <header className="flex min-h-[92px] items-center gap-4 border-b border-[#e5ebf3] bg-white/70 px-5 mb-5 lg:mb-10 sm:px-8 lg:px-10">
                         <button className="rounded-lg p-2 hover:bg-slate-100 lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={22} /></button>
                         <div className="min-w-0 flex-1">{header}</div>
+                        <div className="hidden max-w-[640px] items-center gap-3 rounded-xl border border-[#e0e0dc] bg-white px-4 py-3 text-sm text-[#555752] sm:flex">
+                            <Building2 size={20} className="shrink-0 text-[#898984]" aria-hidden="true" />
+                            <span className="max-w-[180px] truncate" title={user.division || undefined}>{user.division || 'Division not assigned'}</span>
+                            <span className="h-5 border-l border-[#e0e0dc]" aria-hidden="true" />
+                            <UserRound size={18} className="shrink-0 text-[#898984]" aria-hidden="true" />
+                            <span className="max-w-[140px] truncate" title={user.role || undefined}>{user.role || 'Role not assigned'}</span>
+                            <span className="h-5 border-l border-[#e0e0dc]" aria-hidden="true" />
+                            <Map size={18} className="shrink-0 text-[#898984]" aria-hidden="true" />
+                            <span className="max-w-[160px] truncate" title={user.range || undefined}>{user.range || 'Range not assigned'}</span>
+                        </div>
                         <DropdownMenu as="div" className="relative hidden sm:block">
                             <MenuButton className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-sm text-[#555752] outline-none transition hover:bg-white focus-visible:ring-2 focus-visible:ring-blue-300">
                                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e8eef7] text-xs font-semibold text-[#164f98]">{String(user.name ?? 'U').charAt(0).toUpperCase()}</span>

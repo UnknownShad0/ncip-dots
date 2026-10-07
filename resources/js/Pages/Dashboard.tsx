@@ -155,10 +155,6 @@ export default function Dashboard({
         <AuthenticatedLayout header={
             <div className="flex w-full items-center justify-between gap-4">
                 <h1 className="text-3xl font-bold tracking-tight sm:text-[42px]">Dashboard</h1>
-                <label className="hidden h-12 w-full max-w-[360px] items-center gap-3 rounded-xl border border-[#e0e0dc] bg-white px-4 text-[#898984] focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 sm:flex">
-                    <Search size={21} />
-                    <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search documents" className="w-full border-0 bg-transparent p-0 text-[16px] text-[#171717] placeholder:text-[#898984] focus:ring-0" />
-                </label>
             </div>
         }>
             <Head title="Dashboard" />

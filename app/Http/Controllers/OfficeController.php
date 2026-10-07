@@ -47,7 +47,7 @@ class OfficeController extends Controller
                     'short_name' => $office->shortName ?? '',
                     'code' => $office->officeCode ?? '',
                     'email' => $office->officeEmail ?? '',
-                    'location' => $range?->name ?? $rangeValue,
+                    'location' => $range?->name ?? '',
                     'parentOfficeId' => $office->parentbureauId ?? null,
                     'parent_name' => $legacyOfficeNames->get($office->parentbureauId) ?? '',
                     'range_id' => $range?->id,

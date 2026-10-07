@@ -72,7 +72,7 @@ class User extends Authenticatable
             'legacy_office_id' => 'integer',
         ];
     }
-
+//
     public function office(): BelongsTo
     {
         return $this->belongsTo(Office::class);
