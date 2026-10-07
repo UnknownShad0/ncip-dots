@@ -12,6 +12,7 @@ use App\Models\DocumentType;
 use App\Models\ActionType;
 use App\Models\PurposeType;
 use App\Models\Office;
+use App\Models\Range;
 use App\Models\RangeLegacy;
 use App\Models\DocumentTypeLegacy;
 use App\Models\ActionTypeLegacy;
@@ -33,7 +34,7 @@ class DocumentController extends Controller
 {
     private const MAX_DOCUMENT_UPLOAD_KB = 10240;
     private bool $userRangeResolved = false;
-    private ?string $userRangeName = null;
+    private ?array $userRangeIdentity = null;
     private ?array $legacyRangeNames = null;
 
     public function index()
@@ -478,6 +479,11 @@ class DocumentController extends Controller
         ]);
         $validated = $this->normalizeActionTypeDetails($validated);
         $targetOffice = Office::findOrFail($validated['to_office_id']);
+        if (! $this->officeIsInCurrentUserRange($targetOffice)) {
+            throw ValidationException::withMessages([
+                'to_office_id' => 'Choose a receiving office within your assigned range.',
+            ]);
+        }
         if (!$this->officeHasActiveUsers($targetOffice)) {
             throw ValidationException::withMessages([
                 'to_office_id' => 'Choose a receiving office with at least one active user.',
@@ -702,8 +708,10 @@ class DocumentController extends Controller
                 $this->legacyRows(fn () => PurposeTypeLegacy::query()->whereIn('status', ['active', 'Active', 'enabled', 'Enabled', '1', 'Y'])->orderBy('name')->get(['name']))
             ),
             'offices' => Office::query()
+                ->with('range:id,name')
                 ->orderBy('name')
-                ->get(['id', 'name'])
+                ->get(['id', 'name', 'range_id', 'legacy_range_id'])
+                ->filter(fn (Office $office) => $this->officeIsInCurrentUserRange($office))
                 ->map(fn (Office $office) => [
                     'id' => (string) $office->id,
                     'name' => $office->name,
@@ -856,43 +864,78 @@ class DocumentController extends Controller
         return $options->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)->values()->all();
     }
 
-    private function currentUserRangeName(): ?string
+    private function currentUserRangeIdentity(): ?array
     {
-        if ($this->userRangeResolved) return $this->userRangeName;
+        if ($this->userRangeResolved) return $this->userRangeIdentity;
         $this->userRangeResolved = true;
 
-        $bureauId = app(DocumentAccess::class)->legacyBureauId(auth()->user());
-        if (!$bureauId) return null;
+        $user = auth()->user();
+        if (! $user) return null;
 
-        $rangeValue = trim((string) BureauLegacy::query()->where('bureauId', $bureauId)->value('range'));
-        $rangeName = $this->legacyRangeName($rangeValue);
+        $office = $user->office_id
+            ? Office::query()->with('range')->find($user->office_id, ['id', 'name', 'code', 'range_id', 'legacy_range_id'])
+            : null;
 
-        $this->userRangeName = $rangeName ? mb_strtolower(trim($rangeName)) : null;
-        return $this->userRangeName;
+        if (! $office && filled($user->office_code)) {
+            $office = Office::query()->with('range')->where('code', $user->office_code)
+                ->first(['id', 'name', 'code', 'range_id', 'legacy_range_id']);
+        }
+
+        if ($office && ($identity = $this->officeRangeIdentity($office))) {
+            return $this->userRangeIdentity = $identity;
+        }
+
+        if ($user->legacy_office_id) {
+            $bureau = BureauLegacy::query()->whereKey($user->legacy_office_id)->first(['bureauId', 'range']);
+            if ($bureau && ($identity = $this->legacyBureauRangeIdentity($bureau))) {
+                return $this->userRangeIdentity = $identity;
+            }
+        }
+
+        return null;
     }
 
     private function legacyBureauIsInCurrentUserRange(BureauLegacy $bureau): bool
     {
-        $rangeName = $this->currentUserRangeName();
-        if (!$rangeName) return false;
+        $userRange = $this->currentUserRangeIdentity();
+        $bureauRange = $this->legacyBureauRangeIdentity($bureau);
 
-        $value = trim((string) ($bureau->range ?? ''));
-        if ($value === '') return false;
-        $bureauRangeName = $this->legacyRangeName($value);
-
-        return $bureauRangeName !== null && mb_strtolower(trim($bureauRangeName)) === $rangeName;
+        return $userRange !== null && $userRange === $bureauRange;
     }
 
     private function officeIsInCurrentUserRange(Office $office): bool
     {
-        $rangeName = $this->currentUserRangeName();
-        if (!$rangeName) return false;
+        $userRange = $this->currentUserRangeIdentity();
+        $officeRange = $this->officeRangeIdentity($office);
 
-        $officeRangeName = $office->range?->name;
-        if ($officeRangeName && mb_strtolower(trim($officeRangeName)) === $rangeName) return true;
+        return $userRange !== null && $userRange === $officeRange;
+    }
 
-        $legacyBureau = BureauLegacy::query()->where('longName', $office->name)->first();
-        return $legacyBureau ? $this->legacyBureauIsInCurrentUserRange($legacyBureau) : false;
+    private function officeRangeIdentity(Office $office): ?array
+    {
+        if ($office->range_id !== null && $office->range) {
+            return ['source' => 'new', 'id' => (int) $office->range_id];
+        }
+
+        if ($office->legacy_range_id !== null && RangeLegacy::query()->whereKey($office->legacy_range_id)->exists()) {
+            return ['source' => 'legacy', 'id' => (int) $office->legacy_range_id];
+        }
+
+        $bureau = BureauLegacy::query()->where('longName', $office->name)->first(['bureauId', 'range']);
+
+        return $bureau ? $this->legacyBureauRangeIdentity($bureau) : null;
+    }
+
+    private function legacyBureauRangeIdentity(BureauLegacy $bureau): ?array
+    {
+        $value = trim((string) ($bureau->range ?? ''));
+        if ($value === '') return null;
+
+        $range = ctype_digit($value)
+            ? RangeLegacy::query()->whereKey((int) $value)->first(['id'])
+            : RangeLegacy::query()->whereRaw('LOWER(name) = ?', [mb_strtolower($value)])->first(['id']);
+
+        return $range ? ['source' => 'legacy', 'id' => (int) $range->id] : null;
     }
 
     private function legacyBureauIsActive(BureauLegacy $bureau): bool

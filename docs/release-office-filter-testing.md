@@ -1,34 +1,39 @@
-# Release receiving office filter (exploratory)
+# Document Release Office Range Filter
 
-This note records the temporary release-office restrictions being explored. Keep it until the desired policy is confirmed.
+This document describes how the receiving-office list is restricted to the signed-in user's assigned range.
 
-## Current behavior
+## Range resolution
 
-- Legacy receiving bureaus are loaded from `legacy.bureau` and must have an active status (`1`, `active`, `enabled`, or `Y`, case-insensitive).
-- Both legacy and current offices are limited to the range resolved from the signed-in user's bureau.
-- Options with no active user assigned are disabled in the release modal. Legacy bureaus also must be active.
-- The release endpoint repeats the range, bureau-active, and assigned-active-user checks, so a manually crafted request is rejected too.
-- Legacy selections use `legacy:<bureauId>` and are resolved to a current `offices` row before release.
+The controller resolves the user's range from their assigned office in the new database:
 
-## Files and implementation areas
+1. Look up `users.office_id` in `offices`.
+2. If that office's `range_id` points to a row in the new `ranges` table, use the identity `new:<range id>`.
+3. Otherwise, if its `legacy_range_id` points to a row in legacy `rangeregion`, use `legacy:<range id>`.
+4. If the user has no resolved `office_id`, try their `office_code`; if needed, fall back to `legacy_office_id` and that legacy bureau's `range` value.
 
-- `app/Http/Controllers/DocumentController.php`
-  - `release()`: rechecks range and active-user eligibility.
-  - `documentFormOptions()`: filters office choices by the signed-in user's range and loads active legacy bureaus.
-  - `currentUserRangeName()`, `legacyBureauIsInCurrentUserRange()`, `officeIsInCurrentUserRange()`, `legacyBureauIsActive()`, `legacyBureauHasActiveUsers()`, and `officeHasActiveUsers()`: implement the exploratory rules.
-  - `resolveLegacySelections()`: checks legacy selections and resolves the `to_office_id` value through `office_id`.
-  - `mergeOfficeOptions()`: retains the legacy bureau ID in option values and adds the `disabled` flag.
-- `resources/js/Pages/Documents/Index.tsx`
-  - `LibraryOption.disabled` and the release-office `<option disabled={office.disabled}>` render disabled choices.
+Range identity includes its source. A new range with ID `4` is distinct from a legacy range with ID `4`.
 
-## Reverting the exploratory restrictions
+## Receiving office options
 
-When the policy is decided, review these changes before reverting. To remove only the range and active-user experiment while keeping legacy bureaus in the dropdown:
+The release form lists rows from the new database's `offices` table that resolve to the same range identity as the sender. An office's range comes from its valid `range_id` first, then its valid `legacy_range_id`. If neither is available, the controller can resolve a matching legacy bureau by office name.
 
-1. Remove the range filtering from the `offices` prop in `documentFormOptions()` and remove the range helper methods and their range imports/cache fields.
-2. Remove the active-user/range guard in `release()` and the matching guards in `resolveLegacySelections()`.
-3. Remove `disabled` from `mergeOfficeOptions()` and remove the active-user helper methods if they are no longer needed.
-4. Remove the `disabled` property from `LibraryOption` and the `disabled` attribute from the receiving-office `<option>`.
-5. Keep `mergeOfficeOptions()`'s legacy `bureauId` option values and the `to_office_id` to legacy resolver mapping if legacy bureaus should remain selectable.
+Offices without an active recipient remain visible but disabled. If the sender has no resolvable range or no offices match it, the dropdown has no receiving-office choices and displays a message.
 
-Do not revert either whole file: both contain unrelated work. Recheck with the relevant feature tests after deciding the final policy.
+Legacy bureaus are not listed directly as receiving options. Release trails store a new-database office ID, so a legacy office must have a corresponding `offices` row to be selectable.
+
+## Release validation
+
+The `release()` endpoint repeats the range check before checking that the target office has an active recipient. This rejects a forged or stale request even if the browser submits an office that was not in the filtered dropdown.
+
+Legacy-formatted selections (`legacy:<bureau id>`) are also checked against the sender's range, legacy bureau status, and active-recipient requirement before resolution to an `offices` row.
+
+## Manual verification
+
+1. Sign in as a user whose assigned office has a valid new `range_id`. Confirm the dropdown lists only new-database offices with that same new range ID.
+2. Repeat with a user assigned an office whose range is set by `legacy_range_id`. Confirm only offices with that same legacy range ID are listed. A numerically identical ID from the new `ranges` table must not match.
+3. Sign in as a user with no resolvable office range. Confirm the dropdown reports that no receiving offices are available.
+4. Confirm an in-range office with no active recipient is disabled.
+5. Submit a valid in-range office and confirm the document releases successfully.
+6. Submit an out-of-range office ID directly to the release endpoint and confirm the request is rejected with a `to_office_id` validation error.
+
+Implementation: `app/Http/Controllers/DocumentController.php` and `resources/js/Pages/Documents/Index.tsx`.

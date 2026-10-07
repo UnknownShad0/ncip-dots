@@ -721,7 +721,7 @@ export default function DocumentsIndex({
                                 <div>
                                     <label htmlFor="release-office" className="mb-1 block text-sm font-medium text-slate-700">Required Receiving Office <span className="text-rose-600">*</span></label>
                                     <select id="release-office" required value={releaseForm.officeId} onChange={(event) => { setReleaseForm({ ...releaseForm, officeId: event.target.value }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm">
-                                        <option value="">Select receiving office</option>
+                                        <option value="">{offices.length ? 'Select receiving office' : 'No receiving offices available in your range'}</option>
                                         {offices.map((office) => <option key={office.id} value={office.id} disabled={office.disabled}>{office.name}</option>)}
                                     </select>
                                 </div>
