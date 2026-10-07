@@ -22,16 +22,16 @@ class UserAccountController extends Controller
 
     public function lookupEmployee(Request $request, HrisDirectory $directory)
     {
-        $validated = $request->validate(['agency_employee_no' => ['required', 'string', 'max:100']]);
+        $validated = $request->validate(['employee_code' => ['required', 'string', 'max:100']]);
         $request->session()->forget('hris_employee_lookup');
         try {
-            $result = $directory->lookup($validated['agency_employee_no']);
+            $result = $directory->lookup($validated['employee_code']);
         } catch (\Throwable $exception) {
             report($exception);
             return response()->json(['message' => 'Employee directory is unavailable. Please check the HRIS configuration or try again.'], 502);
         }
         if (! $result) {
-            return response()->json(['message' => 'No employee found for that Agency Employee Number.'], 404);
+            return response()->json(['message' => 'No employee found for that employee code.'], 404);
         }
         $request->session()->put('hris_employee_lookup', $result);
         return response()->json($result);
@@ -120,7 +120,7 @@ class UserAccountController extends Controller
                     'username' => $user->username ?? '',
                     'role_id' => $user->role_id === null ? '' : (string) $user->role_id,
                     'role' => $roleName,
-                    'agency_employee_no' => $user->agency_employee_no,
+                    'employee_code' => $user->employee_code,
                     'office_id' => $user->legacy_office_id,
                     'office_name' => $user->officeByCode?->name ?? $user->office?->name ?? $officeNames->get($user->legacy_office_id) ?? '',
                     'is_active' => (bool) $user->is_active,
@@ -145,14 +145,14 @@ class UserAccountController extends Controller
         if ($type === 'employee') {
             $validated = $request->validate([
                 'operation' => ['required', 'in:create'],
-                'agency_employee_no' => ['required', 'string', 'max:100', 'unique:users,agency_employee_no'],
+                'employee_code' => ['required', 'string', 'max:100', 'unique:users,employee_code'],
                 'email' => ['required', 'email', 'max:255', 'unique:users,email'],
                 'office_code' => ['required', 'string', 'max:100'],
                 'office_table_id' => ['required', 'string'],
                 'employee_role' => ['required', Rule::in(['super admin', 'executive', 'admin staff'])],
             ]);
             $lookup = $request->session()->get('hris_employee_lookup');
-            if (! $lookup || ($lookup['employee']['agency_employee_no'] ?? null) !== $validated['agency_employee_no']) {
+            if (! $lookup || ($lookup['employee']['employee_code'] ?? null) !== $validated['employee_code']) {
                 throw ValidationException::withMessages(['user' => 'Search for the employee successfully before saving.']);
             }
             $employee = $lookup['employee'];
@@ -175,7 +175,7 @@ class UserAccountController extends Controller
             $attributes = [
                 'firstname' => $employee['first_name'], 'lastname' => $employee['last_name'],
                 'middlename' => $employee['middle_name'] ?? null, 'extensionname' => $employee['ext_name'] ?? null,
-                'agency_employee_no' => $employee['agency_employee_no'],
+                'employee_code' => $employee['employee_code'],
                 'username' => $employee['username'], 'email' => $validated['email'],
                 'division_code' => $employee['division_code'] ?? null,
                 'region_code' => $directoryOffice['region_code'], 'office_code' => $office->code,
@@ -244,16 +244,16 @@ class UserAccountController extends Controller
             'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'firstname' => ['required', 'string', 'max:100'],
             'lastname' => ['required', 'string', 'max:100'],
-            'role_id' => [Rule::requiredIf(! $user->agency_employee_no), 'nullable', 'integer', Rule::in($this->roleIds())],
-            'employee_role' => [Rule::requiredIf((bool) $user->agency_employee_no), 'nullable', Rule::in(['super admin', 'executive', 'admin staff'])],
-            'officeId' => [Rule::requiredIf(! $user->agency_employee_no || $user->legacy_office_id !== null), 'nullable', 'integer', Rule::exists('legacy.bureau', 'bureauId')->whereIn('status', self::ACTIVE_OFFICE_STATUSES)],
+            'role_id' => [Rule::requiredIf(! $user->employee_code), 'nullable', 'integer', Rule::in($this->roleIds())],
+            'employee_role' => [Rule::requiredIf((bool) $user->employee_code), 'nullable', Rule::in(['super admin', 'executive', 'admin staff'])],
+            'officeId' => [Rule::requiredIf(! $user->employee_code || $user->legacy_office_id !== null), 'nullable', 'integer', Rule::exists('legacy.bureau', 'bureauId')->whereIn('status', self::ACTIVE_OFFICE_STATUSES)],
             'status' => ['required', Rule::in(['1', '0'])],
             'isLocked' => ['required', Rule::in(['Y', 'N'])],
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
         ]);
 
-        $roleId = $user->agency_employee_no ? $this->employeeRoleId($validated['employee_role']) : (int) $validated['role_id'];
-        $role = $user->agency_employee_no ? $validated['employee_role'] : DB::connection('legacy')->table('role')->where('roleId', $roleId)->value('rolename');
+        $roleId = $user->employee_code ? $this->employeeRoleId($validated['employee_role']) : (int) $validated['role_id'];
+        $role = $user->employee_code ? $validated['employee_role'] : DB::connection('legacy')->table('role')->where('roleId', $roleId)->value('rolename');
         $bureau = filled($validated['officeId'] ?? null) ? BureauLegacy::query()->findOrFail($validated['officeId']) : null;
         $office = $bureau ? Office::query()->firstOrCreate(
             ['name' => $bureau->longName],

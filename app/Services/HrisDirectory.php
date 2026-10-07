@@ -42,11 +42,11 @@ class HrisDirectory
         return $response->successful() && ($result['valid'] ?? false) === true;
     }
 
-    public function lookup(string $employeeNumber): ?array
+    public function lookup(string $employeeCode): ?array
     {
-        $employeeRecords = $this->records($this->fetch('employee_path', ['agency_employee_no' => $employeeNumber]));
+        $employeeRecords = $this->records($this->fetchEmployeeByCode($employeeCode));
         $employee = collect($employeeRecords)
-            ->first(fn (array $record) => strcasecmp(trim((string) ($record['agency_employee_no'] ?? '')), trim($employeeNumber)) === 0);
+            ->first(fn (array $record) => strcasecmp(trim((string) ($record['employee_code'] ?? '')), trim($employeeCode)) === 0);
 
         Log::debug('HRIS employee lookup evaluated', [
             'records_received' => count($employeeRecords),
@@ -73,11 +73,42 @@ class HrisDirectory
 
         return [
             'employee' => array_intersect_key($employee, array_flip([
-                'agency_employee_no', 'first_name', 'middle_name', 'last_name', 'ext_name',
+                'employee_code', 'first_name', 'middle_name', 'last_name', 'ext_name',
                 'username', 'email_address', 'division_code', 'division',
             ])),
             'offices' => $offices,
         ];
+    }
+
+    private function fetchEmployeeByCode(string $employeeCode): mixed
+    {
+        $config = config('services.hris');
+        if (blank($config['url'] ?? null)) {
+            throw new RuntimeException('HRIS API URL is not configured.');
+        }
+
+        $request = Http::acceptJson()->timeout(15);
+        if (filled($config['token'] ?? null)) {
+            $request = $request->withToken($config['token']);
+        }
+
+        $path = rtrim($config['employee_path'], '/').'/'.rawurlencode($employeeCode);
+        $endpoint = rtrim($config['url'], '/').'/'.ltrim($path, '/');
+        $response = $request->get($endpoint);
+        $payload = $response->json();
+
+        Log::debug('HRIS employee lookup request completed', [
+            'endpoint' => parse_url($endpoint, PHP_URL_PATH),
+            'status' => $response->status(),
+            'response_type' => get_debug_type($payload),
+            'response_fields' => is_array($payload) && ! array_is_list($payload) ? array_slice(array_keys($payload), 0, 12) : [],
+        ]);
+
+        if ($response->status() === 404) {
+            return [];
+        }
+
+        return $response->throw()->json();
     }
 
     private function fetch(string $path, array $query): mixed

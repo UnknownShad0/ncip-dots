@@ -73,7 +73,7 @@ class DatabaseSeeder extends Seeder
                 'lastname' => 'ANUNCIADO',
                 'extensionname' => null,
                 'email' => 'jmarkanunciado1@gmail.com',
-                'agency_employee_no' => 'EMP-78466',
+                'employee_code' => 'EMP-14043',
                 'division_code' => 'DIV-4824',
                 'division' => null,
                 'region_code' => '13',
@@ -92,7 +92,7 @@ class DatabaseSeeder extends Seeder
                 'lastname' => 'DELMAS',
                 'extensionname' => null,
                 'email' => 'hsdelmas@dots.local',
-                'agency_employee_no' => 'EMP-2967',
+                'employee_code' => 'EMP-12149',
                 'division_code' => 'DIV-4954',
                 'division' => 'CAR - PROVINCIAL OFFICE, BAGUIO',
                 'region_code' => '14',
@@ -108,7 +108,7 @@ class DatabaseSeeder extends Seeder
                 'lastname' => 'LAPITAN-CAMPUED',
                 'extensionname' => null,
                 'email' => 'tpnlapitancampued@dots.local',
-                'agency_employee_no' => 'EMP-2970',
+                'employee_code' => 'EMP-12152',
                 'division_code' => 'DIV-4868',
                 'division' => 'OC - OFFICE OF THE CLERK OF THE COMMISSION',
                 'region_code' => '13',
@@ -124,7 +124,7 @@ class DatabaseSeeder extends Seeder
                 'lastname' => 'ANOG',
                 'extensionname' => null,
                 'email' => 'sgeanog@dots.local',
-                'agency_employee_no' => 'EMP-2971',
+                'employee_code' => 'EMP-12153',
                 'division_code' => 'DIV-4854',
                 'division' => 'AS - GENERAL SERVICES DIVISION',
                 'region_code' => '13',
@@ -139,8 +139,8 @@ class DatabaseSeeder extends Seeder
                 ?? Office::query()->where('code', $account['office_code'] ?? '')->value('id')
                 ?? $office->id;
             $accountDivisionId = array_key_exists('division_id', $account) ? $account['division_id'] : $division->id;
-            $accountIdentity = filled($account['agency_employee_no'] ?? null)
-                ? ['agency_employee_no' => $account['agency_employee_no']]
+            $accountIdentity = filled($account['employee_code'] ?? null)
+                ? ['employee_code' => $account['employee_code']]
                 : ['username' => $account['username']];
 
             $user = User::updateOrCreate(

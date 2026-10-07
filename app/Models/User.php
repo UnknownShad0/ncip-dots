@@ -28,7 +28,7 @@ class User extends Authenticatable
         'lastname',
         'middlename',
         'extensionname',
-        'agency_employee_no',
+        'employee_code',
         'division_code',
         'division',
         'region_code',

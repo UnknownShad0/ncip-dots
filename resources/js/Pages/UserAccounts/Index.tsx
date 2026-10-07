@@ -11,7 +11,7 @@ type UserRow = {
     username: string;
     firstname: string;
     lastname: string;
-    agency_employee_no?: string;
+    employee_code?: string;
     role_id: string;
     role: string;
     office_id: number | null;
@@ -39,7 +39,7 @@ type FormState = {
     password_confirmation: string;
 };
 type EmployeeLookup = {
-    employee: { agency_employee_no: string; first_name: string; middle_name?: string; last_name: string; ext_name?: string; username: string; email_address?: string; division_code?: string; division?: string };
+    employee: { employee_code: string; first_name: string; middle_name?: string; last_name: string; ext_name?: string; username: string; email_address?: string; division_code?: string; division?: string };
     offices: { office_code: string; office_name: string; region_code: string; region_name: string }[];
 };
 type SortKey = 'name' | 'username' | 'email' | 'role' | 'office_name' | 'is_active';
@@ -63,7 +63,7 @@ export default function UserAccountsIndex({
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [processing, setProcessing] = useState(false);
     const [accountType, setAccountType] = useState<'dots' | 'employee' | null>(null);
-    const [employeeNumber, setEmployeeNumber] = useState('');
+    const [employeeCode, setEmployeeCode] = useState('');
     const [lookup, setLookup] = useState<EmployeeLookup | null>(null);
     const [lookupOpen, setLookupOpen] = useState(false);
     const [lookupBusy, setLookupBusy] = useState(false);
@@ -75,7 +75,7 @@ export default function UserAccountsIndex({
     const resetLookup = () => {
         lookupVersion.current++;
         setLookup(null); setLookupOpen(false); setLookupBusy(false);
-        setLookupError(''); setEmployeeNumber(''); setOfficeCode(''); setOfficeTableId('');
+        setLookupError(''); setEmployeeCode(''); setOfficeCode(''); setOfficeTableId('');
     };
     const selectType = (type: 'dots' | 'employee') => {
         resetLookup(); setAccountType(type); setForm(emptyForm); setErrors({});
@@ -84,7 +84,7 @@ export default function UserAccountsIndex({
         const version = ++lookupVersion.current;
         setLookupBusy(true); setLookupError(''); setLookup(null); setForm(emptyForm); setOfficeCode(''); setOfficeTableId('');
         try {
-            const response = await axios.post<EmployeeLookup>('/user-accounts/lookup-employee', { agency_employee_no: employeeNumber.trim() });
+            const response = await axios.post<EmployeeLookup>('/user-accounts/lookup-employee', { employee_code: employeeCode.trim() });
             if (version !== lookupVersion.current) return;
             const result = response.data;
             setLookup(result); setLookupOpen(false);
@@ -94,7 +94,7 @@ export default function UserAccountsIndex({
                 username: result.employee.username, email: '' });
         } catch (error) {
             if (version !== lookupVersion.current) return;
-            setLookupError(axios.isAxiosError(error) ? error.response?.data?.errors?.agency_employee_no?.[0] || error.response?.data?.message || 'Employee lookup failed. Please try again.' : 'Employee lookup failed. Please try again.');
+            setLookupError(axios.isAxiosError(error) ? error.response?.data?.errors?.employee_code?.[0] || error.response?.data?.message || 'Employee lookup failed. Please try again.' : 'Employee lookup failed. Please try again.');
         } finally {
             if (version === lookupVersion.current) setLookupBusy(false);
         }
@@ -146,7 +146,7 @@ export default function UserAccountsIndex({
         const payload = {
             ...form,
             account_type: accountType,
-            agency_employee_no: lookup?.employee.agency_employee_no,
+            employee_code: lookup?.employee.employee_code,
             office_code: officeCode,
             office_table_id: officeTableId,
             operation: editingRow ? 'update' : 'create',
@@ -251,8 +251,8 @@ export default function UserAccountsIndex({
                     <div className="flex items-center justify-between"><h3 id="user-account-modal-title" className="text-lg font-semibold text-slate-800">{editingRow ? 'Edit User Account' : 'New User Account'}</h3><button type="button" onClick={closeModal} className="text-slate-500">Close</button></div>
                     {!editingRow && accountType === 'employee' && <div className="space-y-4">
                         {(!lookup || lookupOpen) && <div className="space-y-3 rounded-xl border p-4">
-                            <div className="flex items-end gap-2"><div className="flex-1"><Field label="Agency Employee Number"><input value={employeeNumber} onChange={(e) => setEmployeeNumber(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (employeeNumber.trim() && !lookupBusy) void searchEmployee(); } }} placeholder="Enter Agency Employee Number" className="w-full rounded-md border-slate-300" /></Field></div>
-                                <button type="button" disabled={lookupBusy || !employeeNumber.trim()} onClick={() => void searchEmployee()} className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{lookupBusy ? 'Searching...' : 'Search'}</button>
+                            <div className="flex items-end gap-2"><div className="flex-1"><Field label="Employee Code"><input value={employeeCode} onChange={(e) => setEmployeeCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (employeeCode.trim() && !lookupBusy) void searchEmployee(); } }} placeholder="Enter employee code" className="w-full rounded-md border-slate-300" /></Field></div>
+                                <button type="button" disabled={lookupBusy || !employeeCode.trim()} onClick={() => void searchEmployee()} className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{lookupBusy ? 'Searching...' : 'Search'}</button>
                             </div>
                             {lookupError && <p role="alert" className="text-sm text-red-600">{lookupError}</p>}
                         </div>}
@@ -260,7 +260,7 @@ export default function UserAccountsIndex({
                             <button type="button" disabled={processing || lookupBusy} onClick={() => { setLookupOpen(true); setLookupError(''); }} className="self-start rounded-lg border px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50">Search another employee</button>
                             <dl className="grid gap-3 rounded-xl bg-sky-50 p-4 text-sm sm:grid-cols-2">
                                 {[
-                                    ['Agency Employee Number', lookup.employee.agency_employee_no],
+                                    ['Employee Code', lookup.employee.employee_code],
                                     ['First Name', lookup.employee.first_name], ['Middle Name', lookup.employee.middle_name],
                                     ['Last Name', lookup.employee.last_name], ['Extension Name', lookup.employee.ext_name],
                                     ['Username', lookup.employee.username],
@@ -284,8 +284,8 @@ export default function UserAccountsIndex({
                         <Field label="Last Name" error={errors.lastname}><input required value={form.lastname} onChange={(e) => setForm({ ...form, lastname: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
                         <Field label="Username" error={errors.username}><input required maxLength={50} disabled={!!editingRow?.username} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="w-full rounded-md border-slate-300 disabled:bg-slate-100" /></Field>
                         {editingRow && <Field label="Email" error={errors.email}><input required={!editingRow} type="email" maxLength={255} disabled={!!editingRow} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-md border-slate-300 disabled:bg-slate-100" /></Field>}
-                        {editingRow?.agency_employee_no ? <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option><option value="super admin">Super Admin</option><option value="executive">Executive</option><option value="admin staff">Admin Staff</option></select></Field> : <Field label="Role" error={errors.role_id}><select required value={form.role_id} onChange={(e) => setForm({ ...form, role_id: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></Field>}
-                        <Field label="Office" error={errors.officeId}>{editingRow?.agency_employee_no && !editingRow.office_id ? <p className="rounded-md border bg-slate-50 p-2">{editingRow.office_name}</p> : <select required value={form.officeId} onChange={(e) => { setErrors({}); setForm({ ...form, officeId: e.target.value, email: accountType === 'dots' ? offices.find((office) => String(office.id) === e.target.value)?.email ?? '' : form.email }); }} className="w-full rounded-md border-slate-300"><option value="">Select office</option>{officeOptions.map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}</select>}</Field>
+                        {editingRow?.employee_code ? <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option><option value="super admin">Super Admin</option><option value="executive">Executive</option><option value="admin staff">Admin Staff</option></select></Field> : <Field label="Role" error={errors.role_id}><select required value={form.role_id} onChange={(e) => setForm({ ...form, role_id: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></Field>}
+                        <Field label="Office" error={errors.officeId}>{editingRow?.employee_code && !editingRow.office_id ? <p className="rounded-md border bg-slate-50 p-2">{editingRow.office_name}</p> : <select required value={form.officeId} onChange={(e) => { setErrors({}); setForm({ ...form, officeId: e.target.value, email: accountType === 'dots' ? offices.find((office) => String(office.id) === e.target.value)?.email ?? '' : form.email }); }} className="w-full rounded-md border-slate-300"><option value="">Select office</option>{officeOptions.map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}</select>}</Field>
                         {!editingRow && accountType === 'dots' && form.officeId && <p className="text-sm text-slate-600 sm:col-span-2">{form.email ? <>Login details will be sent to <span className="font-medium">{form.email}</span>.</> : <span className="text-red-600">The selected office has no email address. Update the office email before creating an account.</span>}</p>}
                         {editingRow && <Field label="Account Status" error={errors.status}><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full rounded-md border-slate-300"><option value="1">Active</option><option value="0">Inactive</option></select></Field>}
                         {editingRow && <Field label="Login Status" error={errors.isLocked}><select value={form.isLocked} onChange={(e) => setForm({ ...form, isLocked: e.target.value })} className="w-full rounded-md border-slate-300"><option value="N">Unlocked</option><option value="Y">Locked</option></select></Field>}
