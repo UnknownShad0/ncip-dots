@@ -6,6 +6,9 @@ use App\Models\Document;
 use App\Models\DocumentCreationDraft;
 use App\Models\DocumentType;
 use App\Models\DocumentTypeLegacy;
+use App\Models\BureauLegacy;
+use App\Models\Office;
+use App\Models\RangeLegacy;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -38,7 +41,7 @@ class DocumentCreationController extends Controller
         return Inertia::render('DocumentCreation/Index', [
             'drafts' => $drafts,
             'documentTypes' => $this->documentTypeOptions(),
-            'approvers' => User::query()->where('is_active', true)->where('id', '<>', $user->id)->orderBy('name')->get(['id', 'name', 'role']),
+            'approvers' => $this->approversInCurrentUserRange($user),
             'currentUserId' => $user->id,
             'approvedOnly' => $approvedOnly,
         ]);
@@ -68,7 +71,13 @@ class DocumentCreationController extends Controller
         abort_unless((int) $draft->created_by === (int) $request->user()->id && in_array($draft->status, ['draft', 'revision_requested'], true), 403);
         $data = $request->validate(['approver_id' => ['required', 'integer', 'exists:users,id']]);
         abort_if((int) $data['approver_id'] === (int) $request->user()->id, 422, 'Choose a different approver.');
-        abort_unless(User::query()->whereKey($data['approver_id'])->where('is_active', true)->exists(), 422, 'Choose an active approver.');
+        $approver = User::query()->with(['office.range', 'officeByCode.range'])
+            ->whereKey($data['approver_id'])
+            ->where('is_active', true)
+            ->first();
+        abort_unless($approver, 422, 'Choose an active approver.');
+        $currentRange = $this->userRangeIdentity($request->user());
+        abort_unless($currentRange !== null && $this->userRangeIdentity($approver) === $currentRange, 422, 'Choose an approver in your office range.');
         $number = $draft->version_number + 1;
         $draft->versions()->create(['version_number' => $number, 'content' => $draft->content, 'created_by' => $request->user()->id]);
         $draft->update(['approver_id' => $data['approver_id'], 'version_number' => $number, 'status' => 'pending_approval', 'submitted_at' => now(), 'decision_at' => null, 'decision_remarks' => null]);
@@ -182,5 +191,74 @@ class DocumentCreationController extends Controller
     private function canAccess(DocumentCreationDraft $draft, Request $request): bool
     {
         return in_array((int) $request->user()->id, [(int) $draft->created_by, (int) $draft->approver_id, (int) $draft->verified_by], true);
+    }
+
+    private function approversInCurrentUserRange(User $user): array
+    {
+        $range = $this->userRangeIdentity($user);
+        if ($range === null) {
+            return [];
+        }
+
+        return User::query()
+            ->with(['office.range', 'officeByCode.range'])
+            ->where('is_active', true)
+            ->where('id', '<>', $user->id)
+            ->orderBy('name')
+            ->get()
+            ->filter(fn (User $approver) => $this->userRangeIdentity($approver) === $range)
+            ->map(fn (User $approver) => ['id' => $approver->id, 'name' => $approver->name, 'role' => $approver->role])
+            ->values()
+            ->all();
+    }
+
+    private function userRangeIdentity(User $user): ?array
+    {
+        $office = $user->office;
+        if (! $office && filled($user->office_code)) {
+            $office = $user->officeByCode ?: Office::query()->with('range')->where('code', $user->office_code)->first();
+        }
+
+        if ($office && ($range = $this->officeRangeIdentity($office))) {
+            return $range;
+        }
+
+        if ($user->legacy_office_id) {
+            $bureau = BureauLegacy::query()->whereKey($user->legacy_office_id)->first(['bureauId', 'range']);
+            if ($bureau && ($range = $this->legacyBureauRangeIdentity($bureau))) {
+                return $range;
+            }
+        }
+
+        return null;
+    }
+
+    private function officeRangeIdentity(Office $office): ?array
+    {
+        if ($office->range_id !== null && $office->range) {
+            return ['source' => 'new', 'id' => (int) $office->range_id];
+        }
+
+        if ($office->legacy_range_id !== null && RangeLegacy::query()->whereKey($office->legacy_range_id)->exists()) {
+            return ['source' => 'legacy', 'id' => (int) $office->legacy_range_id];
+        }
+
+        $bureau = BureauLegacy::query()->where('longName', $office->name)->first(['bureauId', 'range']);
+
+        return $bureau ? $this->legacyBureauRangeIdentity($bureau) : null;
+    }
+
+    private function legacyBureauRangeIdentity(BureauLegacy $bureau): ?array
+    {
+        $value = trim((string) ($bureau->range ?? ''));
+        if ($value === '') {
+            return null;
+        }
+
+        $range = ctype_digit($value)
+            ? RangeLegacy::query()->whereKey((int) $value)->first(['id'])
+            : RangeLegacy::query()->whereRaw('LOWER(name) = ?', [mb_strtolower($value)])->first(['id']);
+
+        return $range ? ['source' => 'legacy', 'id' => (int) $range->id] : null;
     }
 }
