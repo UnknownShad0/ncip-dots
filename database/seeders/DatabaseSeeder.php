@@ -59,7 +59,7 @@ class DatabaseSeeder extends Seeder
                 'lastname' => 'ANUNCIADO',
                 'extensionname' => null,
                 'email' => 'jmarkanunciado1@gmail.com',
-                'employee_code' => 'EMP-14043',
+                'employee_code' => 'EMP-11111',
                 'division_code' => 'DIV-4824',
                 'division' => null,
                 'region_code' => '13',

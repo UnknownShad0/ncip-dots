@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\BureauLegacy;
 use App\Models\Office;
+use App\Models\RangeLegacy;
 use App\Models\User;
 use App\Models\UserLegacy;
 use App\Services\HrisDirectory;
@@ -44,10 +45,24 @@ class UserAccountController extends Controller
             ->orderBy('longName')
             ->get(['bureauId', 'longName', 'officeEmail'])
             ->map(fn (BureauLegacy $office) => ['id' => (int) $office->bureauId, 'name' => $office->longName, 'email' => trim((string) $office->officeEmail)]);
+        $legacyRanges = RangeLegacy::query()->get(['id', 'name'])->keyBy('id');
         $officeTableOptions = Office::query()
+            ->with('range:id,name')
             ->orderBy('name')
-            ->get(['id', 'code', 'name', 'email'])
-            ->map(fn (Office $office) => ['id' => 'new-'.$office->id, 'code' => $office->code, 'name' => $office->name, 'email' => $office->email, 'source' => 'New DB'])
+            ->get(['id', 'code', 'name', 'email', 'range_id', 'legacy_range_id'])
+            ->map(function (Office $office) use ($legacyRanges) {
+                $legacyRange = $office->legacy_range_id ? $legacyRanges->get((int) $office->legacy_range_id) : null;
+                $rangeName = $office->range?->name ?? $legacyRange?->name;
+
+                return [
+                    'id' => 'new-'.$office->id,
+                    'code' => $office->code,
+                    'name' => $office->name,
+                    'email' => $office->email,
+                    'range_name' => $rangeName,
+                    'source' => 'New DB',
+                ];
+            })
             ->values();
         // $legacyOfficeTableOptions = BureauLegacy::query()
         //     ->whereIn('status', self::ACTIVE_OFFICE_STATUSES)
@@ -166,9 +181,10 @@ class UserAccountController extends Controller
                 'last_name' => ['required', 'string', 'max:100'],
             ])->validate();
             [$office, $bureauId] = $this->resolveSelectedOffice($validated['office_table_id']);
-            if (! $office) {
+            $divisionCode = trim((string) ($employee['division_code'] ?? ''));
+            if (! $office || $divisionCode === '' || strcasecmp(trim((string) $office->code), $divisionCode) !== 0) {
                 throw ValidationException::withMessages([
-                    'office_table_id' => 'Select an existing local office. Add unmatched legacy offices in the Offices module first.',
+                    'office_table_id' => 'No registered Office matches this employee division. Register the Office in the Offices module first.',
                 ]);
             }
             $bureauId ??= BureauLegacy::query()->where('officeCode', $office->code)->value('bureauId');

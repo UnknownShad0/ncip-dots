@@ -1,6 +1,6 @@
 import axios from 'axios';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { FormEvent, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 
@@ -23,7 +23,7 @@ type UserRow = {
     source: string;
 };
 type OfficeOption = { id: number; name: string; email?: string };
-type OfficeTableOption = { id: string; code: string | null; name: string; email?: string | null; source?: string };
+type OfficeTableOption = { id: string; code: string | null; name: string; email?: string | null; range_name?: string | null; source?: string };
 type RoleOption = { id: number; name: string };
 type FormState = {
     employee_role: string;
@@ -89,7 +89,11 @@ export default function UserAccountsIndex({
             const result = response.data;
             setLookup(result); setLookupOpen(false);
             setOfficeCode(result.offices[0]?.office_code ?? '');
-            setOfficeTableId('');
+            const divisionCode = result.employee.division_code?.trim().toLowerCase();
+            const matchingOffice = divisionCode
+                ? officeTableOptions.find((office) => office.code?.trim().toLowerCase() === divisionCode)
+                : undefined;
+            setOfficeTableId(matchingOffice?.id ?? '');
             setForm({ ...emptyForm, firstname: result.employee.first_name, lastname: result.employee.last_name,
                 username: result.employee.username, email: '' });
         } catch (error) {
@@ -116,6 +120,10 @@ export default function UserAccountsIndex({
     const officeOptions = editingRow?.office_id && !offices.some((office) => office.id === editingRow.office_id)
         ? [...offices, { id: editingRow.office_id, name: `${editingRow.office_name} (Inactive)` }]
         : offices;
+    const divisionCode = lookup?.employee.division_code?.trim().toLowerCase();
+    const divisionOffice = divisionCode
+        ? officeTableOptions.find((office) => office.code?.trim().toLowerCase() === divisionCode)
+        : undefined;
 
     const closeModal = () => {
         resetLookup();
@@ -266,12 +274,15 @@ export default function UserAccountsIndex({
                                     ['Username', lookup.employee.username],
                                 ].map(([label, value]) => <div key={label}><dt className="text-slate-500">{label}</dt><dd className="mt-1 font-medium text-slate-800">{value || '—'}</dd></div>)}
                             </dl>
-                            {lookup.offices.length === 0 && <p className="text-sm text-red-600">No office was found for this employee’s division. An office is required to create the account.</p>}
-                            <div className="-mb-1">
-                                <Field label="Office" error={errors.office_table_id}><select required value={officeTableId} onChange={(e) => {
-                                setOfficeTableId(e.target.value);
-                                }} className="w-full rounded-md border-slate-300"><option value="">Select office</option>{officeTableOptions.map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}</select></Field>
-                            </div>
+                            {divisionOffice ? <div className="grid gap-3 sm:grid-cols-2">
+                                <Field label="Office"><input aria-label="Office" readOnly value={divisionOffice.name} className="w-full rounded-md border-slate-300 bg-slate-50 text-slate-700 read-only:cursor-default" /></Field>
+                                <Field label="Range"><input aria-label="Range" readOnly value={divisionOffice.range_name || 'No range assigned'} className="w-full rounded-md border-slate-300 bg-slate-50 text-slate-700 read-only:cursor-default" /></Field>
+                            </div> : <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-900">
+                                <p className="whitespace-normal leading-6">No registered Office matches division <span className="font-semibold">{lookup.employee.division || '(unknown)'}</span>.
+                                    Register the Office first in the <Link href="/offices" className="font-semibold text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-900">Offices module</Link>, then search for this employee again.
+                                </p>
+                            </div>}
+                            {errors.office_table_id && <p className="text-xs text-red-600">{errors.office_table_id}</p>}
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <Field label="Email" error={errors.email}><input required type="email" maxLength={255} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
                                 <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option><option value="super admin">Super Admin</option><option value="executive">Executive</option><option value="admin staff">Admin Staff</option></select></Field>
@@ -294,7 +305,7 @@ export default function UserAccountsIndex({
                     </div>}
                     {Object.entries(errors).filter(([key]) => !['firstname', 'lastname', 'role_id', 'officeId', 'office_table_id', 'password', 'password_confirmation', 'status', 'isLocked', 'user'].includes(key)).map(([key, message]) => <p key={key} className="text-sm text-red-600">{message}</p>)}
                     {errors.user && <p className="text-sm text-red-600">{errors.user}</p>}
-                    <div className="flex justify-end gap-2 border-t pt-4"><button type="button" onClick={closeModal} className="rounded-md border px-4 py-2 text-sm">Cancel</button><button disabled={processing || (!editingRow && (!accountType || (accountType === 'dots' && !form.email) || (accountType === 'employee' && (!lookup || lookupOpen || lookupBusy || !officeCode || !officeTableId || !form.employee_role || !form.email))))} className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{processing ? 'Saving...' : 'Save account'}</button></div>
+                    <div className="flex justify-end gap-2 border-t pt-4"><button type="button" onClick={closeModal} className="rounded-md border px-4 py-2 text-sm">Cancel</button><button disabled={processing || (!editingRow && (!accountType || (accountType === 'dots' && !form.email) || (accountType === 'employee' && (!lookup || lookupOpen || lookupBusy || !officeCode || !officeTableId || !divisionOffice || !form.employee_role || !form.email))))} className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{processing ? 'Saving...' : 'Save account'}</button></div>
                 </form>
             </div>}
         </AuthenticatedLayout>
