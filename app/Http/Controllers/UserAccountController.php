@@ -99,6 +99,7 @@ class UserAccountController extends Controller
                     ->implode(' ');
                 $roleId = (string) ($user->role ?? '');
                 $roleName = $roleOptions->firstWhere('id', (int) $roleId)['name'] ?? ('Role '.$roleId);
+                $isActive = in_array(strtolower((string) $user->status), ['1', 'active', 'y'], true);
 
                 return [
                     'id' => $user->userUuid,
@@ -111,7 +112,8 @@ class UserAccountController extends Controller
                     'role' => $roleName,
                     'office_id' => $user->bureauId,
                     'office_name' => $officeNames->get($user->bureauId) ?? '',
-                    'is_active' => in_array(strtolower((string) $user->status), ['1', 'active', 'y'], true),
+                    'is_active' => $isActive,
+                    'account_status' => $isActive ? 'Active' : 'Inactive',
                     'is_locked' => in_array(strtoupper((string) $user->isLocked), ['1', 'Y', 'LOCKED'], true),
                     'logged_in_status' => $user->loggedInStatus ?? 'N',
                     'last_login_at' => $user->lastLoggedInTime?->toDateTimeString(),
@@ -125,6 +127,7 @@ class UserAccountController extends Controller
             ->map(function (User $user) use ($officeNames, $roleOptions) {
                 $roleId = (int) ($user->role_id ?? 0);
                 $roleName = $roleOptions->firstWhere('id', $roleId)['name'] ?? ($user->role ?: 'User');
+                $isActive = (bool) $user->is_active;
 
                 return [
                     'id' => (string) $user->id,
@@ -138,7 +141,8 @@ class UserAccountController extends Controller
                     'employee_code' => $user->employee_code,
                     'office_id' => $user->legacy_office_id,
                     'office_name' => $user->officeByCode?->name ?? $user->office?->name ?? $officeNames->get($user->legacy_office_id) ?? '',
-                    'is_active' => (bool) $user->is_active,
+                    'is_active' => $isActive,
+                    'account_status' => ! $isActive ? 'Inactive' : ($user->password === null ? 'Pending' : 'Active'),
                     'is_locked' => (bool) $user->is_locked,
                     'logged_in_status' => 'N',
                     'last_login_at' => $user->last_login_at?->toDateTimeString(),

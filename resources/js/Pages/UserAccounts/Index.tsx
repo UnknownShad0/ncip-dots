@@ -17,6 +17,7 @@ type UserRow = {
     office_id: number | null;
     office_name: string;
     is_active: boolean;
+    account_status: 'Active' | 'Inactive' | 'Pending';
     is_locked: boolean;
     logged_in_status: string;
     last_login_at: string | null;
@@ -42,7 +43,7 @@ type EmployeeLookup = {
     employee: { employee_code: string; first_name: string; middle_name?: string; last_name: string; ext_name?: string; username: string; email_address?: string; division_code?: string; division?: string };
     offices: { office_code: string; office_name: string; region_code: string; region_name: string }[];
 };
-type SortKey = 'name' | 'username' | 'email' | 'role' | 'office_name' | 'is_active';
+type SortKey = 'name' | 'username' | 'email' | 'role' | 'office_name' | 'account_status';
 
 const emptyForm: FormState = {
     employee_role: '', firstname: '', lastname: '', username: '', email: '', role_id: '', officeId: '',
@@ -219,7 +220,7 @@ export default function UserAccountsIndex({
                             <th className="px-4 py-3 font-semibold">{sortButton('Email', 'email')}</th>
                             <th className="px-4 py-3 font-semibold">{sortButton('Role', 'role')}</th>
                             <th className="px-4 py-3 font-semibold">{sortButton('Office', 'office_name')}</th>
-                            <th className="px-4 py-3 font-semibold">{sortButton('Status', 'is_active')}</th>
+                            <th className="px-4 py-3 font-semibold">{sortButton('Status', 'account_status')}</th>
                             <th className="px-4 py-3 font-semibold print:hidden">Actions</th>
                         </tr></thead>
                         <tbody>
@@ -231,8 +232,8 @@ export default function UserAccountsIndex({
                                     <td className="px-4 py-3 text-slate-600">{user.role || '—'}</td>
                                     <td className="px-4 py-3 text-slate-600">{user.office_name || 'No office'}</td>
                                     <td className="px-4 py-3">
-                                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${user.is_active ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200' : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'}`}>
-                                            {user.is_active ? 'Active' : 'Inactive'}
+                                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${user.account_status === 'Active' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200' : user.account_status === 'Pending' ? 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200' : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'}`}>
+                                            {user.account_status}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 print:hidden">
