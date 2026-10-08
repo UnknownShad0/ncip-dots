@@ -49,20 +49,20 @@ class UserAccountController extends Controller
             ->get(['id', 'code', 'name', 'email'])
             ->map(fn (Office $office) => ['id' => 'new-'.$office->id, 'code' => $office->code, 'name' => $office->name, 'email' => $office->email, 'source' => 'New DB'])
             ->values();
-        $legacyOfficeTableOptions = BureauLegacy::query()
-            ->whereIn('status', self::ACTIVE_OFFICE_STATUSES)
-            ->orderBy('longName')
-            ->get(['bureauId', 'officeCode', 'longName', 'officeEmail'])
-            ->map(fn (BureauLegacy $office) => [
-                'id' => 'legacy-'.$office->bureauId,
-                'code' => $office->officeCode,
-                'name' => $office->longName,
-                'email' => trim((string) $office->officeEmail),
-                'source' => 'Legacy DB',
-            ]);
-        $officeTableOptions = $legacyOfficeTableOptions->concat($officeTableOptions)
-            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
-            ->values();
+        // $legacyOfficeTableOptions = BureauLegacy::query()
+        //     ->whereIn('status', self::ACTIVE_OFFICE_STATUSES)
+        //     ->orderBy('longName')
+        //     ->get(['bureauId', 'officeCode', 'longName', 'officeEmail'])
+        //     ->map(fn (BureauLegacy $office) => [
+        //         'id' => 'legacy-'.$office->bureauId,
+        //         'code' => $office->officeCode,
+        //         'name' => $office->longName,
+        //         'email' => trim((string) $office->officeEmail),
+        //         'source' => 'Legacy DB',
+        //     ]);
+        // $officeTableOptions = $legacyOfficeTableOptions->concat($officeTableOptions)
+        //     ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+        //     ->values();
         $officeNames = BureauLegacy::query()->pluck('longName', 'bureauId');
 
         $roleOptions = DB::connection('legacy')->table('role')
@@ -168,7 +168,7 @@ class UserAccountController extends Controller
             [$office, $bureauId] = $this->resolveSelectedOffice($validated['office_table_id']);
             if (! $office) {
                 throw ValidationException::withMessages([
-                    'office_table_id' => 'Select a valid office from the Office module.',
+                    'office_table_id' => 'Select an existing local office. Add unmatched legacy offices in the Offices module first.',
                 ]);
             }
             $bureauId ??= BureauLegacy::query()->where('officeCode', $office->code)->value('bureauId');
@@ -178,7 +178,11 @@ class UserAccountController extends Controller
                 'employee_code' => $employee['employee_code'],
                 'username' => $employee['username'], 'email' => $validated['email'],
                 'division_code' => $employee['division_code'] ?? null,
-                'region_code' => $directoryOffice['region_code'], 'office_code' => $office->code,
+                'division' => $employee['division'] ?? null,
+                'region_code' => $directoryOffice['region_code'] ?? null,
+                'region_name' => $directoryOffice['region_name'] ?? null,
+                'office_code' => $directoryOffice['office_code'],
+                'office_name' => $directoryOffice['office_name'] ?? null,
                 'office_id' => $office->id, 'legacy_office_id' => $bureauId,
                 'role' => $validated['employee_role'],
                 'role_id' => $this->employeeRoleId($validated['employee_role']),
@@ -199,10 +203,10 @@ class UserAccountController extends Controller
             if ($validator->fails()) {
                 throw ValidationException::withMessages(['officeId' => 'The selected office needs a valid email that is not already assigned to another account.']);
             }
-            $office = Office::query()->firstOrCreate(
-                ['name' => $bureau->longName],
-                ['short_name' => $bureau->shortName, 'code' => $bureau->officeCode, 'email' => $bureau->officeEmail],
-            );
+            $office = $this->findExistingOffice($bureau);
+            if (! $office) {
+                throw ValidationException::withMessages(['officeId' => 'This legacy office has no local match. Add it in the Offices module before assigning users.']);
+            }
             $attributes = [
                 'firstname' => $validated['firstname'], 'lastname' => $validated['lastname'],
                 'username' => $validated['username'], 'email' => $email,
@@ -255,10 +259,10 @@ class UserAccountController extends Controller
         $roleId = $user->employee_code ? $this->employeeRoleId($validated['employee_role']) : (int) $validated['role_id'];
         $role = $user->employee_code ? $validated['employee_role'] : DB::connection('legacy')->table('role')->where('roleId', $roleId)->value('rolename');
         $bureau = filled($validated['officeId'] ?? null) ? BureauLegacy::query()->findOrFail($validated['officeId']) : null;
-        $office = $bureau ? Office::query()->firstOrCreate(
-            ['name' => $bureau->longName],
-            ['short_name' => $bureau->shortName, 'code' => $bureau->officeCode, 'email' => $bureau->officeEmail],
-        ) : $user->office;
+        $office = $bureau ? $this->findExistingOffice($bureau) : $user->office;
+        if ($bureau && ! $office) {
+            throw ValidationException::withMessages(['officeId' => 'This legacy office has no local match. Add it in the Offices module before assigning users.']);
+        }
         $user->fill([
             'name' => trim($validated['firstname'].' '.$validated['lastname']),
             'firstname' => $validated['firstname'],
@@ -307,16 +311,16 @@ class UserAccountController extends Controller
             return [null, null];
         }
 
-        $attributes = [
-            'short_name' => $bureau->shortName,
-            'code' => $bureau->officeCode,
-            'email' => $bureau->officeEmail,
-        ];
-        $office = filled($bureau->officeCode)
-            ? Office::query()->firstOrCreate(['code' => $bureau->officeCode], ['name' => $bureau->longName, ...$attributes])
-            : Office::query()->firstOrCreate(['name' => $bureau->longName], $attributes);
+        $office = $this->findExistingOffice($bureau);
 
         return [$office, (int) $bureau->bureauId];
+    }
+
+    private function findExistingOffice(BureauLegacy $bureau): ?Office
+    {
+        return filled($bureau->officeCode)
+            ? Office::query()->where('code', $bureau->officeCode)->first()
+            : Office::query()->where('name', $bureau->longName)->first();
     }
 
     private function roleIds(): array

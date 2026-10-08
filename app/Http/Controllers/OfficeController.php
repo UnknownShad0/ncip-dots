@@ -121,7 +121,7 @@ class OfficeController extends Controller
 
         return Inertia::render('Offices/Index', [
             'offices' => [
-                ...$legacyOffices->toArray(),
+                // ...$legacyOffices->toArray(),
                 ...$newOffices->toArray(),
             ],
             'parentOffices' => $parentOffices,

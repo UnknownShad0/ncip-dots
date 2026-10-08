@@ -34,7 +34,7 @@ class DatabaseSeeder extends Seeder
             'code' => 'RM',
         ]);
 
-        $carTmsdOfficeId = Office::query()->where('code', 'CAR-TMSD')->value('id') ?? $office->id;
+        // $carTmsdOfficeId = Office::query()->where('code', 'CAR-TMSD')->value('id') ?? $office->id;
 
         $seedAccounts = [
             [
@@ -50,21 +50,7 @@ class DatabaseSeeder extends Seeder
                 'email' => 'executive@dots.local',
                 'role' => 'Executive',
                 'role_id' => 2,
-            ],
-            [
-                'name' => 'Admin Staff User',
-                'username' => 'admin.staff',
-                'email' => 'admin.staff@dots.local',
-                'role' => 'Admin Staff',
-                'role_id' => 3,
-            ],
-            [
-                'name' => 'Encoder User',
-                'username' => 'encoder',
-                'email' => 'encoder@dots.local',
-                'role' => 'Encoder',
-                'role_id' => 14,
-            ],            
+            ],          
             [
                 'name' => 'JOHN MARK BALEROSO ANUNCIADO',
                 'username' => 'jmbannunciado1',
@@ -78,7 +64,7 @@ class DatabaseSeeder extends Seeder
                 'division' => null,
                 'region_code' => '13',
                 'office_code' => 'CAR-TMSD',
-                'office_id' => $carTmsdOfficeId,
+                'office_id' => 1,
                 'legacy_office_id' => 46,
                 'division_id' => null,
                 'role' => 'Admin Staff',
@@ -97,6 +83,7 @@ class DatabaseSeeder extends Seeder
                 'division' => 'CAR - PROVINCIAL OFFICE, BAGUIO',
                 'region_code' => '14',
                 'office_code' => 'BSO-299',
+                'office_id' => 1,
                 'role' => 'Super Admin',
                 'role_id' => 1,
             ],
@@ -113,6 +100,7 @@ class DatabaseSeeder extends Seeder
                 'division' => 'OC - OFFICE OF THE CLERK OF THE COMMISSION',
                 'region_code' => '13',
                 'office_code' => 'BSO-442',
+                'office_id' => 1,
                 'role' => 'Executive',
                 'role_id' => 2,
             ],
@@ -129,6 +117,7 @@ class DatabaseSeeder extends Seeder
                 'division' => 'AS - GENERAL SERVICES DIVISION',
                 'region_code' => '13',
                 'office_code' => 'BSO-439',
+                'office_id' => 1,
                 'role' => 'Admin Staff',
                 'role_id' => 3,
             ],
