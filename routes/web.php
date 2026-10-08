@@ -11,6 +11,7 @@ use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\IplumaController;
 use App\Http\Controllers\OfficeController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PublicDocumentTrackingController;
 use App\Http\Controllers\PurposeTypeController;
 use App\Http\Controllers\RangeController;
 use App\Http\Controllers\SetupController;
@@ -18,6 +19,9 @@ use App\Http\Controllers\UserAccountController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/login');
+Route::get('/track/{trackingNumber}', [PublicDocumentTrackingController::class, 'show'])
+    ->where('trackingNumber', '[^/]+')
+    ->name('documents.track');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');

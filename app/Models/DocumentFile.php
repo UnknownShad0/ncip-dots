@@ -12,6 +12,8 @@ class DocumentFile extends Model
 
     protected $fillable = [
         'document_id',
+        'document_trail_id',
+        'type',
         'file_name',
         'original_name',
         'file_path',
@@ -23,6 +25,11 @@ class DocumentFile extends Model
     public function document(): BelongsTo
     {
         return $this->belongsTo(Document::class);
+    }
+
+    public function trail(): BelongsTo
+    {
+        return $this->belongsTo(DocumentTrail::class, 'document_trail_id');
     }
 
     public function uploader(): BelongsTo

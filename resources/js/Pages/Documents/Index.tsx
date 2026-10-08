@@ -1,6 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import CrudAlertModal from '@/Components/CrudAlertModal';
 import { Head, router } from '@inertiajs/react';
+import QRCode from 'react-qr-code';
 import { Archive, ArrowDownUp, ChevronLeft, ChevronRight, Eye, FilePlus2, FileText, Inbox, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
@@ -8,6 +9,7 @@ import type { FormEvent } from 'react';
 type DocumentItem = {
     id?: number | string | null;
     tracking_number?: string;
+    tracking_url?: string;
     title?: string;
     status?: string;
     office_name?: string;
@@ -17,6 +19,7 @@ type DocumentItem = {
     created_by_name?: string;
     file_name?: string;
     file_url?: string;
+    files?: Array<{ id: number; name: string; type: 'original' | 'version' | string; url: string; uploaded_at?: string | null }>;
     origin_type?: string;
     last_transaction?: string;
     created_at?: string;
@@ -63,6 +66,13 @@ const getDocumentTypeName = (document: DocumentItem): string => {
     return name.trim().toLowerCase() === 'others' && document.other_document_type
         ? `${name} (${document.other_document_type})`
         : name;
+};
+
+const validateDocumentFile = (file: File | null, maxSizeKb: number): string | null => {
+    if (!file) return null;
+    if (maxSizeKb > 0 && file.size > maxSizeKb * 1024) return `The selected file must be ${maxSizeKb / 1024} MB or smaller.`;
+    if (!/\.(pdf|jpe?g|png|docx?)$/i.test(file.name)) return 'Choose a PDF, JPG, PNG, DOC, or DOCX file.';
+    return null;
 };
 
 const getPurposeTypeName = (document: DocumentItem): string =>
@@ -134,6 +144,7 @@ export default function DocumentsIndex({
     const [releasingRow, setReleasingRow] = useState<DocumentItem | null>(null);
     const [releaseForm, setReleaseForm] = useState({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', file: null as File | null });
     const [releaseError, setReleaseError] = useState('');
+    const [uploadError, setUploadError] = useState('');
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
@@ -230,6 +241,8 @@ export default function DocumentsIndex({
 
     const handleCreate = (e: React.FormEvent, finalize: boolean) => {
         e.preventDefault();
+        const fileError = validateDocumentFile(form.file, uploadLimitKb);
+        if (fileError) { setUploadError(fileError); return; }
 
         const data = new FormData();
         Object.entries({ ...form, is_finalized: finalize ? '1' : '0' }).forEach(([key, value]) => {
@@ -257,24 +270,26 @@ export default function DocumentsIndex({
             setReleaseError(`The selected file must be ${uploadLimitKb / 1024} MB or smaller.`);
             return;
         }
-        if (releaseForm.file && !/\.(pdf|jpe?g|png)$/i.test(releaseForm.file.name)) {
-            setReleaseError('Choose a PDF, JPG, or PNG file.');
+        if (releaseForm.file && !/\.(pdf|jpe?g|png|docx?)$/i.test(releaseForm.file.name)) {
+            setReleaseError('Choose a PDF, JPG, PNG, DOC, or DOCX file.');
             return;
         }
 
-        router.post(`/documents/${releasingRow.id}/release`, {
-            action_type_id: releaseForm.actionTypeId,
-            other_action: needsOtherAction ? releaseForm.otherAction.trim() : '',
-            to_office_id: releaseForm.officeId,
-            remarks: releaseForm.remarks,
-        }, {
+        const data = new FormData();
+        data.append('action_type_id', releaseForm.actionTypeId);
+        data.append('other_action', needsOtherAction ? releaseForm.otherAction.trim() : '');
+        data.append('to_office_id', releaseForm.officeId);
+        data.append('remarks', releaseForm.remarks);
+        if (releaseForm.file) data.append('file', releaseForm.file);
+
+        router.post(`/documents/${releasingRow.id}/release`, data, {
             onSuccess: () => {
                 setReleasingRow(null);
                 setReleaseForm({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', file: null });
                 setReleaseError('');
                 setCrudAlert({ title: 'Document released', message: 'Document released successfully.' });
             },
-            onError: (errors) => setReleaseError(errors.other_action ?? errors.action_type_id ?? errors.to_office_id ?? errors.remarks ?? 'Could not release this document.'),
+            onError: (errors) => setReleaseError(errors.file ?? errors.other_action ?? errors.action_type_id ?? errors.to_office_id ?? errors.remarks ?? 'Could not release this document.'),
         });
     };
 
@@ -285,6 +300,8 @@ export default function DocumentsIndex({
         if (!editingRow || editingRow.id == null) {
             return;
         }
+        const fileError = validateDocumentFile(form.file, uploadLimitKb);
+        if (fileError) { setUploadError(fileError); return; }
 
         const data = new FormData();
         Object.entries({ ...form, is_finalized: finalize ? '1' : '0', _method: 'put' }).forEach(([key, value]) => {
@@ -700,7 +717,7 @@ export default function DocumentsIndex({
                                 </div>
                                 <div className="sm:col-span-2">
                                     <p className="text-xs font-semibold uppercase text-[#898984]">File</p>
-                                    {releasingRow.file_url ? <a href={releasingRow.file_url} target="_blank" rel="noreferrer" className="mt-1 inline-block break-all text-sm font-medium text-blue-700 underline">{releasingRow.file_name || 'View attached file'}</a> : <p className="mt-1 text-sm text-slate-700">{releasingRow.file_name || 'No file attached'}</p>}
+                                    {releasingRow.files?.length ? <ul className="mt-1 space-y-1">{releasingRow.files.map((file) => <li key={file.id} className="flex flex-wrap items-baseline gap-x-2 text-sm"><span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium uppercase text-slate-600">{file.type}</span><a href={file.url} target="_blank" rel="noreferrer" className="break-all font-medium text-blue-700 underline">{file.name}</a>{file.uploaded_at && <span className="text-xs text-slate-500">{file.uploaded_at}</span>}</li>)}</ul> : releasingRow.file_url ? <a href={releasingRow.file_url} target="_blank" rel="noreferrer" className="mt-1 inline-block break-all text-sm font-medium text-blue-700 underline">{releasingRow.file_name || 'View attached file'}</a> : <p className="mt-1 text-sm text-slate-700">{releasingRow.file_name || 'No file attached'}</p>}
                                 </div>
                             </section>
 
@@ -732,8 +749,8 @@ export default function DocumentsIndex({
                                 </div>
                                 <div className="sm:col-span-2">
                                     <label htmlFor="release-file" className="mb-1 block text-sm font-medium text-slate-700">Replacement or new version (optional)</label>
-                                    <input id="release-file" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" onChange={(event) => { setReleaseForm({ ...releaseForm, file: event.target.files?.[0] ?? null }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                                    <p className="mt-1 text-xs text-slate-500">PDF, JPG, or PNG. Maximum file size: {uploadLimitKb / 1024} MB.</p>
+                                    <input id="release-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => { setReleaseForm({ ...releaseForm, file: event.target.files?.[0] ?? null }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                                    <p className="mt-1 text-xs text-slate-500">PDF, JPG, PNG, DOC, or DOCX. Maximum file size: {uploadLimitKb / 1024} MB.</p>
                                 </div>
                             </section>
 
@@ -861,7 +878,9 @@ export default function DocumentsIndex({
 
                             {form.document_source === 'upload' && <div>
                                 <label className="mb-1 block text-sm font-medium text-slate-700">File (optional)</label>
-                                <input type="file" onChange={(e) => setForm({ ...form, file: e.target.files?.[0] ?? null })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => { setForm({ ...form, file: e.target.files?.[0] ?? null }); setUploadError(''); }} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                                <p className="mt-1 text-xs text-slate-500">PDF, JPG, PNG, DOC, or DOCX. Maximum file size: {uploadLimitKb / 1024} MB.</p>
+                                {uploadError && <p role="alert" className="mt-1 text-sm text-rose-700">{uploadError}</p>}
                             </div>}
                             <div className="flex flex-wrap gap-5">
                                 <label className="inline-flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={form.urgent} onChange={(e) => setForm({ ...form, urgent: e.target.checked })} /> Mark as urgent</label>
@@ -907,7 +926,7 @@ function DispositionPrintView({ document }: { document: DocumentItem }) {
                 .disposition-fields .field-label { width: 19%; font-size: 7.4pt; font-weight: bold; text-transform: uppercase; }
                 .disposition-fields .field-value { width: 58%; }
                 .disposition-fields .qr-cell { width: 23%; text-align: center; }
-                .disposition-qr { width: .85in; height: .85in; margin: 0 auto 5px; border: 1px dashed #777; display: flex; align-items: center; justify-content: center; color: #555; font-size: 8pt; font-weight: bold; }
+                .disposition-qr { width: .95in; height: .95in; margin: 0 auto 5px; border: 1px dashed #777; display: flex; align-items: center; justify-content: center; color: #555; font-size: 8pt; font-weight: bold; }
                 .disposition-qr-note { font-size: 7pt; line-height: 1.4; overflow-wrap: anywhere; }
                 .disposition-remarks { margin-top: 5px; font-size: 8.5pt; overflow-wrap: anywhere; }
                 .disposition-remarks-heading { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 8px; line-height: 1.4; }
@@ -944,7 +963,7 @@ function DispositionPrintView({ document }: { document: DocumentItem }) {
                             <td className="field-label">TO/FOR:</td>
                             <td className="field-value">{latest?.to_office || 'Not specified'}</td>
                             <td className="qr-cell" rowSpan={6}>
-                                <div className="disposition-qr">QR<br />WIP</div>
+                                <div className="disposition-qr">{document.tracking_url ? <QRCode value={document.tracking_url} size={88} level="M" bgColor="#ffffff" fgColor="#111827" /> : 'No tracking URL'}</div>
                                 <div className="disposition-qr-note"><strong>DOTS No.:</strong><br />{document.tracking_number || 'Not assigned'}</div>
                             </td>
                         </tr>

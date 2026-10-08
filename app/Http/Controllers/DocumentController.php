@@ -23,6 +23,7 @@ use App\Models\UserLegacy;
 use App\Services\DocumentAccess;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -32,7 +33,7 @@ use Inertia\Inertia;
 
 class DocumentController extends Controller
 {
-    private const MAX_DOCUMENT_UPLOAD_KB = 10240;
+    private const MAX_DOCUMENT_UPLOAD_KB = 102400;
     private bool $userRangeResolved = false;
     private ?array $userRangeIdentity = null;
     private ?array $legacyRangeNames = null;
@@ -142,6 +143,7 @@ class DocumentController extends Controller
                 return [
                     'id' => $document->docId,
                     'tracking_number' => $document->trackingNo ?? '',
+                    'tracking_url' => $document->trackingNo ? route('documents.track', ['trackingNumber' => $document->trackingNo]) : null,
                     'title' => $document->title ?? '',
                     'created_at' => $document->dateCreated?->format('F j Y h:i:s A'),
                     'status' => $status,
@@ -202,6 +204,7 @@ class DocumentController extends Controller
                 return [
                     'id' => $document->id,
                     'tracking_number' => $document->tracking_number ?? '',
+                    'tracking_url' => $document->tracking_number ? route('documents.track', ['trackingNumber' => $document->tracking_number]) : null,
                     'title' => $document->title ?? '',
                     'status' => $this->workflowStatus($document->latestTrail?->status ?? $document->status),
                     'office_name' => $document->office?->name ?? '',
@@ -212,6 +215,13 @@ class DocumentController extends Controller
                     'created_by_name' => $document->creator?->name ?? '',
                     'file_name' => $latestFile?->original_name ?? $latestFile?->file_name,
                     'file_url' => $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null,
+                    'files' => $document->files->sortBy('id')->map(fn ($file) => [
+                        'id' => $file->id,
+                        'name' => $file->original_name ?: $file->file_name,
+                        'type' => $file->type ?: 'original',
+                        'url' => Storage::disk('public')->url($file->file_path),
+                        'uploaded_at' => $file->created_at?->toDateTimeString(),
+                    ])->values(),
                     'origin_type' => $document->origin_type ?? '',
                     'last_transaction' => $this->formatTrailTransaction($document->latestTrail),
                     'transactions' => $document->trails->sortByDesc('id')->values()->map(fn (DocumentTrail $trail) => [
@@ -304,7 +314,7 @@ class DocumentController extends Controller
             'urgent' => ['boolean'],
             'notify_by_email' => ['boolean'],
             'is_finalized' => ['required', 'boolean'],
-            'file' => ['nullable', 'file', 'max:'.self::MAX_DOCUMENT_UPLOAD_KB],
+            'file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:'.self::MAX_DOCUMENT_UPLOAD_KB],
         ]);
         $approvedDraft = null;
         if ($validated['approved_draft_id'] ?? null) {
@@ -325,7 +335,8 @@ class DocumentController extends Controller
         $validated = $this->normalizeDocumentTypeAndPurpose($validated);
 
         $document = null;
-        DB::transaction(function () use ($validated, $approvedDraft, &$document) {
+        $initialTrail = null;
+        DB::transaction(function () use ($validated, $approvedDraft, &$document, &$initialTrail) {
             $user = auth()->user();
             $access = app(DocumentAccess::class);
             $officeId = $access->currentOfficeId($user);
@@ -361,7 +372,7 @@ class DocumentController extends Controller
             ]);
 
             if ($validated['is_finalized']) {
-                $document->trails()->create([
+                $initialTrail = $document->trails()->create([
                     'from_office_id' => $officeId,
                     'created_by' => auth()->id(),
                     'status' => 'pending',
@@ -381,13 +392,7 @@ class DocumentController extends Controller
         });
 
         if ($request->hasFile('file')) {
-            $file = $request->file('file');
-            $path = $file->store('documents', 'public');
-            $document->files()->create([
-                'file_name' => basename($path), 'original_name' => $file->getClientOriginalName(),
-                'file_path' => $path, 'mime_type' => $file->getMimeType(), 'size_bytes' => $file->getSize(),
-                'uploaded_by' => auth()->id(),
-            ]);
+            $this->storeDocumentFile($document, $request->file('file'), 'original', $initialTrail);
         } elseif ($approvedDraft) {
             $path = 'documents/'.$document->tracking_number.'.pdf';
             $pdf = Pdf::loadHTML($this->approvedDraftHtml($approvedDraft))->setPaper('letter');
@@ -399,6 +404,8 @@ class DocumentController extends Controller
                 'mime_type' => 'application/pdf',
                 'size_bytes' => Storage::disk('public')->size($path),
                 'uploaded_by' => auth()->id(),
+                'type' => 'original',
+                'document_trail_id' => $initialTrail?->id,
             ]);
         }
 
@@ -421,7 +428,7 @@ class DocumentController extends Controller
             'urgent' => ['boolean'],
             'notify_by_email' => ['boolean'],
             'is_finalized' => ['required', 'boolean'],
-            'file' => ['nullable', 'file', 'max:'.self::MAX_DOCUMENT_UPLOAD_KB],
+            'file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:'.self::MAX_DOCUMENT_UPLOAD_KB],
         ]);
         $validated = $this->normalizeActionTypeDetails($validated);
         $validated = $this->normalizeDocumentTypeAndPurpose($validated);
@@ -445,8 +452,9 @@ class DocumentController extends Controller
             'is_finalized' => $validated['is_finalized'],
         ]);
 
+        $finalizationTrail = null;
         if ($validated['is_finalized']) {
-            $document->trails()->create([
+            $finalizationTrail = $document->trails()->create([
                 'from_office_id' => $document->office_id,
                 'created_by' => auth()->id(),
                 'status' => 'pending',
@@ -455,12 +463,7 @@ class DocumentController extends Controller
         }
 
         if ($file = $request->file('file')) {
-            $path = $file->store('documents', 'public');
-            $document->files()->create([
-                'file_name' => basename($path), 'original_name' => $file->getClientOriginalName(),
-                'file_path' => $path, 'mime_type' => $file->getMimeType(), 'size_bytes' => $file->getSize(),
-                'uploaded_by' => auth()->id(),
-            ]);
+            $this->storeDocumentFile($document, $file, 'version', $finalizationTrail);
         }
 
         return redirect()->route('documents.index')->with('success', 'Document updated successfully.');
@@ -476,6 +479,7 @@ class DocumentController extends Controller
             'other_action' => ['nullable', 'string', 'max:255'],
             'to_office_id' => ['required', 'integer', 'exists:offices,id'],
             'remarks' => ['nullable', 'string', 'max:250'],
+            'file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:'.self::MAX_DOCUMENT_UPLOAD_KB],
         ]);
         $validated = $this->normalizeActionTypeDetails($validated);
         $targetOffice = Office::findOrFail($validated['to_office_id']);
@@ -493,8 +497,8 @@ class DocumentController extends Controller
         $this->authorizeCurrentHolder($document);
         $officeId = app(DocumentAccess::class)->currentOfficeId(auth()->user());
 
-        DB::transaction(function () use ($document, $validated, $officeId) {
-            $document->trails()->create([
+        $trail = DB::transaction(function () use ($document, $validated, $officeId) {
+            $trail = $document->trails()->create([
                 'from_office_id' => $officeId,
                 'to_office_id' => $validated['to_office_id'],
                 'created_by' => auth()->id(),
@@ -503,7 +507,13 @@ class DocumentController extends Controller
                 'remarks' => $validated['remarks'] ?? null,
             ]);
             $document->update(['status' => 'available']);
+
+            return $trail;
         });
+
+        if ($file = $request->file('file')) {
+            $this->storeDocumentFile($document, $file, 'version', $trail);
+        }
 
         return back()->with('success', 'Document released successfully.');
     }
@@ -972,6 +982,31 @@ class DocumentController extends Controller
         }
 
         return User::query()->where('office_id', $office->id)->where('is_active', true)->exists();
+    }
+
+    private function storeDocumentFile(Document $document, UploadedFile $file, string $type, ?DocumentTrail $trail = null): void
+    {
+        $officeName = $document->office?->name ?: 'DOTS';
+        $username = auth()->user()?->username ?: 'unknown-user';
+        $directory = implode('/', [
+            'documents',
+            now()->format('m-Y'),
+            Str::slug($officeName) ?: 'office',
+            Str::slug($username) ?: 'user',
+            now()->format('Ymd_His'),
+        ]);
+        $path = $file->store($directory, 'public');
+
+        $document->files()->create([
+            'document_trail_id' => $trail?->id,
+            'type' => $type,
+            'file_name' => basename($path),
+            'original_name' => $file->getClientOriginalName(),
+            'file_path' => $path,
+            'mime_type' => $file->getMimeType(),
+            'size_bytes' => $file->getSize(),
+            'uploaded_by' => auth()->id(),
+        ]);
     }
 
     private function legacyRangeName(string $value): ?string
