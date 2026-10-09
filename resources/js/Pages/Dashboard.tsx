@@ -136,7 +136,7 @@ export default function Dashboard({
         {
             label: 'Released Documents',
             value: formatNumber(stats.released_documents),
-            detail: 'Currently released from your office',
+            detail: 'Unique documents released by your office',
             icon: Send,
             tone: 'border-emerald-200 bg-emerald-50 text-emerald-900',
             iconTone: 'bg-emerald-100 text-emerald-700',

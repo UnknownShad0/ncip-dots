@@ -79,13 +79,13 @@ class DashboardController extends Controller
                     ->distinct('trackingNo')
                     ->count('trackingNo') : 0),
             'released_documents' => (($officeId || $canViewAllDocuments) ? Document::query()
-                ->whereHas('latestTrail', function ($trail) use ($officeId, $canViewAllDocuments) {
+                ->whereHas('trails', function ($trail) use ($officeId, $canViewAllDocuments) {
                     $trail->whereRaw('LOWER(status) = ?', ['available']);
                     if (!$canViewAllDocuments) $trail->where('from_office_id', $officeId);
                 })
                 ->count() : 0)
                 + (($bureauId || $canViewAllDocuments) ? DocumentTrailLegacy::query()
-                    ->whereIn('docTrailId', $latestLegacyTrails)
+                    ->whereIn('trackingNo', $legacyTrackingNumbers)
                     ->where('status', 'AVAILABLE')
                     ->when(!$canViewAllDocuments, fn ($query) => $query->where('originating', $bureauId))
                     ->distinct('trackingNo')
