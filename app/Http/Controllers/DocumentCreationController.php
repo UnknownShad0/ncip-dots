@@ -9,6 +9,7 @@ use App\Models\DocumentType;
 use App\Models\Office;
 use App\Models\RangeLegacy;
 use App\Models\User;
+use Illuminate\Support\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -19,21 +20,49 @@ class DocumentCreationController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
+        $userOffice = $this->userOffice($user);
+        $canReviewOfficeApprovals = $user->is_active && $user->isAdministrator() && $userOffice !== null;
         $approvedOnly = $request->query('queue') === 'approved';
-        $drafts = DocumentCreationDraft::query()->with(['creator:id,name', 'approver:id,name', 'documentType:id,name', 'events.user:id,name'])
-            ->where(fn ($q) => $q->where('created_by', $user->id)->orWhere('approver_id', $user->id)->orWhere('verified_by', $user->id))
-            ->when($request->query('queue') === 'approval', fn ($q) => $q->where('approver_id', $user->id)->where('status', 'pending_approval'))
+        $draftQuery = DocumentCreationDraft::query()->with([
+            'creator:id,name',
+            'approver:id,name',
+            'approverOffice:id,name',
+            'decisionMaker:id,name',
+            'documentType:id,name',
+            'events.user:id,name',
+        ])->where(function ($query) use ($user, $userOffice, $canReviewOfficeApprovals) {
+            $query->where('created_by', $user->id)
+                ->orWhere('approver_id', $user->id)
+                ->orWhere('verified_by', $user->id);
+            if ($canReviewOfficeApprovals) {
+                $query->orWhere('approver_office_id', $userOffice->id);
+            }
+        });
+
+        $drafts = $draftQuery
+            ->when($request->query('queue') === 'approval', function ($query) use ($user, $userOffice, $canReviewOfficeApprovals) {
+                $query->where('status', 'pending_approval')
+                    ->where(function ($approvalQuery) use ($user, $userOffice, $canReviewOfficeApprovals) {
+                        $approvalQuery->where('approver_id', $user->id);
+                        if ($canReviewOfficeApprovals) {
+                            $approvalQuery->orWhere('approver_office_id', $userOffice->id);
+                        }
+                    });
+            })
             ->when($request->query('queue') === 'submitted', fn ($q) => $q->where('created_by', $user->id)->where('status', 'pending_approval'))
             ->when($request->query('queue') === 'revision', fn ($q) => $q->where('created_by', $user->id)->where('status', 'revision_requested'))
             ->when($approvedOnly, fn ($q) => $q->where('created_by', $user->id)->whereIn('status', ['approved', 'awaiting_verification', 'verified', 'registered']))
             ->latest()->get()
-            ->map(function (DocumentCreationDraft $draft) {
+            ->map(function (DocumentCreationDraft $draft) use ($user, $userOffice, $canReviewOfficeApprovals) {
                 $version = $draft->versions()->where('version_number', $draft->version_number)->first();
                 $draft->setAttribute('current_submission', $version ? [
                     'version_number' => $version->version_number,
                     'content' => $version->content,
                     'submitted_at' => $version->created_at,
                 ] : null);
+                $draft->setAttribute('can_decide', (int) $draft->created_by !== (int) $user->id
+                    && ((int) $draft->approver_id === (int) $user->id
+                        || ($canReviewOfficeApprovals && (int) $draft->approver_office_id === (int) $userOffice->id)));
 
                 return $draft;
             });
@@ -41,7 +70,9 @@ class DocumentCreationController extends Controller
         return Inertia::render('DocumentCreation/Index', [
             'drafts' => $drafts,
             'documentTypes' => $this->documentTypeOptions(),
-            'approvers' => $this->approversInCurrentUserRange($user),
+            'approverOffices' => $this->approverOffices()
+                ->map(fn (Office $office) => ['id' => $office->id, 'name' => $office->name])
+                ->all(),
             'currentUserId' => $user->id,
             'approvedOnly' => $approvedOnly,
         ]);
@@ -69,18 +100,21 @@ class DocumentCreationController extends Controller
     public function submit(Request $request, DocumentCreationDraft $draft)
     {
         abort_unless((int) $draft->created_by === (int) $request->user()->id && in_array($draft->status, ['draft', 'revision_requested'], true), 403);
-        $data = $request->validate(['approver_id' => ['required', 'integer', 'exists:users,id']]);
-        abort_if((int) $data['approver_id'] === (int) $request->user()->id, 422, 'Choose a different approver.');
-        $approver = User::query()->with(['office.range', 'officeByCode.range'])
-            ->whereKey($data['approver_id'])
-            ->where('is_active', true)
-            ->first();
-        abort_unless($approver, 422, 'Choose an active approver.');
-        $currentRange = $this->userRangeIdentity($request->user());
-        abort_unless($currentRange !== null && $this->userRangeIdentity($approver) === $currentRange, 422, 'Choose an approver in your office range.');
+        $data = $request->validate(['approver_office_id' => ['required', 'integer', 'exists:offices,id']]);
+        $approverOffice = $this->approverOffices()->first(fn (Office $office) => (int) $office->id === (int) $data['approver_office_id']);
+        abort_unless($approverOffice, 422, 'Choose an office with an active admin.');
         $number = $draft->version_number + 1;
         $draft->versions()->create(['version_number' => $number, 'content' => $draft->content, 'created_by' => $request->user()->id]);
-        $draft->update(['approver_id' => $data['approver_id'], 'version_number' => $number, 'status' => 'pending_approval', 'submitted_at' => now(), 'decision_at' => null, 'decision_remarks' => null]);
+        $draft->update([
+            'approver_id' => null,
+            'approver_office_id' => $approverOffice->id,
+            'decided_by' => null,
+            'version_number' => $number,
+            'status' => 'pending_approval',
+            'submitted_at' => now(),
+            'decision_at' => null,
+            'decision_remarks' => null,
+        ]);
         $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Submitted for approval', 'metadata' => ['version' => $number]]);
 
         return back()->with('success', 'PDF version submitted for approval.');
@@ -88,12 +122,18 @@ class DocumentCreationController extends Controller
 
     public function decide(Request $request, DocumentCreationDraft $draft)
     {
-        abort_unless((int) $draft->approver_id === (int) $request->user()->id && $draft->status === 'pending_approval', 403);
+        $user = $request->user();
+        $legacyApprover = (int) $draft->approver_id === (int) $user->id;
+        $officeApprover = $draft->approver_office_id !== null
+            && $this->userCanApproveForOffice($user, (int) $draft->approver_office_id);
+        abort_unless((int) $draft->created_by !== (int) $user->id
+            && ($legacyApprover || $officeApprover)
+            && $draft->status === 'pending_approval', 403);
         $data = $request->validate(['decision' => ['required', 'in:approved,revision_requested,rejected'], 'version_number' => ['required', 'integer'], 'remarks' => ['nullable', 'string', 'max:4000']]);
         abort_unless((int) $data['version_number'] === (int) $draft->version_number, 409, 'This submission has changed. Refresh and review the latest version.');
         $nextStatus = $data['decision'];
-        $draft->update(['status' => $nextStatus, 'decision_at' => now(), 'decision_remarks' => $data['remarks'] ?? null]);
-        $draft->events()->create(['user_id' => $request->user()->id, 'event' => ucfirst(str_replace('_', ' ', $data['decision'])), 'remarks' => $data['remarks'] ?? null, 'metadata' => ['version' => $draft->version_number]]);
+        $draft->update(['status' => $nextStatus, 'decided_by' => $user->id, 'decision_at' => now(), 'decision_remarks' => $data['remarks'] ?? null]);
+        $draft->events()->create(['user_id' => $user->id, 'event' => ucfirst(str_replace('_', ' ', $data['decision'])), 'remarks' => $data['remarks'] ?? null, 'metadata' => ['version' => $draft->version_number]]);
 
         return back()->with('success', 'Approval decision recorded.');
     }
@@ -161,23 +201,56 @@ class DocumentCreationController extends Controller
         return in_array((int) $request->user()->id, [(int) $draft->created_by, (int) $draft->approver_id, (int) $draft->verified_by], true);
     }
 
-    private function approversInCurrentUserRange(User $user): array
+    private function approverOffices(): Collection
     {
-        $range = $this->userRangeIdentity($user);
-        if ($range === null) {
-            return [];
+        return User::query()
+            ->with(['office', 'officeByCode'])
+            ->where('is_active', true)
+            ->get()
+            ->filter(fn (User $approver) => $approver->isAdministrator())
+            ->map(fn (User $approver) => $this->userOffice($approver))
+            ->filter()
+            ->unique('id')
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
+    }
+
+    private function userOffice(User $user): ?Office
+    {
+        $office = $user->office ?: ($user->office_code ? $user->officeByCode : null);
+        if ($office) {
+            return $office;
         }
 
-        return User::query()
-            ->with(['office.range', 'officeByCode.range'])
-            ->where('is_active', true)
-            ->where('id', '<>', $user->id)
-            ->orderBy('name')
-            ->get()
-            ->filter(fn (User $approver) => $this->userRangeIdentity($approver) === $range)
-            ->map(fn (User $approver) => ['id' => $approver->id, 'name' => $approver->name, 'role' => $approver->role])
-            ->values()
-            ->all();
+        if (! $user->legacy_office_id) {
+            return null;
+        }
+
+        $bureau = BureauLegacy::query()->whereKey($user->legacy_office_id)->first(['officeCode', 'longName']);
+        if (! $bureau) {
+            return null;
+        }
+
+        $officeQuery = Office::query();
+        if (filled($bureau->officeCode)) {
+            $officeQuery->where('code', $bureau->officeCode);
+        }
+        if (filled($bureau->longName)) {
+            if (filled($bureau->officeCode)) {
+                $officeQuery->orWhere('name', $bureau->longName);
+            } else {
+                $officeQuery->where('name', $bureau->longName);
+            }
+        }
+
+        return $officeQuery->first();
+    }
+
+    private function userCanApproveForOffice(User $user, int $officeId): bool
+    {
+        return $user->is_active
+            && $user->isAdministrator()
+            && (int) $this->userOffice($user)?->id === $officeId;
     }
 
     private function userRangeIdentity(User $user): ?array
