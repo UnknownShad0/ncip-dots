@@ -168,7 +168,7 @@ class UserAccountController extends Controller
                 'email' => ['required', 'email', 'max:255', 'unique:users,email'],
                 'office_code' => ['required', 'string', 'max:100'],
                 'office_table_id' => ['required', 'string'],
-                'employee_role' => ['required', Rule::in(['super admin', 'executive', 'admin staff'])],
+                'employee_role' => ['required', Rule::in(['Super Admin', 'Executive', 'Admin Staff'])],
             ]);
             $lookup = $request->session()->get('hris_employee_lookup');
             if (! $lookup || ($lookup['employee']['employee_code'] ?? null) !== $validated['employee_code']) {
@@ -269,7 +269,7 @@ class UserAccountController extends Controller
             'firstname' => ['required', 'string', 'max:100'],
             'lastname' => ['required', 'string', 'max:100'],
             'role_id' => [Rule::requiredIf(! $user->employee_code), 'nullable', 'integer', Rule::in($this->roleIds())],
-            'employee_role' => [Rule::requiredIf((bool) $user->employee_code), 'nullable', Rule::in(['super admin', 'executive', 'admin staff'])],
+            'employee_role' => [Rule::requiredIf((bool) $user->employee_code), 'nullable', Rule::in(['Super Admin', 'Executive', 'Admin Staff'])],
             'officeId' => [Rule::requiredIf(! $user->employee_code || $user->legacy_office_id !== null), 'nullable', 'integer', Rule::exists('legacy.bureau', 'bureauId')->whereIn('status', self::ACTIVE_OFFICE_STATUSES)],
             'status' => ['required', Rule::in(['1', '0'])],
             'isLocked' => ['required', Rule::in(['Y', 'N'])],

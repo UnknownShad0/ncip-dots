@@ -53,6 +53,7 @@ class DocumentController extends Controller
         $legacyTrailRows = collect();
         $legacyTransactions = collect();
         $legacyTransactionUsers = collect();
+        $legacyShortTransactionUsers = collect();
         $user = auth()->user();
         $access = app(DocumentAccess::class);
 
@@ -100,22 +101,32 @@ class DocumentController extends Controller
             ->unique('trackingNo')
             ->keyBy('trackingNo');
 
-        $legacyTransactionUsers = UserLegacy::query()
+        $legacyUsers = UserLegacy::query()
             ->whereIn('userUuid', $legacyTrailRows->pluck('createdBy')->merge($legacyDocuments->pluck('createdBy'))->filter()->unique())
-            ->get(['userUuid', 'username', 'firstname', 'middlename', 'lastname', 'extensionname'])
-            ->mapWithKeys(function (UserLegacy $user) {
-                $name = collect([$user->firstname, $user->middlename, $user->lastname, $user->extensionname])
-                    ->filter(fn ($part) => filled($part))
-                    ->implode(' ');
+            ->get(['userUuid', 'username', 'firstname', 'middlename', 'lastname', 'extensionname']);
+        $legacyTransactionUsers = $legacyUsers->mapWithKeys(function (UserLegacy $user) {
+            $name = collect([$user->firstname, $user->middlename, $user->lastname, $user->extensionname])
+                ->filter(fn ($part) => filled($part))
+                ->implode(' ');
 
-                return [$user->userUuid => $name ?: ($user->username ?? '')];
-            });
+            return [$user->userUuid => $name ?: ($user->username ?? '')];
+        });
+        $legacyShortTransactionUsers = $legacyUsers->mapWithKeys(function (UserLegacy $user) {
+            $name = trim(
+                (filled($user->firstname) ? mb_substr(trim($user->firstname), 0, 1).'. ' : '').
+                ($user->lastname ?? '')
+            );
+
+            return [$user->userUuid => $name ?: ($user->username ?? '')];
+        });
         } catch (\Throwable $exception) {
             // The current Documents module must remain usable while the optional
             // legacy database is offline or its credentials are unavailable.
             report($exception);
             $legacyDocuments = collect();
             $legacyTrailRows = collect();
+            $legacyTransactionUsers = collect();
+            $legacyShortTransactionUsers = collect();
         }
 
         $legacyDocumentTypes = $latestOnly ? collect() : LegacyDocumentTypeMap::typesByLegacyId();
@@ -126,7 +137,7 @@ class DocumentController extends Controller
             ->keyBy('bureauId');
         $legacyTransactionsByDocument = $legacyTrailRows->groupBy('trackingNo');
         $legacyDocuments = $legacyDocuments
-            ->map(function ($document) use ($legacyTransactions, $legacyTransactionUsers, $legacyDocumentTypes, $legacyTransactionsByDocument, $legacyBureaus) {
+            ->map(function ($document) use ($legacyTransactions, $legacyTransactionUsers, $legacyShortTransactionUsers, $legacyDocumentTypes, $legacyTransactionsByDocument, $legacyBureaus) {
                 $transaction = $legacyTransactions->get($document->trackingNo);
                 $originatingBureauId = $legacyTransactionsByDocument->get($document->trackingNo, collect())->last()?->originating;
                 $typeName = $legacyDocumentTypes->get($document->dtId)?->name ?? '';
@@ -144,10 +155,12 @@ class DocumentController extends Controller
                     'created_at' => $document->dateCreated?->format('F j Y h:i:s A'),
                     'status' => $status,
                     'office_name' => $legacyBureaus->get($originatingBureauId)?->longName ?? $legacyBureaus->get($originatingBureauId)?->shortName ?? '',
+                    'office_short_name' => $legacyBureaus->get($originatingBureauId)?->shortName,
                     'document_type' => $typeName,
                     'other_document_type' => $document->otherDtype ?? '',
                     'purpose_type' => $document->purpose ?? '',
                     'created_by_name' => $legacyTransactionUsers->get($document->createdBy) ?? $document->createdBy,
+                    'created_by_short_name' => $legacyShortTransactionUsers->get($document->createdBy) ?? $document->createdBy,
                     'urgent' => $document->urgent ?? null,
                     'origin_type' => $document->originType ?? '',
                     'last_transaction' => $this->formatLastTransaction(
@@ -164,6 +177,7 @@ class DocumentController extends Controller
                         'to_office' => $legacyBureaus->get($trail->receiving)?->shortName ?? $legacyBureaus->get($trail->receiving)?->longName,
                         'holder' => $legacyBureaus->get($trail->holder)?->shortName ?? $legacyBureaus->get($trail->holder)?->longName,
                         'created_by' => $legacyTransactionUsers->get($trail->createdBy) ?? $trail->createdBy,
+                        'created_by_short_name' => $legacyShortTransactionUsers->get($trail->createdBy) ?? $trail->createdBy,
                         'created_at' => $trail->dateCreated?->format('F j Y h:i:s A'),
                     ])->values(),
                     'remarks' => $document->remarks ?? '',
@@ -210,6 +224,10 @@ class DocumentController extends Controller
                     'purpose_type' => $document->purposeType?->name ?? '',
                     'other_purpose' => $document->other_purpose ?? '',
                     'created_by_name' => $document->creator?->name ?? '',
+                    'created_by_short_name' => trim(
+                        (filled($document->creator?->firstname) ? mb_substr(trim($document->creator->firstname), 0, 1).'. ' : '').
+                        ($document->creator?->lastname ?? '')
+                    ) ?: $document->creator?->name,
                     'file_name' => $latestFile?->original_name ?? $latestFile?->file_name,
                     'file_url' => $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null,
                     'files' => $document->files->sortBy('id')->map(fn ($file) => [

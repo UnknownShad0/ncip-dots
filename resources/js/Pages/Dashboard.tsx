@@ -22,7 +22,7 @@ type RecentDocument = {
     tracking_number?: string;
     status?: string;
     created_at?: string;
-    office?: { name?: string } | null;
+    office?: { name?: string; short_name?: string | null } | null;
 };
 
 type IncomingDocument = {
@@ -70,7 +70,7 @@ export default function Dashboard({
     const [crudAlert, setCrudAlert] = useState<CrudAlert | null>(null);
     const documents = useMemo(() => recentDocuments.filter((document) => {
         const search = query.trim().toLowerCase();
-        return !search || [document.title, document.tracking_number, document.office?.name].some((value) => value?.toLowerCase().includes(search));
+        return !search || [document.title, document.tracking_number, document.office?.short_name, document.office?.name].some((value) => value?.toLowerCase().includes(search));
     }), [recentDocuments, query]);
     const visibleIncoming = useMemo(() => {
         const search = incomingQuery.trim().toLowerCase();
@@ -259,7 +259,7 @@ export default function Dashboard({
                                 <li key={document.id ?? `${document.title ?? 'document'}-${index}`} className="flex flex-col gap-1 border-b border-[#e2e2df] py-3 last:border-0 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
                                     <div className="min-w-0">
                                         <p className="truncate text-[16px] font-medium">{document.title || document.tracking_number || 'Document activity'}</p>
-                                        <p className="mt-0.5 text-sm text-[#898984]">{[document.tracking_number, document.office?.name, document.status].filter(Boolean).join(' · ') || 'Document updated'}</p>
+                                        <p className="mt-0.5 text-sm text-[#898984]">{[document.tracking_number, document.office?.short_name || document.office?.name, document.status].filter(Boolean).join(' · ') || 'Document updated'}</p>
                                     </div>
                                     <time className="shrink-0 text-sm text-[#898984]">{relativeTime(document.created_at, index)}</time>
                                 </li>

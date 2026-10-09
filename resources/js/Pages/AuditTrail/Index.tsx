@@ -21,7 +21,7 @@ export default function AuditTrailIndex({ trail = [] }: { trail?: any[] }) {
                                     <div>
                                         <div className="font-medium text-slate-800">{entry.action}</div>
                                         <div className="text-sm text-slate-500">
-                                            {entry.user ? entry.user.name : 'System'}
+                                            {entry.user ? (entry.user.short_name || entry.user.name) : 'System'}
                                         </div>
                                     </div>
                                     <div className="text-xs text-slate-400">

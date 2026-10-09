@@ -18,6 +18,7 @@ type DocumentItem = {
     purpose_type?: string;
     documentType?: { name?: string } | null;
     created_by_name?: string;
+    created_by_short_name?: string | null;
     file_name?: string;
     file_url?: string;
     files?: Array<{ id: number; name: string; type: 'original' | 'version' | string; url: string; uploaded_at?: string | null }>;
@@ -40,6 +41,7 @@ type DocumentItem = {
     }>;
     office?: {
         name?: string;
+        short_name?: string | null;
     } | null;
     remarks?: string;
     source?: string;
@@ -683,7 +685,7 @@ export default function DocumentsIndex({
                                 <div><p className="text-xs font-semibold uppercase text-[#898984]">Title</p><p className="mt-1 break-words text-sm font-medium text-slate-800">{viewingRow.title || 'Untitled'}</p></div>
                                 <div><p className="text-xs font-semibold uppercase text-[#898984]">Document type</p><p className="mt-1 text-sm font-medium text-slate-800">{getDocumentTypeName(viewingRow) || '—'}</p></div>
                                 <div><p className="text-xs font-semibold uppercase text-[#898984]">Origin</p><p className="mt-1 text-sm text-slate-700">{viewingRow.origin_type || '—'}</p></div>
-                                <div><p className="text-xs font-semibold uppercase text-[#898984]">Office</p><p className="mt-1 text-sm text-slate-700">{viewingRow.office_name || viewingRow.office?.name || '—'}</p></div>
+                                <div><p className="text-xs font-semibold uppercase text-[#898984]">Office</p><p className="mt-1 text-sm text-slate-700">{viewingRow.office_short_name || viewingRow.office?.short_name || viewingRow.office_name || viewingRow.office?.name || '—'}</p></div>
                                 <div><p className="text-xs font-semibold uppercase text-[#898984]">Status</p><span className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(viewingRow.status)}`}>{(viewingRow.status || 'draft').toUpperCase()}</span></div>
                                 <div className="sm:col-span-2 lg:col-span-3"><p className="text-xs font-semibold uppercase text-[#898984]">Remarks</p><p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-700">{viewingRow.remarks || '—'}</p></div>
                             </section>
@@ -693,7 +695,7 @@ export default function DocumentsIndex({
                                     <div><h3 id="transaction-history-title" className="font-semibold text-[#171717]">Transaction history</h3><p className="mt-0.5 text-sm text-[#73736e]">Document activity in workflow order.</p></div>
                                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{viewingRow.transactions?.length ?? 0} transactions</span>
                                 </div>
-                                {viewingRow.transactions?.length ? <ol className="space-y-3 border-l-2 border-slate-200 pl-4">{viewingRow.transactions.map((transaction, index) => <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="relative rounded-xl border border-[#e2e2df] bg-[#fafaf8] p-3 before:absolute before:-left-[22px] before:top-4 before:h-2.5 before:w-2.5 before:rounded-full before:bg-sky-500"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-slate-800">{transaction.action || transaction.status || 'Transaction'}</span><span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium uppercase text-slate-600">{transaction.status || '—'}</span></div><p className="mt-1 text-sm text-slate-600">{[transaction.from_office, transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder ? `Held by ${transaction.holder}` : 'Office details unavailable')}</p><p className="mt-1 text-xs text-slate-500">{[transaction.created_by, transaction.created_at].filter(Boolean).join(' · ') || 'Date and user unavailable'}</p></li>)}</ol> : <p className="rounded-xl border border-dashed border-[#deded9] px-4 py-8 text-center text-sm text-[#73736e]">No transactions recorded.</p>}
+                                {viewingRow.transactions?.length ? <ol className="space-y-3 border-l-2 border-slate-200 pl-4">{viewingRow.transactions.map((transaction, index) => <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="relative rounded-xl border border-[#e2e2df] bg-[#fafaf8] p-3 before:absolute before:-left-[22px] before:top-4 before:h-2.5 before:w-2.5 before:rounded-full before:bg-sky-500"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-slate-800">{transaction.action || transaction.status || 'Transaction'}</span><span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium uppercase text-slate-600">{transaction.status || '—'}</span></div><p className="mt-1 text-sm text-slate-600">{[transaction.from_office_short_name || transaction.from_office, transaction.to_office_short_name || transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder_short_name || transaction.holder ? `Held by ${transaction.holder_short_name || transaction.holder}` : 'Office details unavailable')}</p><p className="mt-1 text-xs text-slate-500">{[transaction.created_by_short_name || transaction.created_by, transaction.created_at].filter(Boolean).join(' · ') || 'Date and user unavailable'}</p></li>)}</ol> : <p className="rounded-xl border border-dashed border-[#deded9] px-4 py-8 text-center text-sm text-[#73736e]">No transactions recorded.</p>}
                         </section>
                         </div>
                     </section>
@@ -716,7 +718,7 @@ export default function DocumentsIndex({
                                 <ReadOnlyDetail label="Title" value={releasingRow.title} />
                                 <ReadOnlyDetail label="Type" value={getDocumentTypeName(releasingRow)} />
                                 <ReadOnlyDetail label="Purpose" value={getPurposeTypeName(releasingRow)} />
-                                <ReadOnlyDetail label="Created by" value={releasingRow.created_by_name} />
+                                <ReadOnlyDetail label="Created by" value={releasingRow.created_by_short_name || releasingRow.created_by_name} />
                                 <ReadOnlyDetail label="Date created" value={releasingRow.created_at} />
                                 <div className="sm:col-span-2">
                                     <p className="text-xs font-semibold uppercase text-[#898984]">Remarks</p>

@@ -30,6 +30,26 @@ class DocumentCreationOfficeApprovalTest extends TestCase
             ->where('approverOffices.0.name', 'Regional Office'));
     }
 
+    public function test_document_creation_page_exposes_short_names_for_users_and_offices(): void
+    {
+        $office = $this->office('Regional Office');
+        $office->update(['short_name' => 'Regional']);
+        $creator = $this->user($office, 'Encoder', 14);
+        $creator->update(['firstname' => 'Alexandra', 'lastname' => 'Molina']);
+        $this->user($office, 'Admin Staff', 3);
+        $draft = $this->draft($creator);
+        $draft->events()->create(['user_id' => $creator->id, 'event' => 'Draft created']);
+
+        $this->actingAs($creator)->get('/document-creation')->assertInertia(fn (Assert $page) => $page
+            ->where('auth.user.short_name', 'A. Molina')
+            ->where('auth.user.office_short_name', 'Regional')
+            ->where('auth.user.office_display_name', 'Regional')
+            ->where('approverOffices.0.short_name', 'Regional')
+            ->where('drafts.0.creator.short_name', 'A. Molina')
+            ->where('drafts.0.events.0.user.short_name', 'A. Molina')
+            ->where('drafts.0.events.0.user.office_short_name', 'Regional'));
+    }
+
     public function test_any_active_admin_in_the_assigned_office_can_decide_and_other_offices_cannot(): void
     {
         $creatorOffice = $this->office('Creator Office');

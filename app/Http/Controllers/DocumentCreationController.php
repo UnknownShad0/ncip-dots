@@ -24,12 +24,14 @@ class DocumentCreationController extends Controller
         $canReviewOfficeApprovals = $user->is_active && $user->isAdministrator() && $userOffice !== null;
         $approvedOnly = $request->query('queue') === 'approved';
         $draftQuery = DocumentCreationDraft::query()->with([
-            'creator:id,name',
-            'approver:id,name',
-            'approverOffice:id,name',
-            'decisionMaker:id,name',
+            'creator:id,name,firstname,lastname',
+            'approver:id,name,firstname,lastname',
+            'approverOffice:id,name,short_name',
+            'decisionMaker:id,name,firstname,lastname',
             'documentType:id,name',
-            'events.user:id,name',
+            'events.user:id,name,firstname,lastname,office_id,office_code,legacy_office_id',
+            'events.user.office:id,name,short_name',
+            'events.user.officeByCode:id,name,short_name',
         ])->where(function ($query) use ($user, $userOffice, $canReviewOfficeApprovals) {
             $query->where('created_by', $user->id)
                 ->orWhere('approver_id', $user->id)
@@ -63,6 +65,17 @@ class DocumentCreationController extends Controller
                 $draft->setAttribute('can_decide', (int) $draft->created_by !== (int) $user->id
                     && ((int) $draft->approver_id === (int) $user->id
                         || ($canReviewOfficeApprovals && (int) $draft->approver_office_id === (int) $userOffice->id)));
+                foreach (['creator', 'approver', 'decisionMaker'] as $relation) {
+                    if ($draft->{$relation}) {
+                        $draft->{$relation}->setAttribute('short_name', $this->shortUserName($draft->{$relation}));
+                    }
+                }
+                $draft->events->each(function ($event) {
+                    if ($event->user) {
+                        $event->user->setAttribute('short_name', $this->shortUserName($event->user));
+                        $event->user->setAttribute('office_short_name', $this->userOffice($event->user)?->short_name);
+                    }
+                });
 
                 return $draft;
             });
@@ -71,7 +84,7 @@ class DocumentCreationController extends Controller
             'drafts' => $drafts,
             'documentTypes' => $this->documentTypeOptions(),
             'approverOffices' => $this->approverOffices()
-                ->map(fn (Office $office) => ['id' => $office->id, 'name' => $office->name])
+                ->map(fn (Office $office) => ['id' => $office->id, 'name' => $office->name, 'short_name' => $office->short_name])
                 ->all(),
             'currentUserId' => $user->id,
             'approvedOnly' => $approvedOnly,
@@ -200,6 +213,14 @@ class DocumentCreationController extends Controller
     private function canAccess(DocumentCreationDraft $draft, Request $request): bool
     {
         return in_array((int) $request->user()->id, [(int) $draft->created_by, (int) $draft->approver_id, (int) $draft->verified_by], true);
+    }
+
+    private function shortUserName(User $user): string
+    {
+        return trim(
+            (filled($user->firstname) ? mb_substr(trim($user->firstname), 0, 1).'. ' : '').
+            ($user->lastname ?? '')
+        ) ?: $user->name;
     }
 
     private function approverOffices(): Collection
