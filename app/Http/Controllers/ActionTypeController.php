@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActionType;
-use App\Models\ActionTypeLegacy;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -11,23 +10,6 @@ class ActionTypeController extends Controller
 {
     public function index()
     {
-        $legacyActionTypes = ActionTypeLegacy::query()
-            ->select(['dtId', 'name', 'description', 'status'])
-            ->orderBy('name')
-            ->get()
-            ->map(function ($actionType) {
-                $status = strtolower((string) ($actionType->status ?? 'inactive'));
-
-                return [
-                    'id' => $actionType->dtId ?? $actionType->id ?? null,
-                    'name' => $actionType->name,
-                    'code' => '',
-                    'description' => $actionType->description ?? '',
-                    'is_active' => in_array($status, ['1', 'active', 'enabled', 'yes'], true) ? 1 : 0,
-                    'source' => 'Old DB',
-                ];
-            });
-
         $newActionTypes = ActionType::query()
             ->select(['id', 'name', 'code', 'description', 'is_active'])
             ->orderBy('name')
@@ -44,10 +26,7 @@ class ActionTypeController extends Controller
             });
 
         return Inertia::render('ActionTypes/Index', [
-            'actionTypes' => [
-                ...$legacyActionTypes->toArray(),
-                ...$newActionTypes->toArray(),
-            ],
+            'actionTypes' => $newActionTypes->toArray(),
         ]);
     }
 

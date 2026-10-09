@@ -2,16 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BureauLegacy;
 use App\Models\Document;
 use App\Models\DocumentCreationDraft;
 use App\Models\DocumentType;
-use App\Models\DocumentTypeLegacy;
-use App\Models\BureauLegacy;
 use App\Models\Office;
 use App\Models\RangeLegacy;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 class DocumentCreationController extends Controller
@@ -49,20 +49,20 @@ class DocumentCreationController extends Controller
 
     public function store(Request $request)
     {
-        $this->resolveDocumentTypeSelection($request);
         $data = $this->validateDraft($request);
         $draft = DocumentCreationDraft::create([...$data, 'created_by' => $request->user()->id, 'status' => 'draft']);
         $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Draft created']);
+
         return back()->with('success', 'Draft saved.');
     }
 
     public function update(Request $request, DocumentCreationDraft $draft)
     {
         abort_unless((int) $draft->created_by === (int) $request->user()->id && in_array($draft->status, ['draft', 'revision_requested'], true), 403);
-        $this->resolveDocumentTypeSelection($request);
         $data = $this->validateDraft($request);
         $draft->update([...$data, 'status' => 'draft']);
         $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Draft updated']);
+
         return back()->with('success', 'Draft updated.');
     }
 
@@ -82,6 +82,7 @@ class DocumentCreationController extends Controller
         $draft->versions()->create(['version_number' => $number, 'content' => $draft->content, 'created_by' => $request->user()->id]);
         $draft->update(['approver_id' => $data['approver_id'], 'version_number' => $number, 'status' => 'pending_approval', 'submitted_at' => now(), 'decision_at' => null, 'decision_remarks' => null]);
         $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Submitted for approval', 'metadata' => ['version' => $number]]);
+
         return back()->with('success', 'PDF version submitted for approval.');
     }
 
@@ -93,18 +94,19 @@ class DocumentCreationController extends Controller
         $nextStatus = $data['decision'];
         $draft->update(['status' => $nextStatus, 'decision_at' => now(), 'decision_remarks' => $data['remarks'] ?? null]);
         $draft->events()->create(['user_id' => $request->user()->id, 'event' => ucfirst(str_replace('_', ' ', $data['decision'])), 'remarks' => $data['remarks'] ?? null, 'metadata' => ['version' => $draft->version_number]]);
+
         return back()->with('success', 'Approval decision recorded.');
     }
 
     public function register(Request $request, DocumentCreationDraft $draft)
     {
         abort_unless((int) $draft->created_by === (int) $request->user()->id, 403, 'Only the document creator can register an approved document.');
-        abort_unless(in_array($draft->status, ['approved', 'awaiting_verification', 'verified'], true) && !$draft->official_document_id, 403);
+        abort_unless(in_array($draft->status, ['approved', 'awaiting_verification', 'verified'], true) && ! $draft->official_document_id, 403);
         $officeId = $request->user()->office_id;
         abort_unless($officeId, 422, 'Assign your account to an office before registering this document.');
         $document = DB::transaction(function () use ($request, $draft, $officeId) {
             $document = Document::create([
-                'title' => $draft->title, 'tracking_number' => 'draft-'.\Illuminate\Support\Str::uuid(),
+                'title' => $draft->title, 'tracking_number' => 'draft-'.Str::uuid(),
                 'document_type_id' => $draft->document_type_id, 'office_id' => $officeId,
                 'created_by' => $draft->created_by, 'status' => 'pending', 'is_finalized' => true,
                 'remarks' => 'Created through Document Creation workflow.',
@@ -115,8 +117,10 @@ class DocumentCreationController extends Controller
             $document->trails()->create(['from_office_id' => $officeId, 'created_by' => $request->user()->id, 'status' => 'pending', 'action' => 'Registered from Document Creation']);
             $draft->update(['official_document_id' => $document->id, 'status' => 'registered']);
             $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Registered in DOTS', 'metadata' => ['document_id' => $document->id]]);
+
             return $document;
         });
+
         return back()->with('success', 'Registered as '.$document->tracking_number.'.');
     }
 
@@ -133,6 +137,7 @@ class DocumentCreationController extends Controller
         ]);
         abort_unless(DocumentType::query()->whereKey($data['document_type_id'])->where('is_active', true)->exists(), 422, 'Choose an active document type.');
         $data['content']['cc'] = array_values(array_filter($data['content']['cc'] ?? []));
+
         return $data;
     }
 
@@ -145,47 +150,10 @@ class DocumentCreationController extends Controller
                 'id' => (string) $type->id,
                 'name' => $type->name,
                 'source' => 'New DB',
-                'disabled' => !(bool) $type->is_active,
+                'disabled' => ! (bool) $type->is_active,
             ]);
-
-        try {
-            $legacyTypes = DocumentTypeLegacy::query()->orderBy('name')->get(['dtId', 'name', 'status']);
-        } catch (\Throwable $exception) {
-            report($exception);
-            $legacyTypes = collect();
-        }
-
-        $names = $options->map(fn (array $option) => mb_strtolower(trim($option['name'])))->all();
-        foreach ($legacyTypes as $type) {
-            $name = trim((string) $type->name);
-            if ($name === '' || in_array(mb_strtolower($name), $names, true)) {
-                continue;
-            }
-
-            $status = strtolower(trim((string) $type->status));
-            $options->push([
-                'id' => 'legacy:'.rawurlencode($name),
-                'name' => $name,
-                'source' => 'Old DB',
-                'disabled' => !in_array($status, ['1', 'active', 'enabled', 'yes', 'y'], true),
-            ]);
-            $names[] = mb_strtolower($name);
-        }
 
         return $options->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)->values()->all();
-    }
-
-    private function resolveDocumentTypeSelection(Request $request): void
-    {
-        $value = (string) $request->input('document_type_id');
-        if (str_starts_with($value, 'legacy:')) {
-            $name = rawurldecode(substr($value, 7));
-            $legacyType = DocumentTypeLegacy::query()->where('name', $name)->first();
-            abort_unless($legacyType, 422, 'The selected document type is no longer available.');
-            $status = strtolower(trim((string) $legacyType->status));
-            abort_unless(in_array($status, ['1', 'active', 'enabled', 'yes', 'y'], true), 422, 'Choose an active document type.');
-            $request->merge(['document_type_id' => DocumentType::query()->firstOrCreate(['name' => $legacyType->name])->id]);
-        }
     }
 
     private function canAccess(DocumentCreationDraft $draft, Request $request): bool

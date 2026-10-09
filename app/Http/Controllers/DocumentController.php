@@ -9,14 +9,12 @@ use App\Models\DocumentLegacy;
 use App\Models\DocumentTrail;
 use App\Models\DocumentTrailLegacy;
 use App\Models\DocumentType;
+use App\Support\LegacyDocumentTypeMap;
 use App\Models\ActionType;
 use App\Models\PurposeType;
 use App\Models\Office;
 use App\Models\Range;
 use App\Models\RangeLegacy;
-use App\Models\DocumentTypeLegacy;
-use App\Models\ActionTypeLegacy;
-use App\Models\PurposeTypeLegacy;
 use App\Models\BureauLegacy;
 use App\Models\User;
 use App\Models\UserLegacy;
@@ -119,10 +117,7 @@ class DocumentController extends Controller
             $legacyTrailRows = collect();
         }
 
-        $legacyDocumentTypes = $latestOnly ? collect() : DocumentTypeLegacy::query()
-            ->whereIn('dtId', $legacyDocuments->pluck('dtId')->filter()->unique())
-            ->get(['dtId', 'name'])
-            ->keyBy('dtId');
+        $legacyDocumentTypes = $latestOnly ? collect() : LegacyDocumentTypeMap::typesByLegacyId();
 
         $legacyBureaus = $latestOnly ? collect() : BureauLegacy::query()
             ->whereIn('bureauId', $legacyTrailRows->flatMap(fn ($trail) => [$trail->originating, $trail->receiving, $trail->holder])->filter()->unique())
@@ -705,18 +700,15 @@ class DocumentController extends Controller
                 ])
                 ->values()
                 ->all(),
-            'documentTypes' => $this->mergeLibraryOptions(
-                DocumentType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
-                $this->legacyRows(fn () => DocumentTypeLegacy::query()->whereIn('status', ['active', 'Active', 'enabled', 'Enabled', '1', 'Y'])->orderBy('name')->get(['name']))
-            ),
-            'actionTypes' => $this->mergeLibraryOptions(
-                ActionType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
-                $this->legacyRows(fn () => ActionTypeLegacy::query()->whereIn('status', ['active', 'Active', 'enabled', 'Enabled', '1', 'Y'])->orderBy('name')->get(['name']))
-            ),
-            'purposeTypes' => $this->mergeLibraryOptions(
-                PurposeType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
-                $this->legacyRows(fn () => PurposeTypeLegacy::query()->whereIn('status', ['active', 'Active', 'enabled', 'Enabled', '1', 'Y'])->orderBy('name')->get(['name']))
-            ),
+            'documentTypes' => DocumentType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name'])
+                ->map(fn ($type) => ['id' => (string) $type->id, 'name' => $type->name, 'source' => 'New DB'])
+                ->all(),
+            'actionTypes' => ActionType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name'])
+                ->map(fn ($type) => ['id' => (string) $type->id, 'name' => $type->name, 'source' => 'New DB'])
+                ->all(),
+            'purposeTypes' => PurposeType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name'])
+                ->map(fn ($type) => ['id' => (string) $type->id, 'name' => $type->name, 'source' => 'New DB'])
+                ->all(),
             'offices' => Office::query()
                 ->with('range:id,name')
                 ->orderBy('name')
@@ -830,22 +822,6 @@ class DocumentController extends Controller
             'terminal', 'archived' => 'archived',
             default => strtolower(trim((string) ($status ?: 'draft'))),
         };
-    }
-
-    private function mergeLibraryOptions($current, $legacy): array
-    {
-        $options = $current->map(fn ($row) => ['id' => (string) $row->id, 'name' => $row->name, 'source' => 'New DB']);
-        $names = $options->map(fn ($row) => mb_strtolower($row['name']))->all();
-
-        foreach ($legacy as $row) {
-            $name = $row->name ?? $row->longName ?? '';
-            if ($name !== '' && !in_array(mb_strtolower($name), $names, true)) {
-                $options->push(['id' => 'legacy:'.rawurlencode($name), 'name' => $name, 'source' => 'Old DB']);
-                $names[] = mb_strtolower($name);
-            }
-        }
-
-        return $options->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)->values()->all();
     }
 
     private function mergeOfficeOptions($current, $legacy): array
@@ -1022,9 +998,6 @@ class DocumentController extends Controller
     private function resolveLegacySelections(Request $request): void
     {
         $libraries = [
-            'document_type_id' => [DocumentType::class, DocumentTypeLegacy::class],
-            'action_type_id' => [ActionType::class, ActionTypeLegacy::class],
-            'purpose_type_id' => [PurposeType::class, PurposeTypeLegacy::class],
             'office_id' => [Office::class, BureauLegacy::class],
         ];
 

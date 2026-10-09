@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BureauLegacy;
 use App\Models\Document;
 use App\Models\DocumentLegacy;
 use App\Models\DocumentTrailLegacy;
-use App\Models\BureauLegacy;
-use App\Models\DocumentTypeLegacy;
+use App\Support\LegacyDocumentTypeMap;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -62,7 +63,7 @@ class PublicDocumentTrackingController extends Controller
             $officeIds = $trails->flatMap(fn ($trail) => [$trail->originating, $trail->receiving, $trail->holder])->filter()->unique();
             $offices = BureauLegacy::query()->whereIn('bureauId', $officeIds)->get(['bureauId', 'longName', 'shortName'])->keyBy('bureauId');
             $documentType = $legacyDocument->dtId
-                ? DocumentTypeLegacy::query()->whereKey($legacyDocument->dtId)->value('name')
+                ? LegacyDocumentTypeMap::typesByLegacyId()->get($legacyDocument->dtId)?->name
                 : null;
             $files = DB::connection('legacy')->table('file')->where('docId', $legacyDocument->docId)
                 ->orderBy('fileId')
@@ -91,7 +92,7 @@ class PublicDocumentTrackingController extends Controller
                     ]),
                 ],
             ]);
-        } catch (\Illuminate\Database\QueryException $exception) {
+        } catch (QueryException $exception) {
             report($exception);
             abort(404);
         }
