@@ -157,7 +157,7 @@ export default function DocumentsIndex({
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
-    const [sortKey, setSortKey] = useState<SortKey>('title');
+    const [sortKey, setSortKey] = useState<SortKey | null>(null);
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
     const [page, setPage] = useState(1);
     const [perPage, setPerPage] = useState(10);
@@ -367,6 +367,9 @@ export default function DocumentsIndex({
 
             return matchesSearch && matchesStatus;
         });
+
+        // Preserve the server's creation-date descending order until a column is selected.
+        if (sortKey === null) return filtered;
 
         return [...filtered].sort((a, b) => {
             const valueA = String(sortKey === 'document_type' ? getDocumentTypeName(a) : a[sortKey] ?? '').toLowerCase();

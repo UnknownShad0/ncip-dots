@@ -153,6 +153,7 @@ class DocumentController extends Controller
                     'tracking_url' => $document->trackingNo ? route('documents.track', ['trackingNumber' => $document->trackingNo]) : null,
                     'title' => $document->title ?? '',
                     'created_at' => $document->dateCreated?->format('F j Y h:i:s A'),
+                    'created_at_timestamp' => $document->dateCreated?->timestamp,
                     'status' => $status,
                     'office_name' => $legacyBureaus->get($originatingBureauId)?->longName ?? $legacyBureaus->get($originatingBureauId)?->shortName ?? '',
                     'office_short_name' => $legacyBureaus->get($originatingBureauId)?->shortName,
@@ -257,6 +258,7 @@ class DocumentController extends Controller
                         'created_at' => $trail->created_at?->format('F j Y h:i:s A'),
                     ]),
                     'created_at' => $document->created_at?->format('F j Y h:i:s A'),
+                    'created_at_timestamp' => $document->created_at?->timestamp,
                     'remarks' => $document->remarks ?? '',
                     'document_type_id' => $document->document_type_id,
                     'action_type_id' => $document->action_type_id,
@@ -276,10 +278,10 @@ class DocumentController extends Controller
             });
 
         return Inertia::render('Documents/Index', [
-            'documents' => [
-                ...$legacyDocuments->toArray(),
-                ...$newDocuments->toArray(),
-            ],
+            'documents' => $legacyDocuments->concat($newDocuments)
+                ->sortByDesc('created_at_timestamp')
+                ->values()
+                ->all(),
             'title' => $latestOnly ? 'Latest Documents' : 'All Documents',
             ...$this->documentFormOptions(),
         ]);
