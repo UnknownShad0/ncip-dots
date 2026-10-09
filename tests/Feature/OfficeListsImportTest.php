@@ -38,4 +38,26 @@ class OfficeListsImportTest extends TestCase
         $this->expectException(QueryException::class);
         DB::table('office_lists')->insert(['division_code' => 'CODE', 'division_name' => 'Another office']);
     }
+
+    public function test_region_code_scope_matches_short_and_geographic_region_codes(): void
+    {
+        DB::table('office_lists')->insert([
+            ['division_code' => 'CENTRAL-SHORT', 'division_name' => 'Central Office', 'region_code' => '13'],
+            ['division_code' => 'CENTRAL-GEO', 'division_name' => 'Central Office unit', 'region_code' => '1300000000'],
+            ['division_code' => 'REGION-1', 'division_name' => 'Region 1 office', 'region_code' => '0100000000'],
+        ]);
+
+        $this->assertSame(
+            ['CENTRAL-GEO', 'CENTRAL-SHORT'],
+            OfficeList::query()->inRegionCode('13')->orderBy('division_code')->pluck('division_code')->all(),
+        );
+        $this->assertSame(
+            ['CENTRAL-GEO', 'CENTRAL-SHORT'],
+            OfficeList::query()->inRegionCode('1300000000')->orderBy('division_code')->pluck('division_code')->all(),
+        );
+        $this->assertSame(
+            ['REGION-1'],
+            OfficeList::query()->inRegionCode('01')->pluck('division_code')->all(),
+        );
+    }
 }

@@ -13,6 +13,7 @@ use App\Support\LegacyDocumentTypeMap;
 use App\Models\ActionType;
 use App\Models\PurposeType;
 use App\Models\Office;
+use App\Models\OfficeList;
 use App\Models\Range;
 use App\Models\RangeLegacy;
 use App\Models\BureauLegacy;
@@ -478,9 +479,13 @@ class DocumentController extends Controller
         ]);
         $validated = $this->normalizeActionTypeDetails($validated);
         $targetOffice = Office::findOrFail($validated['to_office_id']);
-        if (! $this->officeIsInCurrentUserRange($targetOffice)) {
+        $user = auth()->user();
+        $officeIsInScope = filled($user?->region_code)
+            ? $this->officeIsInUserRegion($targetOffice, $user)
+            : $this->officeIsInCurrentUserRange($targetOffice);
+        if (! $officeIsInScope) {
             throw ValidationException::withMessages([
-                'to_office_id' => 'Choose a receiving office within your assigned range.',
+                'to_office_id' => 'Choose a receiving office within your assigned region or range.',
             ]);
         }
         if (!$this->officeHasActiveUsers($targetOffice)) {
@@ -682,6 +687,47 @@ class DocumentController extends Controller
 
     private function documentFormOptions(): array
     {
+        $user = auth()->user();
+        $regionCode = trim((string) ($user?->region_code ?? ''));
+
+        if ($regionCode !== '') {
+            $regionOfficeLists = OfficeList::query()
+                ->inRegionCode($regionCode)
+                ->orderBy('division_name')
+                ->get(['id', 'division_code', 'division_name']);
+            $registeredOffices = Office::query()
+                ->whereIn('code', $regionOfficeLists->pluck('division_code'))
+                ->get(['id', 'name', 'code'])
+                ->keyBy(fn (Office $office) => mb_strtolower(trim((string) $office->code)));
+            $receivingOffices = $regionOfficeLists
+                ->map(function (OfficeList $officeList) use ($registeredOffices) {
+                    $office = $registeredOffices->get(mb_strtolower(trim($officeList->division_code)));
+
+                    return [
+                        'id' => $office ? (string) $office->id : 'unavailable-'.$officeList->id,
+                        'name' => $officeList->division_name,
+                        'source' => 'Office list',
+                        'disabled' => ! $office || ! $this->officeHasActiveUsers($office),
+                    ];
+                })
+                ->values()
+                ->all();
+        } else {
+            $receivingOffices = Office::query()
+                ->with('range:id,name')
+                ->orderBy('name')
+                ->get(['id', 'name', 'range_id', 'legacy_range_id'])
+                ->filter(fn (Office $office) => $this->officeIsInCurrentUserRange($office))
+                ->map(fn (Office $office) => [
+                    'id' => (string) $office->id,
+                    'name' => $office->name,
+                    'source' => 'New DB',
+                    'disabled' => ! $this->officeHasActiveUsers($office),
+                ])
+                ->values()
+                ->all();
+        }
+
         return [
             'maxUploadSizeKb' => self::MAX_DOCUMENT_UPLOAD_KB,
             'approvedDocuments' => DocumentCreationDraft::query()
@@ -709,19 +755,10 @@ class DocumentController extends Controller
             'purposeTypes' => PurposeType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name'])
                 ->map(fn ($type) => ['id' => (string) $type->id, 'name' => $type->name, 'source' => 'New DB'])
                 ->all(),
-            'offices' => Office::query()
-                ->with('range:id,name')
-                ->orderBy('name')
-                ->get(['id', 'name', 'range_id', 'legacy_range_id'])
-                ->filter(fn (Office $office) => $this->officeIsInCurrentUserRange($office))
-                ->map(fn (Office $office) => [
-                    'id' => (string) $office->id,
-                    'name' => $office->name,
-                    'source' => 'New DB',
-                    'disabled' => ! $this->officeHasActiveUsers($office),
-                ])
-                ->values()
-                ->all(),
+            'officeRegionLabel' => $regionCode !== ''
+                ? trim(($user?->region_name ?: 'Region '.$regionCode).' ('.$regionCode.')')
+                : null,
+            'offices' => $receivingOffices,
         ];
     }
 
@@ -895,6 +932,18 @@ class DocumentController extends Controller
         $officeRange = $this->officeRangeIdentity($office);
 
         return $userRange !== null && $userRange === $officeRange;
+    }
+
+    private function officeIsInUserRegion(Office $office, User $user): bool
+    {
+        if (! filled($office->code) || ! filled($user->region_code)) {
+            return false;
+        }
+
+        return OfficeList::query()
+            ->where('division_code', $office->code)
+            ->inRegionCode((string) $user->region_code)
+            ->exists();
     }
 
     private function officeRangeIdentity(Office $office): ?array
