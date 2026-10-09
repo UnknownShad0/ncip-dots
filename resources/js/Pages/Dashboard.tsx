@@ -1,5 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import CrudAlertModal from '@/Components/CrudAlertModal';
+import DashboardCharts from '@/Components/DashboardCharts';
 import { Head, router } from '@inertiajs/react';
 import { Archive, ArrowDownToLine, FileClock, Files, Search, Send } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -52,11 +53,13 @@ const relativeTime = (date: string | undefined, index: number) => {
 };
 
 export default function Dashboard({
+    documentTypeCounts = [],
     stats = {},
     recentDocuments = [],
     incomingDocuments = [],
     canReceiveDocuments = false,
 }: {
+    documentTypeCounts?: { name: string; count: number }[];
     stats?: DashboardStats;
     recentDocuments?: RecentDocument[];
     incomingDocuments?: IncomingDocument[];
@@ -174,6 +177,8 @@ export default function Dashboard({
                         </article>
                     ))}
                 </section>
+
+                <DashboardCharts stats={stats} documentTypes={documentTypeCounts} />
 
                 <section aria-labelledby="creation-tasks-title" className="mb-8 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 sm:p-6">
                     <div className="mb-4 flex flex-wrap items-end justify-between gap-2">

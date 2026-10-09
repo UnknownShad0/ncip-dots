@@ -8,6 +8,7 @@ use App\Models\DocumentLegacy;
 use App\Models\DocumentTrailLegacy;
 use App\Models\UserLegacy;
 use App\Services\DocumentAccess;
+use App\Services\DashboardCharts;
 use Inertia\Inertia;
 
 class DashboardController extends Controller
@@ -121,6 +122,7 @@ class DashboardController extends Controller
             : collect();
 
         return Inertia::render('Dashboard', [
+            'documentTypeCounts' => app(DashboardCharts::class)->documentTypes($documents, $legacyDocuments),
             'stats' => $stats,
             'recentDocuments' => $recentDocuments,
             'incomingDocuments' => $incomingDocuments,
