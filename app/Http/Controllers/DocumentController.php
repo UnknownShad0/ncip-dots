@@ -204,6 +204,7 @@ class DocumentController extends Controller
                     'title' => $document->title ?? '',
                     'status' => $this->workflowStatus($document->latestTrail?->status ?? $document->status),
                     'office_name' => $document->office?->name ?? '',
+                    'office_short_name' => $document->office?->short_name,
                     'document_type' => $document->documentType?->name ?? '',
                     'other_document_type' => $document->other_document_type ?? '',
                     'purpose_type' => $document->purposeType?->name ?? '',
@@ -225,9 +226,16 @@ class DocumentController extends Controller
                         'status' => $trail->status,
                         'remarks' => $trail->remarks,
                         'from_office' => $trail->fromOffice?->name,
+                        'from_office_short_name' => $trail->fromOffice?->short_name,
                         'to_office' => $trail->toOffice?->name,
+                        'to_office_short_name' => $trail->toOffice?->short_name,
                         'holder' => $trail->toOffice?->name,
+                        'holder_short_name' => $trail->toOffice?->short_name,
                         'created_by' => $trail->creator?->name,
+                        'created_by_short_name' => trim(
+                            (filled($trail->creator?->firstname) ? mb_substr(trim($trail->creator->firstname), 0, 1).'. ' : '').
+                            ($trail->creator?->lastname ?? '')
+                        ) ?: $trail->creator?->name,
                         'created_at' => $trail->created_at?->format('F j Y h:i:s A'),
                     ]),
                     'created_at' => $document->created_at?->format('F j Y h:i:s A'),
@@ -338,7 +346,7 @@ class DocumentController extends Controller
             $officeId = $access->currentOfficeId($user);
             $userOffice = $officeId ? Office::query()->find($officeId) : null;
             $date = now();
-            $officeName = $userOffice?->name ?: 'DOTS';
+            $officeName = trim((string) $userOffice?->short_name) ?: ($userOffice?->name ?: 'DOTS');
             $bureauPrefix = trim(
                 preg_replace('/-+/', '-', preg_replace('/\s+/', '-', trim($officeName))),
                 '-'
@@ -834,12 +842,14 @@ class DocumentController extends Controller
         }
 
         $parts = [filled($trail->action) ? $trail->action : ucfirst(strtolower((string) $trail->status))];
-        if ($trail->fromOffice?->name && $trail->toOffice?->name) {
-            $parts[] = $trail->fromOffice->name.' → '.$trail->toOffice->name;
-        } elseif ($trail->fromOffice?->name) {
-            $parts[] = 'From '.$trail->fromOffice->name;
-        } elseif ($trail->toOffice?->name) {
-            $parts[] = 'To '.$trail->toOffice->name;
+        $fromOffice = trim((string) $trail->fromOffice?->short_name) ?: $trail->fromOffice?->name;
+        $toOffice = trim((string) $trail->toOffice?->short_name) ?: $trail->toOffice?->name;
+        if ($fromOffice && $toOffice) {
+            $parts[] = $fromOffice.' → '.$toOffice;
+        } elseif ($fromOffice) {
+            $parts[] = 'From '.$fromOffice;
+        } elseif ($toOffice) {
+            $parts[] = 'To '.$toOffice;
         }
         if ($trail->creator?->name) {
             $parts[] = 'by '.$trail->creator->name;

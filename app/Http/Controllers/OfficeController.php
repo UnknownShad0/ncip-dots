@@ -136,6 +136,7 @@ class OfficeController extends Controller
             'operation' => ['required', 'in:create'],
             'division_code' => ['required', 'string', 'exists:office_lists,division_code', Rule::unique('offices', 'code')],
             'range_id' => ['nullable', 'string'],
+            'short_name' => ['nullable', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255', Rule::unique('offices', 'email')],
         ], [
             'division_code.unique' => 'Office already exists.',
@@ -146,7 +147,7 @@ class OfficeController extends Controller
         $officeList = OfficeList::query()->where('division_code', $validated['division_code'])->firstOrFail();
         Office::query()->create([
             'name' => $officeList->long_name ?: $officeList->division_name,
-            'short_name' => $officeList->short_name,
+            'short_name' => $validated['short_name'] ?? null,
             'code' => $officeList->division_code,
             'email' => $validated['email'] ?? null,
             'location' => $officeList->office_address,
@@ -164,6 +165,7 @@ class OfficeController extends Controller
             'operation' => ['required', 'in:update'],
             'division_code' => ['required', 'string', 'exists:office_lists,division_code', Rule::unique('offices', 'code')->ignore($office->id)],
             'range_id' => ['nullable', 'string'],
+            'short_name' => ['nullable', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255', Rule::unique('offices', 'email')->ignore($office->id)],
         ], [
             'division_code.unique' => 'Office already exists.',
@@ -174,7 +176,7 @@ class OfficeController extends Controller
         $officeList = OfficeList::query()->where('division_code', $validated['division_code'])->firstOrFail();
         $office->update([
             'name' => $officeList->long_name ?: $officeList->division_name,
-            'short_name' => $officeList->short_name,
+            'short_name' => $validated['short_name'] ?? null,
             'code' => $officeList->division_code,
             'email' => $validated['email'] ?? null,
             'location' => $officeList->office_address,

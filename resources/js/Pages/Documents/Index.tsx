@@ -13,6 +13,7 @@ type DocumentItem = {
     title?: string;
     status?: string;
     office_name?: string;
+    office_short_name?: string | null;
     document_type?: string | { name?: string } | null;
     purpose_type?: string;
     documentType?: { name?: string } | null;
@@ -28,9 +29,13 @@ type DocumentItem = {
         status?: string | null;
         remarks?: string | null;
         from_office?: string | null;
+        from_office_short_name?: string | null;
         to_office?: string | null;
+        to_office_short_name?: string | null;
         holder?: string | null;
+        holder_short_name?: string | null;
         created_by?: string | null;
+        created_by_short_name?: string | null;
         created_at?: string | null;
     }>;
     office?: {
@@ -591,7 +596,7 @@ export default function DocumentsIndex({
                                             <td className="min-w-[240px] px-4 py-3">
                                                 {document.transactions?.[0] ? <div className="flex flex-col gap-1.5">
                                                     <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${getTransactionClasses(document.transactions[0].action, document.transactions[0].status)}`}>{document.transactions[0].action || document.transactions[0].status || 'Transaction'}</span>
-                                                    <span className="text-xs text-slate-600">{[document.transactions[0].from_office, document.transactions[0].to_office].filter(Boolean).join(' → ') || document.transactions[0].holder || 'Office not recorded'}</span>
+                                                    <span className="text-xs text-slate-600">{[document.transactions[0].from_office_short_name || document.transactions[0].from_office, document.transactions[0].to_office_short_name || document.transactions[0].to_office].filter(Boolean).join(' → ') || document.transactions[0].holder_short_name || document.transactions[0].holder || 'Office not recorded'}</span>
                                                     <span className="text-[11px] text-slate-400">{document.transactions[0].created_at || document.transactions[0].created_by || '—'}</span>
                                                 </div> : <span className="text-sm text-slate-400">No transactions</span>}
                                             </td>
@@ -963,13 +968,13 @@ function DispositionPrintView({ document }: { document: DocumentItem }) {
                     <tbody>
                         <tr>
                             <td className="field-label">TO/FOR:</td>
-                            <td className="field-value">{latest?.to_office || 'Not specified'}</td>
+                            <td className="field-value">{latest?.to_office_short_name || latest?.to_office || 'Not specified'}</td>
                             <td className="qr-cell" rowSpan={6}>
                                 <div className="disposition-qr">{document.tracking_url ? <QRCode value={document.tracking_url} size={88} level="M" bgColor="#ffffff" fgColor="#111827" /> : 'No tracking URL'}</div>
                                 <div className="disposition-qr-note"><strong>DOTS No.:</strong><br />{document.tracking_number || 'Not assigned'}</div>
                             </td>
                         </tr>
-                        <tr><td className="field-label">FROM:</td><td className="field-value">{latest?.from_office || document.office_name || 'Not specified'}</td></tr>
+                        <tr><td className="field-label">FROM:</td><td className="field-value">{latest?.from_office_short_name || latest?.from_office || document.office_short_name || document.office_name || 'Not specified'}</td></tr>
                         <tr><td className="field-label">SUBJECT:</td><td className="field-value">{document.title || '—'}</td></tr>
                         <tr><td className="field-label">PURPOSE:</td><td className="field-value">{document.purpose_type || 'For Appropriate Action'}</td></tr>
                         <tr><td className="field-label">DOCUMENT:</td><td className="field-value">{getDocumentTypeName(document) || 'No document attached'}</td></tr>
@@ -984,14 +989,17 @@ function DispositionPrintView({ document }: { document: DocumentItem }) {
                     {transactions.length > 0 && <div className="disposition-trails">
                         {transactions.map((entry, index) => {
                             const actionType = (entry.action || entry.status || '').toLowerCase();
+                            const fromOffice = entry.from_office_short_name || entry.from_office;
+                            const toOffice = entry.to_office_short_name || entry.to_office;
+                            const holder = entry.holder_short_name || entry.holder;
                             const office = actionType.includes('releas')
-                                ? entry.from_office || entry.holder || entry.to_office
+                                ? fromOffice || holder || toOffice
                                 : actionType.includes('receiv')
-                                    ? entry.to_office || entry.holder || entry.from_office
-                                    : entry.holder || entry.from_office || entry.to_office;
+                                    ? toOffice || holder || fromOffice
+                                    : holder || fromOffice || toOffice;
                             return <div key={`${entry.created_at ?? 'trail'}-${index}`}>
                                 {entry.remarks && <div className="disposition-trail-remarks">Remarks: '{entry.remarks}'</div>}
-                                <div className="disposition-trail-action">✔ {entry.action || entry.status || 'Processed'} by {entry.created_by || 'Unknown user'} of {office || 'Unknown office'}{entry.created_at ? ` at ${entry.created_at}` : ''}</div>
+                                <div className="disposition-trail-action">✔ {entry.action || entry.status || 'Processed'} by {entry.created_by_short_name || entry.created_by || 'Unknown user'} of {office || 'Unknown office'}{entry.created_at ? ` at ${entry.created_at}` : ''}</div>
                             </div>;
                         })}
                     </div>}
