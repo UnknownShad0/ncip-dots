@@ -12,9 +12,6 @@ class UserSeeder extends Seeder
 {
     public function run(): void
     {
-        $office = Office::query()->where('code', 'CENTRAL')->firstOrFail();
-        $division = Division::query()->where('office_id', $office->id)->where('code', 'RM')->firstOrFail();
-
         $seedAccounts = [
             [
                 'name' => 'System Admin',
@@ -43,7 +40,6 @@ class UserSeeder extends Seeder
                 'division' => null,
                 'region_code' => '13',
                 'office_code' => 'CAR-TMSD',
-                'office_id' => 1,
                 'legacy_office_id' => 46,
                 'division_id' => null,
                 'role' => 'Admin Staff',
@@ -62,7 +58,6 @@ class UserSeeder extends Seeder
                 'division' => 'CAR - PROVINCIAL OFFICE, BAGUIO',
                 'region_code' => '14',
                 'office_code' => 'BSO-299',
-                'office_id' => 1,
                 'role' => 'Super Admin',
                 'role_id' => 1,
             ],
@@ -79,7 +74,6 @@ class UserSeeder extends Seeder
                 'division' => 'OC - OFFICE OF THE CLERK OF THE COMMISSION',
                 'region_code' => '13',
                 'office_code' => 'BSO-442',
-                'office_id' => 1,
                 'role' => 'Executive',
                 'role_id' => 2,
             ],
@@ -96,17 +90,21 @@ class UserSeeder extends Seeder
                 'division' => 'AS - GENERAL SERVICES DIVISION',
                 'region_code' => '13',
                 'office_code' => 'BSO-439',
-                'office_id' => 1,
                 'role' => 'Admin Staff',
                 'role_id' => 3,
             ],
         ];
 
         foreach ($seedAccounts as $account) {
-            $accountOfficeId = $account['office_id']
-                ?? Office::query()->where('code', $account['office_code'] ?? '')->value('id')
-                ?? $office->id;
-            $accountDivisionId = array_key_exists('division_id', $account) ? $account['division_id'] : $division->id;
+            $accountOfficeId = Office::query()
+                ->where('code', $account['office_code'] ?? 'CENTRAL')
+                ->value('id');
+            $accountDivisionId = array_key_exists('division_id', $account)
+                ? $account['division_id']
+                : ($accountOfficeId === null ? null : Division::query()
+                    ->where('office_id', $accountOfficeId)
+                    ->where('code', $account['division_code'] ?? 'RM')
+                    ->value('id'));
             $accountIdentity = filled($account['employee_code'] ?? null)
                 ? ['employee_code' => $account['employee_code']]
                 : ['username' => $account['username']];
@@ -114,11 +112,9 @@ class UserSeeder extends Seeder
             $user = User::updateOrCreate(
                 $accountIdentity,
                 [
-                    ...[
-                        'office_id' => $accountOfficeId,
-                        'division_id' => $accountDivisionId,
-                    ],
                     ...$account,
+                    'office_id' => $accountOfficeId,
+                    'division_id' => $accountDivisionId,
                     'password' => Hash::make('password'),
                     'is_active' => true,
                     'is_locked' => false,
