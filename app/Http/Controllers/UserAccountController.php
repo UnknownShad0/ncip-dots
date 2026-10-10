@@ -20,7 +20,7 @@ class UserAccountController extends Controller
         $validated = $request->validate(['employee_code' => ['required', 'string', 'max:100']]);
         $request->session()->forget('hris_employee_lookup');
         try {
-            $result = $directory->lookup($validated['employee_code']);
+            $result = $directory->lookup($validated['employee_code'], includeOffices: false);
         } catch (\Throwable $exception) {
             report($exception);
             return response()->json(['message' => 'Employee directory is unavailable. Please check the HRIS configuration or try again.'], 502);
@@ -109,7 +109,6 @@ class UserAccountController extends Controller
                 'operation' => ['required', 'in:create'],
                 'employee_code' => ['required', 'string', 'max:100', 'unique:users,employee_code'],
                 'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-                'office_code' => ['required', 'string', 'max:100'],
                 'office_table_id' => ['required', 'string'],
                 'employee_role' => ['required', Rule::in(['Super Admin', 'Executive', 'Admin Staff'])],
             ]);
@@ -118,10 +117,6 @@ class UserAccountController extends Controller
                 throw ValidationException::withMessages(['user' => 'Search for the employee successfully before saving.']);
             }
             $employee = $lookup['employee'];
-            $directoryOffice = collect($lookup['offices'])->firstWhere('office_code', $validated['office_code']);
-            if (! $directoryOffice) {
-                throw ValidationException::withMessages(['office_code' => 'Select an office returned by the employee directory.']);
-            }
             validator($employee, [
                 'username' => ['required', 'string', 'max:50', 'unique:users,username'],
                 'first_name' => ['required', 'string', 'max:100'],
@@ -131,10 +126,14 @@ class UserAccountController extends Controller
                 ? (int) $matches[1]
                 : null;
             $office = $officeId ? Office::query()->find($officeId) : null;
-            $divisionCode = trim((string) ($employee['division_code'] ?? ''));
-            if (! $office || $divisionCode === '' || strcasecmp(trim((string) $office->code), $divisionCode) !== 0) {
+            if (! $office) {
                 throw ValidationException::withMessages([
-                    'office_table_id' => 'No registered Office matches this employee division. Register the Office in the Offices module first.',
+                    'office_table_id' => 'Select an existing office.',
+                ]);
+            }
+            if (! $office->range) {
+                throw ValidationException::withMessages([
+                    'office_table_id' => 'Assign a range to this office in the Offices module first.',
                 ]);
             }
             $attributes = [
@@ -144,10 +143,8 @@ class UserAccountController extends Controller
                 'username' => $employee['username'], 'email' => $validated['email'],
                 'division_code' => $employee['division_code'] ?? null,
                 'division' => $employee['division'] ?? null,
-                'region_code' => $directoryOffice['region_code'] ?? null,
-                'region_name' => $directoryOffice['region_name'] ?? null,
-                'office_code' => $directoryOffice['office_code'],
-                'office_name' => $directoryOffice['office_name'] ?? null,
+                'office_code' => $office->code,
+                'office_name' => $office->name,
                 'office_id' => $office->id,
                 'role' => $validated['employee_role'],
                 'role_id' => $this->employeeRoleId($validated['employee_role']),
