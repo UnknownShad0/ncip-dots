@@ -53,6 +53,7 @@ Choose a different backup filename if that file already exists; shell redirectio
 
 ```bash
 php artisan migrate --path=database/migrations/2026_10_10_000002_prepare_legacy_document_import.php
+php artisan migrate --path=database/migrations/2026_10_10_000003_add_record_source_to_importable_tables.php
 ```
 
 4. Preview, with no database writes:
@@ -92,6 +93,7 @@ After `migrate:fresh`, run the directory importer first, then this document impo
 - Free-text purposes/actions remain text; purpose names can match lookup rows. An unknown nonzero document type is left null and reported, with its source ID retained in the payload.
 - Users/offices are mapped by their original legacy identity, never by assuming the numeric IDs match. Missing directory identities stop the import.
 - Source zero dates become null. Existing lookup rows matched by name keep their local fields; ambiguous matches stop the import.
+- Importable rows have a `record_source`: `native` for new app records, `legacy_import` for rows inserted by the importer, and `legacy_linked` for local lookup rows matched to legacy identities. Existing directory/lookup records whose historical insert-vs-link status is unknown are marked `legacy_unclassified`; reruns preserve that value rather than guessing.
 - Orphan history/files are saved in `legacy_document_exceptions` with a source key, reason and complete original payload. Do not delete them. Restore the true parent/source relationship before attempting reconciliation; never invent a parent document.
 - Attachments are metadata-only, as requested. `is_available=false` prevents links to old server paths. Actual files will need a separate verified copy process before marking them available.
 - Runtime pages and workflows use the imported local tables only; they do not query the legacy database. The one-time import/preview commands still need the legacy source connection. Preserve it until no further import or reconciliation is required.
@@ -106,6 +108,13 @@ USE new_dots;
 SELECT COUNT(*) AS imported_documents FROM documents WHERE legacy_doc_id IS NOT NULL;
 SELECT COUNT(*) AS imported_trails FROM document_trails WHERE legacy_doc_trail_id IS NOT NULL;
 SELECT COUNT(*) AS imported_file_metadata FROM document_files WHERE legacy_file_id IS NOT NULL;
+
+SELECT 'documents' AS table_name, record_source, COUNT(*) AS records
+FROM documents GROUP BY record_source
+UNION ALL
+SELECT 'document_trails', record_source, COUNT(*) FROM document_trails GROUP BY record_source
+UNION ALL
+SELECT 'document_files', record_source, COUNT(*) FROM document_files GROUP BY record_source;
 
 SELECT source_table, reason, COUNT(*) AS records
 FROM legacy_document_exceptions GROUP BY source_table, reason;

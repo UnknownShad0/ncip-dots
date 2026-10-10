@@ -116,14 +116,16 @@ class LegacyDocumentImport
             }
             $values = ['legacy_type_id' => $row->dtId, 'legacy_payload' => $this->payload($row)];
             if ($match = $matches->first()) {
+                $values['record_source'] = 'legacy_linked';
                 if ($this->apply) {
                     DB::table($target)->where('id', $match->id)->update($values);
                 }
                 $match->legacy_type_id = $row->dtId;
+                $match->record_source = 'legacy_linked';
                 $map[$row->dtId] = $match->id;
                 $this->count($target, 'linked');
             } else {
-                $values += ['name' => $row->name, 'description' => $row->description,
+                $values += ['record_source' => 'legacy_import', 'name' => $row->name, 'description' => $row->description,
                     'is_active' => strtolower((string) $row->status) === 'active', 'created_by' => $this->user($row->createdBy),
                     'created_at' => $this->date($row->dateCreated), 'updated_at' => $this->date($row->dateUpdated)];
                 $id = $this->apply ? DB::table($target)->insertGetId($values) : -((int) $row->dtId);
@@ -219,7 +221,7 @@ class LegacyDocumentImport
                 }
                 $purpose = $purposes['names'][$normalize($d->purpose)] ?? null;
                 $batch[] = [
-                    'legacy_doc_id' => $d->docId, 'legacy_payload' => $this->payload($d), 'legacy_needs_review' => $needsReview,
+                    'legacy_doc_id' => $d->docId, 'legacy_payload' => $this->payload($d), 'record_source' => 'legacy_import', 'legacy_needs_review' => $needsReview,
                     'title' => $d->title, 'tracking_number' => $number, 'document_type_id' => $type,
                     'other_document_type' => $d->otherDtype, 'purpose_type_id' => $purpose,
                     'other_purpose' => $d->purpose, 'origin_type' => $d->originType,
@@ -286,7 +288,7 @@ class LegacyDocumentImport
                 $holder = $this->office($t->holder);
                 $receiver = $this->office($t->receiving);
                 $batch[] = [
-                    'legacy_doc_trail_id' => $t->docTrailId, 'legacy_payload' => $this->payload($t),
+                    'legacy_doc_trail_id' => $t->docTrailId, 'legacy_payload' => $this->payload($t), 'record_source' => 'legacy_import',
                     'document_id' => $doc, 'from_office_id' => $this->office($t->originating),
                     'to_office_id' => $status === 'available' ? $receiver : $holder,
                     'holder_office_id' => $holder, 'legacy_receiving_office_id' => $receiver,
@@ -329,7 +331,7 @@ class LegacyDocumentImport
                     $this->issue('missing_or_conflicting_file_trail', 'file', $f->fileId);
                 }
                 $batch[] = [
-                    'legacy_file_id' => $f->fileId, 'legacy_payload' => $this->payload($f),
+                    'legacy_file_id' => $f->fileId, 'legacy_payload' => $this->payload($f), 'record_source' => 'legacy_import',
                     'document_id' => $doc, 'document_trail_id' => $trail, 'type' => $f->type ?? 'original',
                     'file_name' => $f->fileName, 'original_name' => $f->origName,
                     // Metadata only: never treat an old server path as a public download URL.

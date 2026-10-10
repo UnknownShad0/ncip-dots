@@ -63,6 +63,10 @@ class LegacyDirectoryImportTest extends TestCase
         $this->assertTrue(password_verify('old-password', $user->password));
         $this->assertSame(0, $user->is_active);
         $this->assertSame(1, $user->is_locked);
+        $this->assertSame('legacy_import', $user->record_source);
+        $this->assertSame('legacy_import', DB::table('ranges')->value('record_source'));
+        $this->assertSame('legacy_linked', DB::table('offices')->where('id', $office)->value('record_source'));
+        $this->assertSame('legacy_import', DB::table('offices')->where('legacy_bureau_id', 99)->value('record_source'));
         $this->assertSame('2020-01-01 00:00:00', $user->created_at);
         $this->assertSame([], $import->plan()['operations']);
     }
@@ -77,7 +81,15 @@ class LegacyDirectoryImportTest extends TestCase
         $this->assertSame(14, $user->role_id);
         $this->assertSame(1, $user->is_active);
         $this->assertSame('legacy-user', $user->legacy_user_uuid);
+        $this->assertSame('legacy_linked', $user->record_source);
         $this->assertSame(1, DB::table('users')->count());
+    }
+
+    public function test_new_local_records_default_to_native_source(): void
+    {
+        $id = DB::table('ranges')->insertGetId(['name' => 'Native range']);
+
+        $this->assertSame('native', DB::table('ranges')->where('id', $id)->value('record_source'));
     }
 
     public function test_zero_dates_become_null_without_inventing_historical_dates(): void

@@ -64,6 +64,7 @@ class LegacyDocumentImportTest extends TestCase
         $import->run(true);
         $doc = Document::where('legacy_doc_id', 50)->firstOrFail();
         $this->assertSame(500, mb_strlen($doc->title));
+        $this->assertSame('legacy_import', $doc->record_source);
         $this->assertSame('Historical free text', $doc->other_purpose);
         $this->assertSame(200, $doc->created_by);
         $this->assertSame(101, $doc->office_id);
@@ -73,6 +74,7 @@ class LegacyDocumentImportTest extends TestCase
         $this->assertSame(101, $release->holder_office_id);
         $this->assertSame(102, $release->to_office_id);
         $this->assertSame(102, $release->legacy_receiving_office_id);
+        $this->assertSame('legacy_import', $release->record_source);
         $this->assertSame('terminal', Document::where('legacy_doc_id', 52)->value('status'));
         $incomplete = Document::where('legacy_doc_id', 51)->first();
         $this->assertNull($incomplete->title);
@@ -80,6 +82,7 @@ class LegacyDocumentImportTest extends TestCase
         $this->assertTrue($incomplete->legacy_needs_review);
         $this->assertSame(2, DB::table('legacy_document_exceptions')->count());
         $file = DocumentFile::where('legacy_file_id', 90)->firstOrFail();
+        $this->assertSame('legacy_import', $file->record_source);
         $this->assertFalse($file->is_available);
         $this->assertNull($file->downloadUrl());
         $this->assertNull($file->created_at);
@@ -89,6 +92,21 @@ class LegacyDocumentImportTest extends TestCase
         $this->assertSame(3, $rerun['counts']['documents']['existing']);
         $this->assertArrayNotHasKey('new', $rerun['counts']['document_trails']);
         $this->assertSame(2, DB::table('legacy_document_exceptions')->count());
+    }
+
+    public function test_lookup_matching_local_row_is_marked_as_linked(): void
+    {
+        $id = DB::table('document_types')->insertGetId(['name' => 'Test type']);
+
+        (new LegacyDocumentImport)->run(true);
+
+        $this->assertSame($id, DB::table('document_types')->where('legacy_type_id', 4)->value('id'));
+        $this->assertSame('legacy_linked', DB::table('document_types')->where('id', $id)->value('record_source'));
+        $this->assertSame('legacy_import', DB::table('action_types')->where('legacy_type_id', 4)->value('record_source'));
+
+        (new LegacyDocumentImport)->run(true);
+
+        $this->assertSame('legacy_linked', DB::table('document_types')->where('id', $id)->value('record_source'));
     }
 
     public function test_combined_import_previews_read_only_then_imports_directory_and_documents(): void
@@ -201,6 +219,7 @@ class LegacyDocumentImportTest extends TestCase
             $this->assertStringContainsString('Tracking-number conflict', $e->getMessage());
         }
         $this->assertSame(1, DB::table('documents')->count());
+        $this->assertSame('native', DB::table('documents')->value('record_source'));
     }
 
     public function test_incomplete_or_archived_import_cannot_be_processed(): void

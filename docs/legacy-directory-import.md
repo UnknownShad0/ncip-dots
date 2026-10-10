@@ -10,8 +10,9 @@ Run from the project folder. These are shell commands, not commands for the `mys
 # Backup the target before changing it. Keep this file private.
 mysqldump -u root -p --single-transaction --no-tablespaces new_dots > new_dots_before_import.sql
 
-# Apply ONLY the identity migration, not unrelated pending migrations.
+# Apply the identity and source-tracking migrations, not unrelated pending migrations.
 php artisan migrate --path=database/migrations/2026_10_10_000001_add_legacy_identity_columns.php
+php artisan migrate --path=database/migrations/2026_10_10_000003_add_record_source_to_importable_tables.php
 
 # Read-only preview. No rows are written, even temporarily.
 php artisan legacy:import-directory --unassign-mismatched-divisions
@@ -47,6 +48,8 @@ The importer reads the configured live `legacy` connection. The SQL export is a 
 
 Existing ranges/offices match by trimmed, case-insensitive name. Divisions match by name plus mapped office. Existing users must match BOTH username and email; partial or ambiguous matches stop the import. Existing matched records keep profile fields, HRIS codes, password, permissions and account status; only legacy identity and compatible assignment links are added. Already imported identities are skipped, so reruns do not reset later edits. This is a one-time migration, not ongoing synchronization.
 
+Each importable row has a `record_source`: `native` for rows created in the new app, `legacy_import` for rows inserted by the importer, and `legacy_linked` for an existing local row matched to a legacy identity. Rows that already had a legacy identity before source tracking was introduced are marked `legacy_unclassified` when their original inserted-vs-linked status cannot be proven. The importer preserves that historical status on reruns rather than guessing.
+
 The importer preserves valid original creation timestamps. Legacy zero dates (`0000-00-00 00:00:00`) and absent dates remain null rather than inventing a historical date; the report counts converted zero dates. It does not import session tokens, login-attempt counters or email-verification state, send mail, or create login sessions. Unknown password formats, roles, account statuses, missing relations and conflicting mappings stop the import. Invalid but nonempty legacy emails are retained with a warning; correct them before email delivery.
 
 `bureau.status`, `division.shortName`/`description`, and other source-only fields have no equivalent in these target tables and remain available in the legacy database/export. No new office-status behavior is introduced by this directory import.
@@ -58,13 +61,23 @@ USE new_dots;
 
 -- Total rows and rows linked to legacy identities.
 SELECT 'ranges' AS table_name, COUNT(*) AS total,
-       COUNT(legacy_range_id) AS imported FROM ranges
+       COUNT(legacy_range_id) AS legacy_linked FROM ranges
 UNION ALL
 SELECT 'offices', COUNT(*), COUNT(legacy_bureau_id) FROM offices
 UNION ALL
 SELECT 'divisions', COUNT(*), COUNT(legacy_division_id) FROM divisions
 UNION ALL
 SELECT 'users', COUNT(*), COUNT(legacy_user_uuid) FROM users;
+
+-- Distinguish native, imported, linked and historically unclassified rows.
+SELECT record_source, COUNT(*) AS records
+FROM ranges GROUP BY record_source;
+SELECT record_source, COUNT(*) AS records
+FROM offices GROUP BY record_source;
+SELECT record_source, COUNT(*) AS records
+FROM divisions GROUP BY record_source;
+SELECT record_source, COUNT(*) AS records
+FROM users GROUP BY record_source;
 
 -- All four results should be zero when the full source has been imported.
 SELECT 'ranges' AS table_name, COUNT(*) AS missing

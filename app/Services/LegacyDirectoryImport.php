@@ -58,7 +58,7 @@ class LegacyDirectoryImport
 
                     return $record['id'];
                 }
-                $changes = [$column => $identity];
+                $changes = [$column => $identity, 'record_source' => 'legacy_linked'];
                 foreach ($links as $key => $value) {
                     if (($record[$key] ?? null) !== null && (string) $record[$key] !== (string) $value) {
                         throw new RuntimeException("Assignment conflict: $table legacy ID $identity ($key).");
@@ -77,7 +77,7 @@ class LegacyDirectoryImport
                 return $record['id'];
             }
             $id = $nextId--;
-            $values = array_replace($attrs, [$column => $identity]);
+            $values = array_replace($attrs, [$column => $identity, 'record_source' => 'legacy_import']);
             $rows[$table][] = array_replace($values, ['id' => $id]);
             $operations[] = ['table' => $table, 'id' => $id, 'values' => $values, 'insert' => true];
             $counts[$table]['insert'] = ($counts[$table]['insert'] ?? 0) + 1;
