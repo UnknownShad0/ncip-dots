@@ -22,6 +22,7 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
+        'legacy_user_uuid',
         'name',
         'username',
         'firstname',
@@ -103,14 +104,15 @@ class User extends Authenticatable
 
     public function canReceiveDocuments(): bool
     {
-        if (in_array((int) $this->role_id, [1, 2, 3, 14], true)) {
-            return true;
+        // A stored role ID is authoritative; names support accounts without one.
+        if ($this->role_id !== null) {
+            return in_array((int) $this->role_id, [2, 3, 14], true);
         }
 
         $role = Str::of((string) $this->role)->lower()->replace(['_', '-'], ' ')->squish()->toString();
 
         return in_array($role, [
-            'system admin', 'super admin', 'admin', 'administrator', 'admin staff', 'executive', 'executives', 'encoder',
+            'admin staff', 'executive', 'executives', 'encoder',
         ], true);
     }
 

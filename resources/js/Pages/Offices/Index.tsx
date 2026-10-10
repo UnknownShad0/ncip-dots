@@ -44,6 +44,7 @@ export default function OfficesIndex({
     const [divisionSearch, setDivisionSearch] = useState('');
     const [divisionPickerOpen, setDivisionPickerOpen] = useState(false);
     const [emailError, setEmailError] = useState<string | null>(null);
+    const [shortNameError, setShortNameError] = useState<string | null>(null);
     const [codeError, setCodeError] = useState<string | null>(null);
     const [form, setForm] = useState({
         division_code: '',
@@ -65,6 +66,7 @@ export default function OfficesIndex({
         setDivisionSearch('');
         setEmailError(null);
         setCodeError(null);
+        setShortNameError(null);
         setForm({
             division_code: '',
             name: '',
@@ -82,6 +84,7 @@ export default function OfficesIndex({
 
         setEmailError(null);
         setCodeError(null);
+        setShortNameError(null);
         setEditingRow(row);
         setForm({
             division_code: row.code ?? '',
@@ -96,6 +99,7 @@ export default function OfficesIndex({
     const openCreate = () => {
         setEmailError(null);
         setCodeError(null);
+        setShortNameError(null);
         setEditingRow(null);
         setIsCreateOpen(true);
         setForm({
@@ -112,6 +116,7 @@ export default function OfficesIndex({
         e.preventDefault();
         setEmailError(null);
         setCodeError(null);
+        setShortNameError(null);
 
         router.post('/offices', {
             ...form,
@@ -123,6 +128,7 @@ export default function OfficesIndex({
             },
             onError: (errors) => {
                 setEmailError(errors.email ?? null);
+                setShortNameError(errors.short_name ?? null);
                 setCodeError(errors.division_code ?? errors.code ?? null);
             },
         });
@@ -132,6 +138,7 @@ export default function OfficesIndex({
         e.preventDefault();
         setEmailError(null);
         setCodeError(null);
+        setShortNameError(null);
 
         if (!editingRow || editingRow.id == null) {
             return;
@@ -147,6 +154,7 @@ export default function OfficesIndex({
             },
             onError: (errors) => {
                 setEmailError(errors.email ?? null);
+                setShortNameError(errors.short_name ?? null);
                 setCodeError(errors.division_code ?? errors.code ?? null);
             },
         });
@@ -407,11 +415,48 @@ export default function OfficesIndex({
 
                         <form onSubmit={editingRow ? handleUpdate : handleCreate} className="space-y-4">
                             <div className="grid gap-4 sm:grid-cols-2">
-                                <div>
+                                <div
+                                    onBlur={(e) => {
+                                        if (!e.currentTarget.contains(e.relatedTarget)) {
+                                            setDivisionPickerOpen(false);
+                                            setDivisionSearch('');
+                                        }
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Escape') {
+                                            e.preventDefault();
+                                            setDivisionPickerOpen(false);
+                                            setDivisionSearch('');
+                                        }
+                                    }}
+                                >
                                     <label htmlFor="division-search" className="mb-1 block text-sm font-medium text-slate-700">Office</label>
-                                    <input id="division-search" value={divisionPickerOpen ? divisionSearch : (selectedDivision?.name ?? '')} onFocus={() => { setDivisionPickerOpen(true); setDivisionSearch(''); }} onChange={(e) => { setDivisionSearch(e.target.value); setDivisionPickerOpen(true); }} placeholder="Search offices..." autoComplete="off" className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+                                    <input
+                                        id="division-search"
+                                        value={divisionPickerOpen ? divisionSearch : (selectedDivision?.name ?? '')}
+                                        onFocus={() => { setDivisionPickerOpen(true); setDivisionSearch(''); }}
+                                        onClick={() => {
+                                            if (!divisionPickerOpen) {
+                                                setDivisionSearch('');
+                                                setDivisionPickerOpen(true);
+                                            }
+                                        }}
+                                        onChange={(e) => { setDivisionSearch(e.target.value); setDivisionPickerOpen(true); }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'ArrowDown') {
+                                                e.preventDefault();
+                                                setDivisionPickerOpen(true);
+                                            }
+                                        }}
+                                        aria-expanded={divisionPickerOpen}
+                                        aria-controls={divisionPickerOpen ? 'office-division-options' : undefined}
+                                        aria-haspopup="listbox"
+                                        placeholder="Search offices..."
+                                        autoComplete="off"
+                                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                                    />
                                     {divisionPickerOpen && (
-                                        <div className="mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-300 bg-white shadow-lg" role="listbox" aria-label="Office divisions">
+                                        <div className="mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-300 bg-white shadow-lg" id="office-division-options" role="listbox" aria-label="Office divisions">
                                             {form.division_code && (
                                                 <button type="button" role="option" aria-selected="false" onClick={() => { setForm({ ...form, division_code: '', name: '', short_name: '', code: '', email: '' }); setDivisionPickerOpen(false); setDivisionSearch(''); }} className="block w-full border-b border-slate-200 px-3 py-2 text-left text-sm text-slate-500 hover:bg-slate-50">
                                                     Clear selection
@@ -443,9 +488,13 @@ export default function OfficesIndex({
                                     <label className="mb-1 block text-sm font-medium text-slate-700">Short Name</label>
                                     <input
                                         value={form.short_name}
-                                        onChange={(e) => setForm({ ...form, short_name: e.target.value })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                                        onChange={(e) => { setForm({ ...form, short_name: e.target.value }); setShortNameError(null); }}
+                                        maxLength={255}
+                                        aria-invalid={Boolean(shortNameError)}
+                                        aria-describedby={shortNameError ? 'office-short-name-error' : undefined}
+                                        className={`w-full rounded-lg border px-3 py-2 ${shortNameError ? 'border-red-500' : 'border-slate-300'}`}
                                     />
+                                    {shortNameError && <p id="office-short-name-error" role="alert" className="mt-1 text-sm text-red-600">{shortNameError}</p>}
                                 </div>
                                 <div>
                                     <label htmlFor="range" className="mb-1 block text-sm font-medium text-slate-700">Range</label>

@@ -2,12 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\BureauLegacy;
 use App\Models\Document;
 use App\Models\DocumentCreationDraft;
 use App\Models\DocumentType;
 use App\Models\Office;
-use App\Models\RangeLegacy;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Http\Request;
@@ -24,12 +22,14 @@ class DocumentCreationController extends Controller
         $canReviewOfficeApprovals = $user->is_active && $user->isAdministrator() && $userOffice !== null;
         $approvedOnly = $request->query('queue') === 'approved';
         $draftQuery = DocumentCreationDraft::query()->with([
-            'creator:id,name',
-            'approver:id,name',
-            'approverOffice:id,name',
-            'decisionMaker:id,name',
+            'creator:id,name,firstname,lastname',
+            'approver:id,name,firstname,lastname',
+            'approverOffice:id,name,short_name',
+            'decisionMaker:id,name,firstname,lastname',
             'documentType:id,name',
-            'events.user:id,name',
+            'events.user:id,name,firstname,lastname,office_id,office_code',
+            'events.user.office:id,name,short_name',
+            'events.user.officeByCode:id,name,short_name',
         ])->where(function ($query) use ($user, $userOffice, $canReviewOfficeApprovals) {
             $query->where('created_by', $user->id)
                 ->orWhere('approver_id', $user->id)
@@ -63,6 +63,17 @@ class DocumentCreationController extends Controller
                 $draft->setAttribute('can_decide', (int) $draft->created_by !== (int) $user->id
                     && ((int) $draft->approver_id === (int) $user->id
                         || ($canReviewOfficeApprovals && (int) $draft->approver_office_id === (int) $userOffice->id)));
+                foreach (['creator', 'approver', 'decisionMaker'] as $relation) {
+                    if ($draft->{$relation}) {
+                        $draft->{$relation}->setAttribute('short_name', $this->shortUserName($draft->{$relation}));
+                    }
+                }
+                $draft->events->each(function ($event) {
+                    if ($event->user) {
+                        $event->user->setAttribute('short_name', $this->shortUserName($event->user));
+                        $event->user->setAttribute('office_short_name', $this->userOffice($event->user)?->short_name);
+                    }
+                });
 
                 return $draft;
             });
@@ -71,7 +82,7 @@ class DocumentCreationController extends Controller
             'drafts' => $drafts,
             'documentTypes' => $this->documentTypeOptions(),
             'approverOffices' => $this->approverOffices()
-                ->map(fn (Office $office) => ['id' => $office->id, 'name' => $office->name])
+                ->map(fn (Office $office) => ['id' => $office->id, 'name' => $office->name, 'short_name' => $office->short_name])
                 ->all(),
             'currentUserId' => $user->id,
             'approvedOnly' => $approvedOnly,
@@ -151,7 +162,8 @@ class DocumentCreationController extends Controller
                 'created_by' => $draft->created_by, 'status' => 'pending', 'is_finalized' => true,
                 'remarks' => 'Created through Document Creation workflow.',
             ]);
-            $officeName = $request->user()->office?->name ?: 'DOTS';
+            $office = $request->user()->office;
+            $officeName = trim((string) $office?->short_name) ?: ($office?->name ?: 'DOTS');
             $prefix = trim(preg_replace('/-+/', '-', preg_replace('/\s+/', '-', trim($officeName))), '-');
             $document->update(['tracking_number' => $prefix.'-'.now()->format('y-m-d').'-'.str_pad((string) $document->id, 4, '0', STR_PAD_LEFT)]);
             $document->trails()->create(['from_office_id' => $officeId, 'created_by' => $request->user()->id, 'status' => 'pending', 'action' => 'Registered from Document Creation']);
@@ -201,6 +213,14 @@ class DocumentCreationController extends Controller
         return in_array((int) $request->user()->id, [(int) $draft->created_by, (int) $draft->approver_id, (int) $draft->verified_by], true);
     }
 
+    private function shortUserName(User $user): string
+    {
+        return trim(
+            (filled($user->firstname) ? mb_substr(trim($user->firstname), 0, 1).'. ' : '').
+            ($user->lastname ?? '')
+        ) ?: $user->name;
+    }
+
     private function approverOffices(): Collection
     {
         return User::query()
@@ -222,28 +242,7 @@ class DocumentCreationController extends Controller
             return $office;
         }
 
-        if (! $user->legacy_office_id) {
-            return null;
-        }
-
-        $bureau = BureauLegacy::query()->whereKey($user->legacy_office_id)->first(['officeCode', 'longName']);
-        if (! $bureau) {
-            return null;
-        }
-
-        $officeQuery = Office::query();
-        if (filled($bureau->officeCode)) {
-            $officeQuery->where('code', $bureau->officeCode);
-        }
-        if (filled($bureau->longName)) {
-            if (filled($bureau->officeCode)) {
-                $officeQuery->orWhere('name', $bureau->longName);
-            } else {
-                $officeQuery->where('name', $bureau->longName);
-            }
-        }
-
-        return $officeQuery->first();
+        return null;
     }
 
     private function userCanApproveForOffice(User $user, int $officeId): bool
@@ -264,13 +263,6 @@ class DocumentCreationController extends Controller
             return $range;
         }
 
-        if ($user->legacy_office_id) {
-            $bureau = BureauLegacy::query()->whereKey($user->legacy_office_id)->first(['bureauId', 'range']);
-            if ($bureau && ($range = $this->legacyBureauRangeIdentity($bureau))) {
-                return $range;
-            }
-        }
-
         return null;
     }
 
@@ -280,26 +272,6 @@ class DocumentCreationController extends Controller
             return ['source' => 'new', 'id' => (int) $office->range_id];
         }
 
-        if ($office->legacy_range_id !== null && RangeLegacy::query()->whereKey($office->legacy_range_id)->exists()) {
-            return ['source' => 'legacy', 'id' => (int) $office->legacy_range_id];
-        }
-
-        $bureau = BureauLegacy::query()->where('longName', $office->name)->first(['bureauId', 'range']);
-
-        return $bureau ? $this->legacyBureauRangeIdentity($bureau) : null;
-    }
-
-    private function legacyBureauRangeIdentity(BureauLegacy $bureau): ?array
-    {
-        $value = trim((string) ($bureau->range ?? ''));
-        if ($value === '') {
-            return null;
-        }
-
-        $range = ctype_digit($value)
-            ? RangeLegacy::query()->whereKey((int) $value)->first(['id'])
-            : RangeLegacy::query()->whereRaw('LOWER(name) = ?', [mb_strtolower($value)])->first(['id']);
-
-        return $range ? ['source' => 'legacy', 'id' => (int) $range->id] : null;
+        return null;
     }
 }

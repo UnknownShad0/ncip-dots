@@ -9,17 +9,20 @@ import type { FormEvent } from 'react';
 type DocumentItem = {
     id?: number | string | null;
     tracking_number?: string;
+    needs_review?: boolean;
     tracking_url?: string;
     title?: string;
     status?: string;
     office_name?: string;
+    office_short_name?: string | null;
     document_type?: string | { name?: string } | null;
     purpose_type?: string;
     documentType?: { name?: string } | null;
     created_by_name?: string;
+    created_by_short_name?: string | null;
     file_name?: string;
-    file_url?: string;
-    files?: Array<{ id: number; name: string; type: 'original' | 'version' | string; url: string; uploaded_at?: string | null }>;
+    file_url?: string | null;
+    files?: Array<{ id: number; name: string; type: 'original' | 'version' | string; url: string | null; uploaded_at?: string | null }>;
     origin_type?: string;
     last_transaction?: string;
     created_at?: string;
@@ -28,13 +31,18 @@ type DocumentItem = {
         status?: string | null;
         remarks?: string | null;
         from_office?: string | null;
+        from_office_short_name?: string | null;
         to_office?: string | null;
+        to_office_short_name?: string | null;
         holder?: string | null;
+        holder_short_name?: string | null;
         created_by?: string | null;
+        created_by_short_name?: string | null;
         created_at?: string | null;
     }>;
     office?: {
         name?: string;
+        short_name?: string | null;
     } | null;
     remarks?: string;
     source?: string;
@@ -124,7 +132,7 @@ export default function DocumentsIndex({
     actionTypes = [],
     purposeTypes = [],
     offices = [],
-    officeRegionLabel = null,
+    officeRangeLabel = null,
     approvedDocuments = [],
     maxUploadSizeKb,
 }: {
@@ -134,7 +142,7 @@ export default function DocumentsIndex({
     actionTypes?: LibraryOption[];
     purposeTypes?: LibraryOption[];
     offices?: LibraryOption[];
-    officeRegionLabel?: string | null;
+    officeRangeLabel?: string | null;
     approvedDocuments?: ApprovedDocument[];
     maxUploadSizeKb: number;
 }) {
@@ -150,7 +158,7 @@ export default function DocumentsIndex({
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
-    const [sortKey, setSortKey] = useState<SortKey>('title');
+    const [sortKey, setSortKey] = useState<SortKey | null>(null);
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
     const [page, setPage] = useState(1);
     const [perPage, setPerPage] = useState(10);
@@ -361,6 +369,9 @@ export default function DocumentsIndex({
             return matchesSearch && matchesStatus;
         });
 
+        // Preserve the server's creation-date descending order until a column is selected.
+        if (sortKey === null) return filtered;
+
         return [...filtered].sort((a, b) => {
             const valueA = String(sortKey === 'document_type' ? getDocumentTypeName(a) : a[sortKey] ?? '').toLowerCase();
             const valueB = String(sortKey === 'document_type' ? getDocumentTypeName(b) : b[sortKey] ?? '').toLowerCase();
@@ -567,6 +578,7 @@ export default function DocumentsIndex({
                                         >
                                             <td className="whitespace-nowrap px-4 py-4 text-xs font-semibold text-blue-800">
                                                 <span className="font-mono">{document.tracking_number || 'N/A'}</span>
+                                                {document.needs_review && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">Needs review</span>}
                                                 {isUrgent && <span className="ml-2 inline-flex rounded-full bg-rose-100 px-2 py-0.5 font-sans text-[10px] font-bold uppercase text-rose-800">Urgent</span>}
                                                 {isLegacy && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 font-sans text-[10px] font-medium text-slate-600">Legacy</span>}
                                             </td>
@@ -591,7 +603,7 @@ export default function DocumentsIndex({
                                             <td className="min-w-[240px] px-4 py-3">
                                                 {document.transactions?.[0] ? <div className="flex flex-col gap-1.5">
                                                     <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${getTransactionClasses(document.transactions[0].action, document.transactions[0].status)}`}>{document.transactions[0].action || document.transactions[0].status || 'Transaction'}</span>
-                                                    <span className="text-xs text-slate-600">{[document.transactions[0].from_office, document.transactions[0].to_office].filter(Boolean).join(' → ') || document.transactions[0].holder || 'Office not recorded'}</span>
+                                                    <span className="text-xs text-slate-600">{[document.transactions[0].from_office_short_name || document.transactions[0].from_office, document.transactions[0].to_office_short_name || document.transactions[0].to_office].filter(Boolean).join(' → ') || document.transactions[0].holder_short_name || document.transactions[0].holder || 'Office not recorded'}</span>
                                                     <span className="text-[11px] text-slate-400">{document.transactions[0].created_at || document.transactions[0].created_by || '—'}</span>
                                                 </div> : <span className="text-sm text-slate-400">No transactions</span>}
                                             </td>
@@ -678,7 +690,7 @@ export default function DocumentsIndex({
                                 <div><p className="text-xs font-semibold uppercase text-[#898984]">Title</p><p className="mt-1 break-words text-sm font-medium text-slate-800">{viewingRow.title || 'Untitled'}</p></div>
                                 <div><p className="text-xs font-semibold uppercase text-[#898984]">Document type</p><p className="mt-1 text-sm font-medium text-slate-800">{getDocumentTypeName(viewingRow) || '—'}</p></div>
                                 <div><p className="text-xs font-semibold uppercase text-[#898984]">Origin</p><p className="mt-1 text-sm text-slate-700">{viewingRow.origin_type || '—'}</p></div>
-                                <div><p className="text-xs font-semibold uppercase text-[#898984]">Office</p><p className="mt-1 text-sm text-slate-700">{viewingRow.office_name || viewingRow.office?.name || '—'}</p></div>
+                                <div><p className="text-xs font-semibold uppercase text-[#898984]">Office</p><p className="mt-1 text-sm text-slate-700">{viewingRow.office_short_name || viewingRow.office?.short_name || viewingRow.office_name || viewingRow.office?.name || '—'}</p></div>
                                 <div><p className="text-xs font-semibold uppercase text-[#898984]">Status</p><span className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(viewingRow.status)}`}>{(viewingRow.status || 'draft').toUpperCase()}</span></div>
                                 <div className="sm:col-span-2 lg:col-span-3"><p className="text-xs font-semibold uppercase text-[#898984]">Remarks</p><p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-700">{viewingRow.remarks || '—'}</p></div>
                             </section>
@@ -688,7 +700,7 @@ export default function DocumentsIndex({
                                     <div><h3 id="transaction-history-title" className="font-semibold text-[#171717]">Transaction history</h3><p className="mt-0.5 text-sm text-[#73736e]">Document activity in workflow order.</p></div>
                                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{viewingRow.transactions?.length ?? 0} transactions</span>
                                 </div>
-                                {viewingRow.transactions?.length ? <ol className="space-y-3 border-l-2 border-slate-200 pl-4">{viewingRow.transactions.map((transaction, index) => <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="relative rounded-xl border border-[#e2e2df] bg-[#fafaf8] p-3 before:absolute before:-left-[22px] before:top-4 before:h-2.5 before:w-2.5 before:rounded-full before:bg-sky-500"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-slate-800">{transaction.action || transaction.status || 'Transaction'}</span><span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium uppercase text-slate-600">{transaction.status || '—'}</span></div><p className="mt-1 text-sm text-slate-600">{[transaction.from_office, transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder ? `Held by ${transaction.holder}` : 'Office details unavailable')}</p><p className="mt-1 text-xs text-slate-500">{[transaction.created_by, transaction.created_at].filter(Boolean).join(' · ') || 'Date and user unavailable'}</p></li>)}</ol> : <p className="rounded-xl border border-dashed border-[#deded9] px-4 py-8 text-center text-sm text-[#73736e]">No transactions recorded.</p>}
+                                {viewingRow.transactions?.length ? <ol className="space-y-3 border-l-2 border-slate-200 pl-4">{viewingRow.transactions.map((transaction, index) => <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="relative rounded-xl border border-[#e2e2df] bg-[#fafaf8] p-3 before:absolute before:-left-[22px] before:top-4 before:h-2.5 before:w-2.5 before:rounded-full before:bg-sky-500"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-slate-800">{transaction.action || transaction.status || 'Transaction'}</span><span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium uppercase text-slate-600">{transaction.status || '—'}</span></div><p className="mt-1 text-sm text-slate-600">{[transaction.from_office_short_name || transaction.from_office, transaction.to_office_short_name || transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder_short_name || transaction.holder ? `Held by ${transaction.holder_short_name || transaction.holder}` : 'Office details unavailable')}</p><p className="mt-1 text-xs text-slate-500">{[transaction.created_by_short_name || transaction.created_by, transaction.created_at].filter(Boolean).join(' · ') || 'Date and user unavailable'}</p></li>)}</ol> : <p className="rounded-xl border border-dashed border-[#deded9] px-4 py-8 text-center text-sm text-[#73736e]">No transactions recorded.</p>}
                         </section>
                         </div>
                     </section>
@@ -711,7 +723,7 @@ export default function DocumentsIndex({
                                 <ReadOnlyDetail label="Title" value={releasingRow.title} />
                                 <ReadOnlyDetail label="Type" value={getDocumentTypeName(releasingRow)} />
                                 <ReadOnlyDetail label="Purpose" value={getPurposeTypeName(releasingRow)} />
-                                <ReadOnlyDetail label="Created by" value={releasingRow.created_by_name} />
+                                <ReadOnlyDetail label="Created by" value={releasingRow.created_by_short_name || releasingRow.created_by_name} />
                                 <ReadOnlyDetail label="Date created" value={releasingRow.created_at} />
                                 <div className="sm:col-span-2">
                                     <p className="text-xs font-semibold uppercase text-[#898984]">Remarks</p>
@@ -719,7 +731,7 @@ export default function DocumentsIndex({
                                 </div>
                                 <div className="sm:col-span-2">
                                     <p className="text-xs font-semibold uppercase text-[#898984]">File</p>
-                                    {releasingRow.files?.length ? <ul className="mt-1 space-y-1">{releasingRow.files.map((file) => <li key={file.id} className="flex flex-wrap items-baseline gap-x-2 text-sm"><span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium uppercase text-slate-600">{file.type}</span><a href={file.url} target="_blank" rel="noreferrer" className="break-all font-medium text-blue-700 underline">{file.name}</a>{file.uploaded_at && <span className="text-xs text-slate-500">{file.uploaded_at}</span>}</li>)}</ul> : releasingRow.file_url ? <a href={releasingRow.file_url} target="_blank" rel="noreferrer" className="mt-1 inline-block break-all text-sm font-medium text-blue-700 underline">{releasingRow.file_name || 'View attached file'}</a> : <p className="mt-1 text-sm text-slate-700">{releasingRow.file_name || 'No file attached'}</p>}
+                                    {releasingRow.files?.length ? <ul className="mt-1 space-y-1">{releasingRow.files.map((file) => <li key={file.id} className="flex flex-wrap items-baseline gap-x-2 text-sm"><span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium uppercase text-slate-600">{file.type}</span>{file.url ? <a href={file.url} target="_blank" rel="noreferrer" className="break-all font-medium text-blue-700 underline">{file.name}</a> : <span className="break-all text-slate-600">{file.name} — File not yet available</span>}{file.uploaded_at && <span className="text-xs text-slate-500">{file.uploaded_at}</span>}</li>)}</ul> : releasingRow.file_url ? <a href={releasingRow.file_url} target="_blank" rel="noreferrer" className="mt-1 inline-block break-all text-sm font-medium text-blue-700 underline">{releasingRow.file_name || 'View attached file'}</a> : <p className="mt-1 text-sm text-slate-700">{releasingRow.file_name || 'No file attached'}</p>}
                                 </div>
                             </section>
 
@@ -740,7 +752,7 @@ export default function DocumentsIndex({
                                 <div>
                                     <label htmlFor="release-office" className="mb-1 block text-sm font-medium text-slate-700">Required Receiving Office <span className="text-rose-600">*</span></label>
                                     <select id="release-office" required value={releaseForm.officeId} onChange={(event) => { setReleaseForm({ ...releaseForm, officeId: event.target.value }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm">
-                                        <option value="">{offices.length ? 'Select receiving office' : `No receiving offices available${officeRegionLabel ? ` in ${officeRegionLabel}` : ' in your range'}`}</option>
+                                        <option value="">{offices.length ? 'Select receiving office' : `No receiving offices available${officeRangeLabel ? ` in ${officeRangeLabel}` : ' in your range'}`}</option>
                                         {offices.map((office) => <option key={office.id} value={office.id} disabled={office.disabled}>{office.name}</option>)}
                                     </select>
                                 </div>
@@ -963,13 +975,13 @@ function DispositionPrintView({ document }: { document: DocumentItem }) {
                     <tbody>
                         <tr>
                             <td className="field-label">TO/FOR:</td>
-                            <td className="field-value">{latest?.to_office || 'Not specified'}</td>
+                            <td className="field-value">{latest?.to_office_short_name || latest?.to_office || 'Not specified'}</td>
                             <td className="qr-cell" rowSpan={6}>
                                 <div className="disposition-qr">{document.tracking_url ? <QRCode value={document.tracking_url} size={88} level="M" bgColor="#ffffff" fgColor="#111827" /> : 'No tracking URL'}</div>
                                 <div className="disposition-qr-note"><strong>DOTS No.:</strong><br />{document.tracking_number || 'Not assigned'}</div>
                             </td>
                         </tr>
-                        <tr><td className="field-label">FROM:</td><td className="field-value">{latest?.from_office || document.office_name || 'Not specified'}</td></tr>
+                        <tr><td className="field-label">FROM:</td><td className="field-value">{latest?.from_office_short_name || latest?.from_office || document.office_short_name || document.office_name || 'Not specified'}</td></tr>
                         <tr><td className="field-label">SUBJECT:</td><td className="field-value">{document.title || '—'}</td></tr>
                         <tr><td className="field-label">PURPOSE:</td><td className="field-value">{document.purpose_type || 'For Appropriate Action'}</td></tr>
                         <tr><td className="field-label">DOCUMENT:</td><td className="field-value">{getDocumentTypeName(document) || 'No document attached'}</td></tr>
@@ -984,14 +996,17 @@ function DispositionPrintView({ document }: { document: DocumentItem }) {
                     {transactions.length > 0 && <div className="disposition-trails">
                         {transactions.map((entry, index) => {
                             const actionType = (entry.action || entry.status || '').toLowerCase();
+                            const fromOffice = entry.from_office_short_name || entry.from_office;
+                            const toOffice = entry.to_office_short_name || entry.to_office;
+                            const holder = entry.holder_short_name || entry.holder;
                             const office = actionType.includes('releas')
-                                ? entry.from_office || entry.holder || entry.to_office
+                                ? fromOffice || holder || toOffice
                                 : actionType.includes('receiv')
-                                    ? entry.to_office || entry.holder || entry.from_office
-                                    : entry.holder || entry.from_office || entry.to_office;
+                                    ? toOffice || holder || fromOffice
+                                    : holder || fromOffice || toOffice;
                             return <div key={`${entry.created_at ?? 'trail'}-${index}`}>
                                 {entry.remarks && <div className="disposition-trail-remarks">Remarks: '{entry.remarks}'</div>}
-                                <div className="disposition-trail-action">✔ {entry.action || entry.status || 'Processed'} by {entry.created_by || 'Unknown user'} of {office || 'Unknown office'}{entry.created_at ? ` at ${entry.created_at}` : ''}</div>
+                                <div className="disposition-trail-action">✔ {entry.action || entry.status || 'Processed'} by {entry.created_by_short_name || entry.created_by || 'Unknown user'} of {office || 'Unknown office'}{entry.created_at ? ` at ${entry.created_at}` : ''}</div>
                             </div>;
                         })}
                     </div>}

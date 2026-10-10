@@ -20,24 +20,24 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        $legacySchema = Schema::connection('legacy');
+        // $legacySchema = Schema::connection('legacy');
 
-        if (!$legacySchema->hasTable('file')) {
-            $legacySchema->create('file', function (Blueprint $table) {
-                $table->increments('fileId');
-                $table->unsignedInteger('docId')->nullable()->index();
-                $table->unsignedInteger('docTrailId')->nullable();
-                $table->string('fileName', 100);
-                $table->string('origName', 100);
-                $table->string('filePath', 250)->nullable();
-                $table->string('attachmentFileName', 100)->nullable();
-                $table->string('attachmentOrigName', 100)->nullable();
-                $table->string('attachmentPath', 100)->nullable();
-                $table->enum('type', ['original', 'version', 'terminal'])->nullable();
-                $table->string('uploadedBy', 100)->nullable();
-                $table->dateTime('dateUploaded')->nullable();
-            });
-        }
+        // if (!$legacySchema->hasTable('file')) {
+        //     $legacySchema->create('file', function (Blueprint $table) {
+        //         $table->increments('fileId');
+        //         $table->unsignedInteger('docId')->nullable()->index();
+        //         $table->unsignedInteger('docTrailId')->nullable();
+        //         $table->string('fileName', 100);
+        //         $table->string('origName', 100);
+        //         $table->string('filePath', 250)->nullable();
+        //         $table->string('attachmentFileName', 100)->nullable();
+        //         $table->string('attachmentOrigName', 100)->nullable();
+        //         $table->string('attachmentPath', 100)->nullable();
+        //         $table->enum('type', ['original', 'version', 'terminal'])->nullable();
+        //         $table->string('uploadedBy', 100)->nullable();
+        //         $table->dateTime('dateUploaded')->nullable();
+        //     });
+        // }
     }
 
     public function down(): void
