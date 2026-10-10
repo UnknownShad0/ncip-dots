@@ -2,9 +2,7 @@
 
 namespace App\Http\Middleware;
 
-use App\Models\BureauLegacy;
 use App\Models\Office;
-use App\Models\RangeLegacy;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -39,6 +37,14 @@ class HandleInertiaRequests extends Middleware
 
         if ($authUser) {
             $authUserData = $authUser->toArray();
+            $authUserData['short_name'] = trim(
+                (filled($authUser->firstname) ? mb_substr(trim($authUser->firstname), 0, 1).'. ' : '').
+                ($authUser->lastname ?? '')
+            ) ?: $authUser->name;
+            $office = $this->userOffice($authUser);
+            $authUserData['office_short_name'] = $office?->short_name;
+            $authUserData['office_display_name'] = trim((string) $office?->short_name)
+                ?: ($office?->name ?: ($authUser->office_name ?: $authUser->division));
             $authUserData['range'] = $this->userRange($authUser);
         }
 
@@ -61,6 +67,17 @@ class HandleInertiaRequests extends Middleware
 
     private function userRange(User $user): ?string
     {
+        $office = $this->userOffice($user);
+
+        if ($office?->range) {
+            return $office->range->name;
+        }
+
+        return null;
+    }
+
+    private function userOffice(User $user): ?Office
+    {
         $office = $user->office_id
             ? Office::query()->with('range')->find($user->office_id)
             : null;
@@ -69,28 +86,6 @@ class HandleInertiaRequests extends Middleware
             $office = Office::query()->with('range')->where('code', $user->office_code)->first();
         }
 
-        if ($office?->legacy_range_id) {
-            $rangeName = RangeLegacy::query()->whereKey($office->legacy_range_id)->value('name');
-            if (filled($rangeName)) {
-                return $rangeName;
-            }
-        }
-
-        if ($office?->range) {
-            return $office->range->name;
-        }
-
-        if (! $user->legacy_office_id) {
-            return null;
-        }
-
-        $rangeValue = trim((string) BureauLegacy::query()->whereKey($user->legacy_office_id)->value('range'));
-        if ($rangeValue === '') {
-            return null;
-        }
-
-        return ctype_digit($rangeValue)
-            ? RangeLegacy::query()->whereKey((int) $rangeValue)->value('name')
-            : RangeLegacy::query()->whereRaw('LOWER(name) = ?', [mb_strtolower($rangeValue)])->value('name');
+        return $office;
     }
 }

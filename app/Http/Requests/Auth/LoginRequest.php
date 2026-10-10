@@ -3,13 +3,11 @@
 namespace App\Http\Requests\Auth;
 
 use App\Models\User;
-use App\Models\UserLegacy;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\RateLimiter;
@@ -92,7 +90,7 @@ class LoginRequest extends FormRequest
             ]);
         }
 
-        if (! Auth::attempt($credentials, $this->boolean('remember')) && ! $this->authenticateLegacy($identifier)) {
+        if (! Auth::attempt($credentials, $this->boolean('remember'))) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
@@ -103,95 +101,6 @@ class LoginRequest extends FormRequest
         RateLimiter::clear($this->throttleKey());
 
         return null;
-    }
-
-    /** Authenticate a legacy account and provision it locally for the web guard. */
-    private function authenticateLegacy(string $identifier): bool
-    {
-        try {
-            $legacy = UserLegacy::query()
-                ->where('username', $identifier)
-                ->first();
-        } catch (\Throwable) {
-            return false;
-        }
-
-        if (! $legacy || ! $this->legacyAccountIsUsable($legacy) || ! $this->legacyPasswordMatches((string) $legacy->password)) {
-            return false;
-        }
-
-        $email = trim((string) $legacy->emailAddress);
-        if ($email === '') {
-            $email = strtolower((string) $legacy->username).'@legacy.local';
-        }
-
-        $user = User::query()->where('username', $legacy->username)->first();
-        if (! $user) {
-            $user = User::query()->where('email', $email)->first();
-        }
-
-        if ($user && (! $user->is_active || $user->is_locked)) {
-            return false;
-        }
-
-        if (! $user) {
-            $user = new User;
-        }
-
-        $roleId = is_numeric($legacy->role) ? (int) $legacy->role : null;
-        $roleName = (string) ($legacy->role ?: 'user');
-        if ($roleId) {
-            try {
-                $roleName = \Illuminate\Support\Facades\DB::connection('legacy')->table('role')->where('roleId', $roleId)->value('rolename') ?: $roleName;
-            } catch (\Throwable) {
-                // The legacy role lookup is optional for authentication.
-            }
-        }
-        $name = collect([$legacy->firstname, $legacy->lastname])->filter(fn ($part) => filled($part))->implode(' ');
-
-        $user->fill([
-            'name' => $name ?: (string) $legacy->username,
-            'username' => $legacy->username,
-            'firstname' => $legacy->firstname,
-            'lastname' => $legacy->lastname,
-            'middlename' => $legacy->middlename,
-            'extensionname' => $legacy->extensionname,
-            'email' => $email,
-            'role' => $roleName ?: 'user',
-            'role_id' => $roleId,
-            'legacy_office_id' => $legacy->bureauId,
-            'division_id' => $legacy->divisionId,
-            'is_active' => true,
-            'is_locked' => false,
-            'last_login_at' => now(),
-            'password' => $this->input('password'),
-        ]);
-        $user->save();
-
-        Auth::login($user, $this->boolean('remember'));
-
-        return true;
-    }
-
-    private function legacyAccountIsUsable(UserLegacy $user): bool
-    {
-        $active = in_array(strtolower(trim((string) $user->status)), ['1', 'active', 'y', 'enabled'], true);
-        $locked = in_array(strtoupper(trim((string) $user->isLocked)), ['1', 'Y', 'LOCKED', 'TRUE'], true);
-
-        return $active && ! $locked;
-    }
-
-    private function legacyPasswordMatches(string $stored): bool
-    {
-        if ($stored === '') {
-            return false;
-        }
-
-        try {
-            return Hash::check($this->input('password'), $stored);
-        } catch (\Throwable) {
-            return false;
-        }
     }
 
     /**

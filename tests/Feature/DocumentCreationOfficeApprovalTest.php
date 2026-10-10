@@ -30,6 +30,26 @@ class DocumentCreationOfficeApprovalTest extends TestCase
             ->where('approverOffices.0.name', 'Regional Office'));
     }
 
+    public function test_document_creation_page_exposes_short_names_for_users_and_offices(): void
+    {
+        $office = $this->office('Regional Office');
+        $office->update(['short_name' => 'Regional']);
+        $creator = $this->user($office, 'Encoder', 14);
+        $creator->update(['firstname' => 'Alexandra', 'lastname' => 'Molina']);
+        $this->user($office, 'Admin Staff', 3);
+        $draft = $this->draft($creator);
+        $draft->events()->create(['user_id' => $creator->id, 'event' => 'Draft created']);
+
+        $this->actingAs($creator)->get('/document-creation')->assertInertia(fn (Assert $page) => $page
+            ->where('auth.user.short_name', 'A. Molina')
+            ->where('auth.user.office_short_name', 'Regional')
+            ->where('auth.user.office_display_name', 'Regional')
+            ->where('approverOffices.0.short_name', 'Regional')
+            ->where('drafts.0.creator.short_name', 'A. Molina')
+            ->where('drafts.0.events.0.user.short_name', 'A. Molina')
+            ->where('drafts.0.events.0.user.office_short_name', 'Regional'));
+    }
+
     public function test_any_active_admin_in_the_assigned_office_can_decide_and_other_offices_cannot(): void
     {
         $creatorOffice = $this->office('Creator Office');
@@ -72,12 +92,38 @@ class DocumentCreationOfficeApprovalTest extends TestCase
         $this->assertSame($secondOfficeAdmin->id, $draft->fresh()->decided_by);
     }
 
+    public function test_admin_role_names_without_ids_can_approve_but_cannot_approve_their_own_submission(): void
+    {
+        $office = $this->office('Approval Office');
+        foreach (['Admin', 'Administrator', 'System Admin', ' Super_Admin ', 'ADMIN-STAFF'] as $role) {
+            $admin = $this->user($office, $role, null);
+            $this->assertTrue($admin->isAdministrator());
+            $draft = $this->draft($admin);
+            $this->actingAs($admin)->get('/document-creation')->assertInertia(fn (Assert $page) => $page
+                ->has('approverOffices', 1)->where('approverOffices.0.id', $office->id));
+            $this->post("/document-creation/{$draft->id}/submit", ['approver_office_id' => $office->id])->assertRedirect();
+            $this->post("/document-creation/{$draft->id}/decision", [
+                'decision' => 'approved', 'version_number' => $draft->fresh()->version_number,
+            ])->assertForbidden();
+        }
+        foreach (['Executive', 'Encoder', 'User'] as $role) {
+            $this->assertFalse((new User(['role' => $role]))->isAdministrator());
+        }
+        $creator = $this->user($office, 'Encoder', 14);
+        $draft = $this->draft($creator);
+        $this->actingAs($creator)->post("/document-creation/{$draft->id}/submit", ['approver_office_id' => $office->id])->assertRedirect();
+        $this->actingAs($admin)->post("/document-creation/{$draft->id}/decision", [
+            'decision' => 'approved', 'version_number' => $draft->fresh()->version_number,
+        ])->assertRedirect();
+        $this->assertSame('approved', $draft->fresh()->status);
+    }
+
     private function office(string $name): Office
     {
         return Office::query()->create(['name' => $name, 'code' => str($name)->slug()->upper()->value()]);
     }
 
-    private function user(Office $office, string $role, int $roleId, bool $active = true): User
+    private function user(Office $office, string $role, ?int $roleId, bool $active = true): User
     {
         return User::factory()->create([
             'name' => $role.' '.$office->name,

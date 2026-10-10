@@ -19,5 +19,10 @@ class DocumentCreationDraft extends Model
     public function documentType(): BelongsTo { return $this->belongsTo(DocumentType::class); }
     public function officialDocument(): BelongsTo { return $this->belongsTo(Document::class, 'official_document_id'); }
     public function versions(): HasMany { return $this->hasMany(DocumentCreationVersion::class, 'draft_id'); }
-    public function events(): HasMany { return $this->hasMany(DocumentCreationEvent::class, 'draft_id'); }
+    public function events(): HasMany
+    {
+        return $this->hasMany(DocumentCreationEvent::class, 'draft_id')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
+    }
 }

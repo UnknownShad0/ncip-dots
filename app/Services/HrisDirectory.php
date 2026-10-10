@@ -46,7 +46,7 @@ class HrisDirectory
         return $response->successful() && ($result['valid'] ?? false) === true;
     }
 
-    public function lookup(string $employeeCode): ?array
+    public function lookup(string $employeeCode, bool $includeOffices = true): ?array
     {
         $employeeRecords = $this->records($this->fetchEmployeeByCode($employeeCode));
         $employee = collect($employeeRecords)
@@ -63,7 +63,7 @@ class HrisDirectory
         }
 
         $divisionCode = $employee['division_code'] ?? '';
-        $offices = filled($divisionCode)
+        $offices = $includeOffices && filled($divisionCode)
             ? collect($this->records($this->fetch('office_path', ['division_code' => $divisionCode])))
                 ->filter(fn (array $office) => collect($office['divisions'] ?? [])
                     ->contains(fn ($division) => is_array($division) && ($division['code'] ?? '') === $divisionCode))

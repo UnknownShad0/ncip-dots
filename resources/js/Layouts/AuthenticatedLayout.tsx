@@ -39,6 +39,7 @@ export default function AuthenticatedLayout({
     children,
 }: PropsWithChildren<{ header?: ReactNode }>) {
     const user = (usePage().props as any).auth.user;
+    const displayName = user.short_name || user.name || 'U';
     const canManageLibraries = (usePage().props as any).canManageLibraries === true;
     const [mobileOpen, setMobileOpen] = useState(false);
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
@@ -80,8 +81,8 @@ export default function AuthenticatedLayout({
                     </nav>
                     <div className="shrink-0 border-t border-[#e2e2df] p-4">
                         <div className="mb-3 flex items-center gap-3 px-2">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#e8eef7] text-sm font-semibold text-[#164f98]">{String(user.name ?? 'U').charAt(0).toUpperCase()}</span>
-                            <div className="min-w-0"><div className="truncate text-sm font-semibold">{user.name}</div><div className="truncate text-xs text-[#898984]">{user.email}</div></div>
+                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#e8eef7] text-sm font-semibold text-[#164f98]">{String(displayName).charAt(0).toUpperCase()}</span>
+                            <div className="min-w-0"><div className="truncate text-sm font-semibold">{displayName}</div><div className="truncate text-xs text-[#898984]">{user.email}</div></div>
                         </div>
                         <Link href={route('logout')} method="post" as="button" className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-[#555752] hover:bg-[#f3f4f5]"><LogOut size={17} />Log out</Link>
                     </div>
@@ -93,7 +94,7 @@ export default function AuthenticatedLayout({
                         <div className="min-w-0 flex-1">{header}</div>
                         <div className="hidden max-w-[640px] items-center gap-3 rounded-xl border border-[#e0e0dc] bg-white px-4 py-3 text-sm text-[#555752] sm:flex">
                             <Building2 size={20} className="shrink-0 text-[#898984]" aria-hidden="true" />
-                            <span className="max-w-[180px] truncate" title={user.division || undefined}>{user.division || 'Division not assigned'}</span>
+                            <span className="max-w-[180px] truncate" title={user.office_display_name || undefined}>{user.office_display_name || 'Office not assigned'}</span>
                             <span className="h-5 border-l border-[#e0e0dc]" aria-hidden="true" />
                             <UserRound size={18} className="shrink-0 text-[#898984]" aria-hidden="true" />
                             <span className="max-w-[140px] truncate" title={user.role || undefined}>{user.role || 'Role not assigned'}</span>
@@ -103,13 +104,13 @@ export default function AuthenticatedLayout({
                         </div>
                         <DropdownMenu as="div" className="relative hidden sm:block">
                             <MenuButton className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-sm text-[#555752] outline-none transition hover:bg-white focus-visible:ring-2 focus-visible:ring-blue-300">
-                                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e8eef7] text-xs font-semibold text-[#164f98]">{String(user.name ?? 'U').charAt(0).toUpperCase()}</span>
-                                <span className="max-w-32 truncate">{user.name}</span>
+                                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e8eef7] text-xs font-semibold text-[#164f98]">{String(displayName).charAt(0).toUpperCase()}</span>
+                                <span className="max-w-32 truncate">{displayName}</span>
                                 <ChevronDown size={16} />
                             </MenuButton>
                             <MenuItems transition anchor="bottom end" className="z-50 mt-2 w-60 origin-top-right rounded-xl border border-[#e2e2df] bg-white p-1.5 shadow-lg outline-none transition duration-100 data-[closed]:scale-95 data-[closed]:opacity-0">
                                 <div className="border-b border-[#eeeeeb] px-3 py-2.5">
-                                    <p className="truncate text-sm font-semibold text-[#171717]">{user.name}</p>
+                                    <p className="truncate text-sm font-semibold text-[#171717]">{displayName}</p>
                                     <p className="truncate text-xs text-[#898984]">{user.email}</p>
                                 </div>
                                 <MenuItem>

@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Range;
-use App\Models\RangeLegacy;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -11,41 +10,13 @@ class RangeController extends Controller
 {
     public function index()
     {
-        $legacyRanges = RangeLegacy::query()
-            ->select(['id', 'name', 'status'])
-            ->orderBy('name')
-            ->get()
-            ->map(function ($item) {
-                $status = strtolower((string) ($item->status ?? 'inactive'));
-
-                return [
-                    'id' => $item->id ?? $item->range_id ?? null,
-                    'name' => $item->name,
-                    'description' => '',
-                    'is_active' => in_array($status, ['1', 'active', 'enabled', 'yes'], true) ? 1 : 0,
-                    'source' => 'Old DB',
-                ];
-            });
-
-        $newRanges = Range::query()
+        $ranges = Range::query()
             ->select(['id', 'name', 'description', 'is_active'])
             ->orderBy('name')
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'id' => $item->id,
-                    'name' => $item->name,
-                    'description' => $item->description ?? '',
-                    'is_active' => (int) $item->is_active,
-                    'source' => 'New DB',
-                ];
-            });
+            ->get();
 
         return Inertia::render('Ranges/Index', [
-            'ranges' => [
-                ...$legacyRanges->toArray(),
-                ...$newRanges->toArray(),
-            ],
+            'ranges' => $ranges,
         ]);
     }
 

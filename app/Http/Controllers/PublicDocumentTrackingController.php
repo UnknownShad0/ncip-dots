@@ -2,14 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\BureauLegacy;
 use App\Models\Document;
-use App\Models\DocumentLegacy;
-use App\Models\DocumentTrailLegacy;
-use App\Support\LegacyDocumentTypeMap;
-use Illuminate\Database\QueryException;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
 class PublicDocumentTrackingController extends Controller
@@ -43,58 +36,12 @@ class PublicDocumentTrackingController extends Controller
                         'name' => $file->original_name ?: $file->file_name,
                         'type' => $file->type ?: 'original',
                         'mime_type' => $file->mime_type,
-                        'url' => Storage::disk('public')->url($file->file_path),
+                        'url' => $file->downloadUrl(),
                     ]),
                 ],
             ]);
         }
 
-        try {
-            $legacyDocument = DocumentLegacy::query()->where('trackingNo', $trackingNumber)->first();
-            if (! $legacyDocument) {
-                abort(404);
-            }
-
-            $trails = DocumentTrailLegacy::query()
-                ->where('trackingNo', $trackingNumber)
-                ->orderBy('dateCreated')
-                ->orderBy('docTrailId')
-                ->get(['docTrailId', 'status', 'action', 'dateCreated', 'originating', 'receiving', 'holder']);
-            $officeIds = $trails->flatMap(fn ($trail) => [$trail->originating, $trail->receiving, $trail->holder])->filter()->unique();
-            $offices = BureauLegacy::query()->whereIn('bureauId', $officeIds)->get(['bureauId', 'longName', 'shortName'])->keyBy('bureauId');
-            $documentType = $legacyDocument->dtId
-                ? LegacyDocumentTypeMap::typesByLegacyId()->get($legacyDocument->dtId)?->name
-                : null;
-            $files = DB::connection('legacy')->table('file')->where('docId', $legacyDocument->docId)
-                ->orderBy('fileId')
-                ->get(['fileName', 'origName', 'type', 'dateUploaded']);
-
-            return Inertia::render('PublicTracking/Show', [
-                'document' => [
-                    'tracking_number' => $legacyDocument->trackingNo,
-                    'title' => $legacyDocument->title,
-                    'status' => $legacyDocument->status ?: $trails->last()?->status,
-                    'document_type' => $legacyDocument->otherDtype ?: $documentType,
-                    'purpose' => $legacyDocument->purpose,
-                    'office_name' => $offices->get($trails->first()?->originating)?->longName,
-                    'created_at' => $legacyDocument->dateCreated?->format('F j, Y g:i A'),
-                    'trails' => $trails->map(fn ($trail) => [
-                        'action' => $trail->action ?: ucfirst((string) $trail->status),
-                        'status' => $trail->status,
-                        'from_office' => $offices->get($trail->originating)?->shortName ?: $offices->get($trail->originating)?->longName,
-                        'to_office' => $offices->get($trail->receiving)?->shortName ?: $offices->get($trail->receiving)?->longName,
-                        'holder' => $offices->get($trail->holder)?->shortName ?: $offices->get($trail->holder)?->longName,
-                        'created_at' => $trail->dateCreated?->format('F j, Y g:i A'),
-                    ]),
-                    'files' => $files->map(fn ($file) => [
-                        'name' => $file->origName ?: $file->fileName,
-                        'type' => $file->type ?: 'original',
-                    ]),
-                ],
-            ]);
-        } catch (QueryException $exception) {
-            report($exception);
-            abort(404);
-        }
+        abort(404);
     }
 }

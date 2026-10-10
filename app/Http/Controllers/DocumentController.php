@@ -5,20 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Document;
 use App\Models\DocumentCreationDraft;
 use App\Models\AuditTrail;
-use App\Models\DocumentLegacy;
 use App\Models\DocumentTrail;
-use App\Models\DocumentTrailLegacy;
 use App\Models\DocumentType;
-use App\Support\LegacyDocumentTypeMap;
 use App\Models\ActionType;
 use App\Models\PurposeType;
 use App\Models\Office;
-use App\Models\OfficeList;
-use App\Models\Range;
-use App\Models\RangeLegacy;
-use App\Models\BureauLegacy;
 use App\Models\User;
-use App\Models\UserLegacy;
 use App\Services\DocumentAccess;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -35,7 +27,6 @@ class DocumentController extends Controller
     private const MAX_DOCUMENT_UPLOAD_KB = 102400;
     private bool $userRangeResolved = false;
     private ?array $userRangeIdentity = null;
-    private ?array $legacyRangeNames = null;
 
     public function index()
     {
@@ -49,10 +40,14 @@ class DocumentController extends Controller
 
     private function renderDocumentList(bool $latestOnly = false)
     {
+        return $this->renderLocalDocumentList($latestOnly);
+
+        /*
         $legacyDocuments = collect();
         $legacyTrailRows = collect();
         $legacyTransactions = collect();
         $legacyTransactionUsers = collect();
+        $legacyShortTransactionUsers = collect();
         $user = auth()->user();
         $access = app(DocumentAccess::class);
 
@@ -100,22 +95,32 @@ class DocumentController extends Controller
             ->unique('trackingNo')
             ->keyBy('trackingNo');
 
-        $legacyTransactionUsers = UserLegacy::query()
+        $legacyUsers = UserLegacy::query()
             ->whereIn('userUuid', $legacyTrailRows->pluck('createdBy')->merge($legacyDocuments->pluck('createdBy'))->filter()->unique())
-            ->get(['userUuid', 'username', 'firstname', 'middlename', 'lastname', 'extensionname'])
-            ->mapWithKeys(function (UserLegacy $user) {
-                $name = collect([$user->firstname, $user->middlename, $user->lastname, $user->extensionname])
-                    ->filter(fn ($part) => filled($part))
-                    ->implode(' ');
+            ->get(['userUuid', 'username', 'firstname', 'middlename', 'lastname', 'extensionname']);
+        $legacyTransactionUsers = $legacyUsers->mapWithKeys(function (UserLegacy $user) {
+            $name = collect([$user->firstname, $user->middlename, $user->lastname, $user->extensionname])
+                ->filter(fn ($part) => filled($part))
+                ->implode(' ');
 
-                return [$user->userUuid => $name ?: ($user->username ?? '')];
-            });
+            return [$user->userUuid => $name ?: ($user->username ?? '')];
+        });
+        $legacyShortTransactionUsers = $legacyUsers->mapWithKeys(function (UserLegacy $user) {
+            $name = trim(
+                (filled($user->firstname) ? mb_substr(trim($user->firstname), 0, 1).'. ' : '').
+                ($user->lastname ?? '')
+            );
+
+            return [$user->userUuid => $name ?: ($user->username ?? '')];
+        });
         } catch (\Throwable $exception) {
             // The current Documents module must remain usable while the optional
             // legacy database is offline or its credentials are unavailable.
             report($exception);
             $legacyDocuments = collect();
             $legacyTrailRows = collect();
+            $legacyTransactionUsers = collect();
+            $legacyShortTransactionUsers = collect();
         }
 
         $legacyDocumentTypes = $latestOnly ? collect() : LegacyDocumentTypeMap::typesByLegacyId();
@@ -126,7 +131,7 @@ class DocumentController extends Controller
             ->keyBy('bureauId');
         $legacyTransactionsByDocument = $legacyTrailRows->groupBy('trackingNo');
         $legacyDocuments = $legacyDocuments
-            ->map(function ($document) use ($legacyTransactions, $legacyTransactionUsers, $legacyDocumentTypes, $legacyTransactionsByDocument, $legacyBureaus) {
+            ->map(function ($document) use ($legacyTransactions, $legacyTransactionUsers, $legacyShortTransactionUsers, $legacyDocumentTypes, $legacyTransactionsByDocument, $legacyBureaus) {
                 $transaction = $legacyTransactions->get($document->trackingNo);
                 $originatingBureauId = $legacyTransactionsByDocument->get($document->trackingNo, collect())->last()?->originating;
                 $typeName = $legacyDocumentTypes->get($document->dtId)?->name ?? '';
@@ -142,12 +147,15 @@ class DocumentController extends Controller
                     'tracking_url' => $document->trackingNo ? route('documents.track', ['trackingNumber' => $document->trackingNo]) : null,
                     'title' => $document->title ?? '',
                     'created_at' => $document->dateCreated?->format('F j Y h:i:s A'),
+                    'created_at_timestamp' => $document->dateCreated?->timestamp,
                     'status' => $status,
                     'office_name' => $legacyBureaus->get($originatingBureauId)?->longName ?? $legacyBureaus->get($originatingBureauId)?->shortName ?? '',
+                    'office_short_name' => $legacyBureaus->get($originatingBureauId)?->shortName,
                     'document_type' => $typeName,
                     'other_document_type' => $document->otherDtype ?? '',
                     'purpose_type' => $document->purpose ?? '',
                     'created_by_name' => $legacyTransactionUsers->get($document->createdBy) ?? $document->createdBy,
+                    'created_by_short_name' => $legacyShortTransactionUsers->get($document->createdBy) ?? $document->createdBy,
                     'urgent' => $document->urgent ?? null,
                     'origin_type' => $document->originType ?? '',
                     'last_transaction' => $this->formatLastTransaction(
@@ -164,6 +172,7 @@ class DocumentController extends Controller
                         'to_office' => $legacyBureaus->get($trail->receiving)?->shortName ?? $legacyBureaus->get($trail->receiving)?->longName,
                         'holder' => $legacyBureaus->get($trail->holder)?->shortName ?? $legacyBureaus->get($trail->holder)?->longName,
                         'created_by' => $legacyTransactionUsers->get($trail->createdBy) ?? $trail->createdBy,
+                        'created_by_short_name' => $legacyShortTransactionUsers->get($trail->createdBy) ?? $trail->createdBy,
                         'created_at' => $trail->dateCreated?->format('F j Y h:i:s A'),
                     ])->values(),
                     'remarks' => $document->remarks ?? '',
@@ -179,8 +188,8 @@ class DocumentController extends Controller
             $newDocumentQuery->where('created_at', '>=', now()->subDays(15));
         }
         $newDocuments = $newDocumentQuery
-            ->with(['office', 'documentType', 'purposeType', 'creator', 'files', 'latestTrail.creator', 'latestTrail.fromOffice', 'latestTrail.toOffice', 'trails.creator', 'trails.fromOffice', 'trails.toOffice'])
-            ->select(['id', 'tracking_number', 'title', 'status', 'office_id', 'created_by', 'is_finalized', 'remarks', 'document_type_id', 'action_type_id', 'other_action', 'purpose_type_id', 'other_document_type', 'other_purpose', 'origin_type', 'received_from', 'urgent', 'notify_by_email', 'created_at'])
+            ->with(['office', 'documentType', 'purposeType', 'creator', 'files', 'latestTrail.creator', 'latestTrail.fromOffice', 'latestTrail.toOffice', 'trails.creator', 'trails.fromOffice', 'trails.toOffice', 'trails.holderOffice', 'trails.legacyReceivingOffice'])
+            ->select(['id', 'legacy_doc_id', 'legacy_needs_review', 'is_archived', 'tracking_number', 'title', 'status', 'office_id', 'created_by', 'is_finalized', 'remarks', 'document_type_id', 'action_type_id', 'other_action', 'purpose_type_id', 'other_document_type', 'other_purpose', 'origin_type', 'received_from', 'urgent', 'notify_by_email', 'created_at'])
             ->orderBy('created_at', 'desc')
             ->limit(200)
             ->get()
@@ -195,27 +204,33 @@ class DocumentController extends Controller
                 $isIncoming = strtolower((string) ($latest?->status ?? '')) === 'available'
                     && $officeId !== null && (int) $latest?->to_office_id === (int) $officeId;
                 $isOriginOffice = $officeId !== null && (int) $document->office_id === (int) $officeId;
-                $isDraft = !$document->is_finalized && strtolower((string) $document->status) === 'draft';
+                $isDraft = !$document->legacy_needs_review && !$document->is_finalized && strtolower((string) $document->status) === 'draft';
 
                 return [
                     'id' => $document->id,
                     'tracking_number' => $document->tracking_number ?? '',
                     'tracking_url' => $document->tracking_number ? route('documents.track', ['trackingNumber' => $document->tracking_number]) : null,
                     'title' => $document->title ?? '',
-                    'status' => $this->workflowStatus($document->latestTrail?->status ?? $document->status),
+                    'status' => $document->is_archived ? 'archived' : $this->workflowStatus($document->latestTrail?->status ?? $document->status),
+                    'needs_review' => (bool) $document->legacy_needs_review,
                     'office_name' => $document->office?->name ?? '',
+                    'office_short_name' => $document->office?->short_name,
                     'document_type' => $document->documentType?->name ?? '',
                     'other_document_type' => $document->other_document_type ?? '',
                     'purpose_type' => $document->purposeType?->name ?? '',
                     'other_purpose' => $document->other_purpose ?? '',
                     'created_by_name' => $document->creator?->name ?? '',
+                    'created_by_short_name' => trim(
+                        (filled($document->creator?->firstname) ? mb_substr(trim($document->creator->firstname), 0, 1).'. ' : '').
+                        ($document->creator?->lastname ?? '')
+                    ) ?: $document->creator?->name,
                     'file_name' => $latestFile?->original_name ?? $latestFile?->file_name,
-                    'file_url' => $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null,
+                    'file_url' => $latestFile?->downloadUrl(),
                     'files' => $document->files->sortBy('id')->map(fn ($file) => [
                         'id' => $file->id,
                         'name' => $file->original_name ?: $file->file_name,
                         'type' => $file->type ?: 'original',
-                        'url' => Storage::disk('public')->url($file->file_path),
+                        'url' => $file->downloadUrl(),
                         'uploaded_at' => $file->created_at?->toDateTimeString(),
                     ])->values(),
                     'origin_type' => $document->origin_type ?? '',
@@ -225,12 +240,20 @@ class DocumentController extends Controller
                         'status' => $trail->status,
                         'remarks' => $trail->remarks,
                         'from_office' => $trail->fromOffice?->name,
-                        'to_office' => $trail->toOffice?->name,
-                        'holder' => $trail->toOffice?->name,
+                        'from_office_short_name' => $trail->fromOffice?->short_name,
+                        'to_office' => $trail->legacy_doc_trail_id ? $trail->legacyReceivingOffice?->name : $trail->toOffice?->name,
+                        'to_office_short_name' => $trail->legacy_doc_trail_id ? $trail->legacyReceivingOffice?->short_name : $trail->toOffice?->short_name,
+                        'holder' => $trail->legacy_doc_trail_id ? $trail->holderOffice?->name : $trail->toOffice?->name,
+                        'holder_short_name' => $trail->legacy_doc_trail_id ? $trail->holderOffice?->short_name : $trail->toOffice?->short_name,
                         'created_by' => $trail->creator?->name,
+                        'created_by_short_name' => trim(
+                            (filled($trail->creator?->firstname) ? mb_substr(trim($trail->creator->firstname), 0, 1).'. ' : '').
+                            ($trail->creator?->lastname ?? '')
+                        ) ?: $trail->creator?->name,
                         'created_at' => $trail->created_at?->format('F j Y h:i:s A'),
                     ]),
                     'created_at' => $document->created_at?->format('F j Y h:i:s A'),
+                    'created_at_timestamp' => $document->created_at?->timestamp,
                     'remarks' => $document->remarks ?? '',
                     'document_type_id' => $document->document_type_id,
                     'action_type_id' => $document->action_type_id,
@@ -242,18 +265,121 @@ class DocumentController extends Controller
                     'source' => 'New DB',
                     'is_finalized' => (bool) $document->is_finalized,
                     'can_update' => $isDraft && ($admin || ($isOriginOffice && (int) $document->created_by === (int) $user?->id)),
-                    'can_release' => $isPendingHolder,
-                    'can_terminal' => $isPendingHolder,
-                    'can_receive' => $isIncoming,
+                    'can_release' => !$document->legacy_needs_review && !$document->is_archived && $isPendingHolder,
+                    'can_terminal' => !$document->legacy_needs_review && !$document->is_archived && $isPendingHolder,
+                    'can_receive' => !$document->legacy_needs_review && !$document->is_archived && $isIncoming && $user->canReceiveDocuments(),
                     'can_delete' => $isDraft && ($admin || ($isOriginOffice && (int) $document->created_by === (int) $user?->id)),
                 ];
             });
 
         return Inertia::render('Documents/Index', [
-            'documents' => [
-                ...$legacyDocuments->toArray(),
-                ...$newDocuments->toArray(),
-            ],
+            'documents' => $legacyDocuments->concat($newDocuments)
+                ->sortByDesc('created_at_timestamp')
+                ->values()
+                ->all(),
+            'title' => $latestOnly ? 'Latest Documents' : 'All Documents',
+            ...$this->documentFormOptions(),
+        ]);
+    }
+
+        */
+    }
+
+    private function renderLocalDocumentList(bool $latestOnly = false)
+    {
+        $user = auth()->user();
+        $access = app(DocumentAccess::class);
+        $currentOfficeId = $access->currentOfficeId($user);
+        $isAdministrator = $access->canViewAllDocuments($user);
+        $newDocumentQuery = $access->scope(Document::query(), $user);
+        if ($latestOnly) {
+            $newDocumentQuery->where('created_at', '>=', now()->subDays(15));
+        }
+        $newDocuments = $newDocumentQuery
+            ->with(['office', 'documentType', 'purposeType', 'creator', 'files', 'latestTrail.creator', 'latestTrail.fromOffice', 'latestTrail.toOffice', 'trails.creator', 'trails.fromOffice', 'trails.toOffice', 'trails.holderOffice', 'trails.legacyReceivingOffice'])
+            ->select(['id', 'legacy_doc_id', 'legacy_needs_review', 'is_archived', 'tracking_number', 'title', 'status', 'office_id', 'created_by', 'is_finalized', 'remarks', 'document_type_id', 'action_type_id', 'other_action', 'purpose_type_id', 'other_document_type', 'other_purpose', 'origin_type', 'received_from', 'urgent', 'notify_by_email', 'created_at'])
+            ->orderBy('created_at', 'desc')
+            ->limit(200)
+            ->get()
+            ->map(function ($document) use ($currentOfficeId, $isAdministrator, $user) {
+                $latest = $document->latestTrail;
+                $latestFile = $document->files->sortByDesc('id')->first();
+                $holderOfficeId = $latest?->to_office_id ?? $document->office_id;
+                $isPendingHolder = strtolower((string) ($latest?->status ?? $document->status)) === 'pending'
+                    && $currentOfficeId !== null && (int) $holderOfficeId === (int) $currentOfficeId;
+                $isIncoming = strtolower((string) ($latest?->status ?? '')) === 'available'
+                    && $currentOfficeId !== null && (int) $latest?->to_office_id === (int) $currentOfficeId;
+                $isOriginOffice = $currentOfficeId !== null && (int) $document->office_id === (int) $currentOfficeId;
+                $isDraft = ! $document->legacy_needs_review && ! $document->is_finalized && strtolower((string) $document->status) === 'draft';
+
+                return [
+                    'id' => $document->id,
+                    'tracking_number' => $document->tracking_number ?? '',
+                    'tracking_url' => $document->tracking_number ? route('documents.track', ['trackingNumber' => $document->tracking_number]) : null,
+                    'title' => $document->title ?? '',
+                    'status' => $document->is_archived ? 'archived' : $this->workflowStatus($latest?->status ?? $document->status),
+                    'needs_review' => (bool) $document->legacy_needs_review,
+                    'office_name' => $document->office?->name ?? '',
+                    'office_short_name' => $document->office?->short_name,
+                    'document_type' => $document->documentType?->name ?? '',
+                    'other_document_type' => $document->other_document_type ?? '',
+                    'purpose_type' => $document->purposeType?->name ?? '',
+                    'other_purpose' => $document->other_purpose ?? '',
+                    'created_by_name' => $document->creator?->name ?? '',
+                    'created_by_short_name' => trim(
+                        (filled($document->creator?->firstname) ? mb_substr(trim($document->creator->firstname), 0, 1).'. ' : '').
+                        ($document->creator?->lastname ?? '')
+                    ) ?: $document->creator?->name,
+                    'file_name' => $latestFile?->original_name ?? $latestFile?->file_name,
+                    'file_url' => $latestFile?->downloadUrl(),
+                    'files' => $document->files->sortBy('id')->map(fn ($file) => [
+                        'id' => $file->id,
+                        'name' => $file->original_name ?: $file->file_name,
+                        'type' => $file->type ?: 'original',
+                        'url' => $file->downloadUrl(),
+                        'uploaded_at' => $file->created_at?->toDateTimeString(),
+                    ])->values(),
+                    'origin_type' => $document->origin_type ?? '',
+                    'last_transaction' => $this->formatTrailTransaction($latest),
+                    'transactions' => $document->trails->sortByDesc('id')->values()->map(fn (DocumentTrail $trail) => [
+                        'action' => $trail->action ?: ucfirst(strtolower((string) $trail->status)),
+                        'status' => $trail->status,
+                        'remarks' => $trail->remarks,
+                        'from_office' => $trail->fromOffice?->name,
+                        'from_office_short_name' => $trail->fromOffice?->short_name,
+                        'to_office' => $trail->legacy_doc_trail_id ? $trail->legacyReceivingOffice?->name : $trail->toOffice?->name,
+                        'to_office_short_name' => $trail->legacy_doc_trail_id ? $trail->legacyReceivingOffice?->short_name : $trail->toOffice?->short_name,
+                        'holder' => $trail->legacy_doc_trail_id ? $trail->holderOffice?->name : $trail->toOffice?->name,
+                        'holder_short_name' => $trail->legacy_doc_trail_id ? $trail->holderOffice?->short_name : $trail->toOffice?->short_name,
+                        'created_by' => $trail->creator?->name,
+                        'created_by_short_name' => trim(
+                            (filled($trail->creator?->firstname) ? mb_substr(trim($trail->creator->firstname), 0, 1).'. ' : '').
+                            ($trail->creator?->lastname ?? '')
+                        ) ?: $trail->creator?->name,
+                        'created_at' => $trail->created_at?->format('F j Y h:i:s A'),
+                    ]),
+                    'created_at' => $document->created_at?->format('F j Y h:i:s A'),
+                    'created_at_timestamp' => $document->created_at?->timestamp,
+                    'remarks' => $document->remarks ?? '',
+                    'document_type_id' => $document->document_type_id,
+                    'action_type_id' => $document->action_type_id,
+                    'purpose_type_id' => $document->purpose_type_id,
+                    'office_id' => $document->office_id,
+                    'received_from' => $document->received_from,
+                    'urgent' => $document->urgent,
+                    'notify_by_email' => $document->notify_by_email,
+                    'source' => 'New DB',
+                    'is_finalized' => (bool) $document->is_finalized,
+                    'can_update' => $isDraft && ($isAdministrator || ($isOriginOffice && (int) $document->created_by === (int) $user?->id)),
+                    'can_release' => ! $document->legacy_needs_review && ! $document->is_archived && $isPendingHolder,
+                    'can_terminal' => ! $document->legacy_needs_review && ! $document->is_archived && $isPendingHolder,
+                    'can_receive' => ! $document->legacy_needs_review && ! $document->is_archived && $isIncoming && $user->canReceiveDocuments(),
+                    'can_delete' => $isDraft && ($isAdministrator || ($isOriginOffice && (int) $document->created_by === (int) $user?->id)),
+                ];
+            });
+
+        return Inertia::render('Documents/Index', [
+            'documents' => $newDocuments->sortByDesc('created_at_timestamp')->values()->all(),
             'title' => $latestOnly ? 'Latest Documents' : 'All Documents',
             ...$this->documentFormOptions(),
         ]);
@@ -295,7 +421,6 @@ class DocumentController extends Controller
 
     public function store(Request $request)
     {
-        $this->resolveLegacySelections($request);
         $validated = $request->validate([
             'approved_draft_id' => ['nullable', 'integer', 'exists:document_creation_drafts,id'],
             'title' => ['required_without:approved_draft_id', 'nullable', 'string', 'max:255'],
@@ -338,7 +463,7 @@ class DocumentController extends Controller
             $officeId = $access->currentOfficeId($user);
             $userOffice = $officeId ? Office::query()->find($officeId) : null;
             $date = now();
-            $officeName = $userOffice?->name ?: 'DOTS';
+            $officeName = trim((string) $userOffice?->short_name) ?: ($userOffice?->name ?: 'DOTS');
             $bureauPrefix = trim(
                 preg_replace('/-+/', '-', preg_replace('/\s+/', '-', trim($officeName))),
                 '-'
@@ -410,7 +535,6 @@ class DocumentController extends Controller
 
     public function update(Request $request, $id)
     {
-        $this->resolveLegacySelections($request);
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'remarks' => ['nullable', 'string'],
@@ -467,9 +591,6 @@ class DocumentController extends Controller
 
     public function release(Request $request, $id)
     {
-        $request->merge(['office_id' => $request->input('to_office_id')]);
-        $this->resolveLegacySelections($request);
-        $request->merge(['to_office_id' => $request->input('office_id')]);
         $validated = $request->validate([
             'action_type_id' => ['required', 'integer', 'exists:action_types,id'],
             'other_action' => ['nullable', 'string', 'max:255'],
@@ -479,13 +600,9 @@ class DocumentController extends Controller
         ]);
         $validated = $this->normalizeActionTypeDetails($validated);
         $targetOffice = Office::findOrFail($validated['to_office_id']);
-        $user = auth()->user();
-        $officeIsInScope = filled($user?->region_code)
-            ? $this->officeIsInUserRegion($targetOffice, $user)
-            : $this->officeIsInCurrentUserRange($targetOffice);
-        if (! $officeIsInScope) {
+        if (! $this->officeIsInCurrentUserRange($targetOffice)) {
             throw ValidationException::withMessages([
-                'to_office_id' => 'Choose a receiving office within your assigned region or range.',
+                'to_office_id' => 'Choose a receiving office within your assigned office range.',
             ]);
         }
         if (!$this->officeHasActiveUsers($targetOffice)) {
@@ -526,15 +643,15 @@ class DocumentController extends Controller
         $officeId = app(DocumentAccess::class)->currentOfficeId($user);
         abort_unless($officeId, 403, 'Your account is not assigned to an office.');
 
-        $canReceiveAcrossOffices = app(DocumentAccess::class)->canViewAllDocuments($user);
-        $document = DB::transaction(function () use ($id, $officeId, $user, $canReceiveAcrossOffices) {
+        $document = DB::transaction(function () use ($id, $officeId, $user) {
             $document = Document::query()->lockForUpdate()->findOrFail($id);
+            abort_if($document->legacy_needs_review || $document->is_archived, 403, 'This document needs review or is archived.');
             $latestTrail = $document->trails()->orderByDesc('id')->lockForUpdate()->first();
 
             if (!(
                 $latestTrail
                     && strtolower((string) $latestTrail->status) === 'available'
-                    && ($canReceiveAcrossOffices || (int) $latestTrail->to_office_id === $officeId)
+                    && (int) $latestTrail->to_office_id === $officeId
             )) {
                 throw ValidationException::withMessages([
                     'tracking_number' => 'This document is no longer available for your office to receive.',
@@ -625,7 +742,7 @@ class DocumentController extends Controller
     {
         $user = auth()->user();
         $admin = $user?->isAdministrator() ?? false;
-        $draft = !$document->is_finalized && strtolower((string) $document->status) === 'draft';
+        $draft = !$document->legacy_needs_review && !$document->is_finalized && strtolower((string) $document->status) === 'draft';
         $officeId = $user ? app(DocumentAccess::class)->currentOfficeId($user) : null;
         $originOffice = $officeId && (int) $document->office_id === (int) $officeId;
 
@@ -677,6 +794,7 @@ class DocumentController extends Controller
 
     private function authorizeCurrentHolder(Document $document): void
     {
+        abort_if($document->legacy_needs_review || $document->is_archived, 403, 'This document needs review or is archived.');
         $officeId = app(DocumentAccess::class)->currentOfficeId(auth()->user());
         $latest = $document->latestTrail;
         $holderOfficeId = $latest?->to_office_id ?? $document->office_id;
@@ -687,46 +805,19 @@ class DocumentController extends Controller
 
     private function documentFormOptions(): array
     {
-        $user = auth()->user();
-        $regionCode = trim((string) ($user?->region_code ?? ''));
-
-        if ($regionCode !== '') {
-            $regionOfficeLists = OfficeList::query()
-                ->inRegionCode($regionCode)
-                ->orderBy('division_name')
-                ->get(['id', 'division_code', 'division_name']);
-            $registeredOffices = Office::query()
-                ->whereIn('code', $regionOfficeLists->pluck('division_code'))
-                ->get(['id', 'name', 'code'])
-                ->keyBy(fn (Office $office) => mb_strtolower(trim((string) $office->code)));
-            $receivingOffices = $regionOfficeLists
-                ->map(function (OfficeList $officeList) use ($registeredOffices) {
-                    $office = $registeredOffices->get(mb_strtolower(trim($officeList->division_code)));
-
-                    return [
-                        'id' => $office ? (string) $office->id : 'unavailable-'.$officeList->id,
-                        'name' => $officeList->division_name,
-                        'source' => 'Office list',
-                        'disabled' => ! $office || ! $this->officeHasActiveUsers($office),
-                    ];
-                })
-                ->values()
-                ->all();
-        } else {
-            $receivingOffices = Office::query()
-                ->with('range:id,name')
-                ->orderBy('name')
-                ->get(['id', 'name', 'range_id', 'legacy_range_id'])
-                ->filter(fn (Office $office) => $this->officeIsInCurrentUserRange($office))
-                ->map(fn (Office $office) => [
-                    'id' => (string) $office->id,
-                    'name' => $office->name,
-                    'source' => 'New DB',
-                    'disabled' => ! $this->officeHasActiveUsers($office),
-                ])
-                ->values()
-                ->all();
-        }
+        $receivingOffices = Office::query()
+            ->with('range:id,name')
+            ->orderBy('name')
+            ->get(['id', 'name', 'range_id', 'legacy_range_id'])
+            ->filter(fn (Office $office) => $this->officeIsInCurrentUserRange($office))
+            ->map(fn (Office $office) => [
+                'id' => (string) $office->id,
+                'name' => $office->name,
+                'source' => 'New DB',
+                'disabled' => ! $this->officeHasActiveUsers($office),
+            ])
+            ->values()
+            ->all();
 
         return [
             'maxUploadSizeKb' => self::MAX_DOCUMENT_UPLOAD_KB,
@@ -755,9 +846,7 @@ class DocumentController extends Controller
             'purposeTypes' => PurposeType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name'])
                 ->map(fn ($type) => ['id' => (string) $type->id, 'name' => $type->name, 'source' => 'New DB'])
                 ->all(),
-            'officeRegionLabel' => $regionCode !== ''
-                ? trim(($user?->region_name ?: 'Region '.$regionCode).' ('.$regionCode.')')
-                : null,
+            'officeRangeLabel' => auth()->user()?->office?->range?->name,
             'offices' => $receivingOffices,
         ];
     }
@@ -799,34 +888,6 @@ class DocumentController extends Controller
         </body></html>';
     }
 
-    private function legacyRows(callable $query)
-    {
-        try {
-            return $query();
-        } catch (\Throwable $exception) {
-            report($exception);
-
-            return collect();
-        }
-    }
-
-    private function formatLastTransaction(?string $action, ?string $status, ?string $userName, ?string $date): string
-    {
-        $transaction = filled($action) ? $action : (filled($status) ? ucfirst(strtolower($status)) : '');
-
-        if ($transaction !== '' && filled($userName)) {
-            $transaction .= ' by '.$userName;
-        } elseif ($transaction === '' && filled($userName)) {
-            $transaction = 'Processed by '.$userName;
-        }
-
-        if (filled($date)) {
-            $transaction .= ($transaction !== '' ? ' · ' : '').$date;
-        }
-
-        return $transaction !== '' ? $transaction : '—';
-    }
-
     private function formatTrailTransaction(?DocumentTrail $trail): string
     {
         if (!$trail) {
@@ -834,12 +895,14 @@ class DocumentController extends Controller
         }
 
         $parts = [filled($trail->action) ? $trail->action : ucfirst(strtolower((string) $trail->status))];
-        if ($trail->fromOffice?->name && $trail->toOffice?->name) {
-            $parts[] = $trail->fromOffice->name.' → '.$trail->toOffice->name;
-        } elseif ($trail->fromOffice?->name) {
-            $parts[] = 'From '.$trail->fromOffice->name;
-        } elseif ($trail->toOffice?->name) {
-            $parts[] = 'To '.$trail->toOffice->name;
+        $fromOffice = trim((string) $trail->fromOffice?->short_name) ?: $trail->fromOffice?->name;
+        $toOffice = trim((string) $trail->toOffice?->short_name) ?: $trail->toOffice?->name;
+        if ($fromOffice && $toOffice) {
+            $parts[] = $fromOffice.' → '.$toOffice;
+        } elseif ($fromOffice) {
+            $parts[] = 'From '.$fromOffice;
+        } elseif ($toOffice) {
+            $parts[] = 'To '.$toOffice;
         }
         if ($trail->creator?->name) {
             $parts[] = 'by '.$trail->creator->name;
@@ -861,32 +924,6 @@ class DocumentController extends Controller
         };
     }
 
-    private function mergeOfficeOptions($current, $legacy): array
-    {
-        $options = $current->map(fn (Office $row) => [
-            'id' => (string) $row->id,
-            'name' => $row->name,
-            'source' => 'New DB',
-            'disabled' => !$this->officeHasActiveUsers($row),
-        ]);
-        $names = $options->map(fn ($row) => mb_strtolower($row['name']))->all();
-
-        foreach ($legacy as $row) {
-            $name = $row->longName ?? '';
-            if ($name !== '' && !in_array(mb_strtolower($name), $names, true)) {
-                $options->push([
-                    'id' => 'legacy:'.$row->bureauId,
-                    'name' => $name,
-                    'source' => 'Old DB',
-                    'disabled' => !$this->legacyBureauIsActive($row) || !$this->legacyBureauHasActiveUsers($row),
-                ]);
-                $names[] = mb_strtolower($name);
-            }
-        }
-
-        return $options->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)->values()->all();
-    }
-
     private function currentUserRangeIdentity(): ?array
     {
         if ($this->userRangeResolved) return $this->userRangeIdentity;
@@ -899,31 +936,7 @@ class DocumentController extends Controller
             ? Office::query()->with('range')->find($user->office_id, ['id', 'name', 'code', 'range_id', 'legacy_range_id'])
             : null;
 
-        if (! $office && filled($user->office_code)) {
-            $office = Office::query()->with('range')->where('code', $user->office_code)
-                ->first(['id', 'name', 'code', 'range_id', 'legacy_range_id']);
-        }
-
-        if ($office && ($identity = $this->officeRangeIdentity($office))) {
-            return $this->userRangeIdentity = $identity;
-        }
-
-        if ($user->legacy_office_id) {
-            $bureau = BureauLegacy::query()->whereKey($user->legacy_office_id)->first(['bureauId', 'range']);
-            if ($bureau && ($identity = $this->legacyBureauRangeIdentity($bureau))) {
-                return $this->userRangeIdentity = $identity;
-            }
-        }
-
-        return null;
-    }
-
-    private function legacyBureauIsInCurrentUserRange(BureauLegacy $bureau): bool
-    {
-        $userRange = $this->currentUserRangeIdentity();
-        $bureauRange = $this->legacyBureauRangeIdentity($bureau);
-
-        return $userRange !== null && $userRange === $bureauRange;
+        return $this->userRangeIdentity = $office ? $this->officeRangeIdentity($office) : null;
     }
 
     private function officeIsInCurrentUserRange(Office $office): bool
@@ -934,78 +947,17 @@ class DocumentController extends Controller
         return $userRange !== null && $userRange === $officeRange;
     }
 
-    private function officeIsInUserRegion(Office $office, User $user): bool
-    {
-        if (! filled($office->code) || ! filled($user->region_code)) {
-            return false;
-        }
-
-        return OfficeList::query()
-            ->where('division_code', $office->code)
-            ->inRegionCode((string) $user->region_code)
-            ->exists();
-    }
-
     private function officeRangeIdentity(Office $office): ?array
     {
         if ($office->range_id !== null && $office->range) {
             return ['source' => 'new', 'id' => (int) $office->range_id];
         }
 
-        if ($office->legacy_range_id !== null && RangeLegacy::query()->whereKey($office->legacy_range_id)->exists()) {
-            return ['source' => 'legacy', 'id' => (int) $office->legacy_range_id];
-        }
-
-        $bureau = BureauLegacy::query()->where('longName', $office->name)->first(['bureauId', 'range']);
-
-        return $bureau ? $this->legacyBureauRangeIdentity($bureau) : null;
-    }
-
-    private function legacyBureauRangeIdentity(BureauLegacy $bureau): ?array
-    {
-        $value = trim((string) ($bureau->range ?? ''));
-        if ($value === '') return null;
-
-        $range = ctype_digit($value)
-            ? RangeLegacy::query()->whereKey((int) $value)->first(['id'])
-            : RangeLegacy::query()->whereRaw('LOWER(name) = ?', [mb_strtolower($value)])->first(['id']);
-
-        return $range ? ['source' => 'legacy', 'id' => (int) $range->id] : null;
-    }
-
-    private function legacyBureauIsActive(BureauLegacy $bureau): bool
-    {
-        return in_array(strtolower(trim((string) $bureau->status)), ['1', 'active', 'enabled', 'y'], true);
-    }
-
-    private function legacyBureauHasActiveUsers(BureauLegacy $bureau): bool
-    {
-        $hasLegacyUser = UserLegacy::query()
-            ->where('bureauId', $bureau->bureauId)
-            ->whereIn('status', ['1', 'active', 'Active', 'y', 'Y'])
-            ->exists();
-        $hasLocalUser = User::query()
-            ->where('legacy_office_id', $bureau->bureauId)
-            ->where('is_active', true)
-            ->exists();
-        if (!$hasLocalUser) {
-            $officeId = Office::query()->where('name', $bureau->longName)->value('id');
-            $hasLocalUser = $officeId !== null && User::query()
-                ->where('office_id', $officeId)
-                ->where('is_active', true)
-                ->exists();
-        }
-
-        return $hasLegacyUser || $hasLocalUser;
+        return null;
     }
 
     private function officeHasActiveUsers(Office $office): bool
     {
-        $legacyBureau = BureauLegacy::query()->where('longName', $office->name)->first();
-        if ($legacyBureau) {
-            return $this->legacyBureauIsActive($legacyBureau) && $this->legacyBureauHasActiveUsers($legacyBureau);
-        }
-
         return User::query()->where('office_id', $office->id)->where('is_active', true)->exists();
     }
 
@@ -1034,45 +986,4 @@ class DocumentController extends Controller
         ]);
     }
 
-    private function legacyRangeName(string $value): ?string
-    {
-        $value = trim($value);
-        if ($value === '') return null;
-        if (!ctype_digit($value)) return $value;
-
-        $this->legacyRangeNames ??= RangeLegacy::query()->pluck('name', 'id')->all();
-        return $this->legacyRangeNames[(int) $value] ?? null;
-    }
-
-    private function resolveLegacySelections(Request $request): void
-    {
-        $libraries = [
-            'office_id' => [Office::class, BureauLegacy::class],
-        ];
-
-        foreach ($libraries as $field => [$currentModel, $legacyModel]) {
-            $value = $request->input($field);
-            if (!is_string($value) || !str_starts_with($value, 'legacy:')) {
-                continue;
-            }
-
-            $selection = rawurldecode(substr($value, 7));
-            $legacyRecord = $field === 'office_id' && ctype_digit($selection)
-                ? $legacyModel::query()->find((int) $selection)
-                : $legacyModel::query()->where($field === 'office_id' ? 'longName' : 'name', $selection)->first();
-            abort_unless($legacyRecord, 422, 'The selected library item is no longer available.');
-
-            if ($field === 'office_id' && (!$this->legacyBureauIsActive($legacyRecord)
-                || !$this->legacyBureauHasActiveUsers($legacyRecord)
-                || !$this->legacyBureauIsInCurrentUserRange($legacyRecord))) {
-                throw ValidationException::withMessages([
-                    'to_office_id' => 'Choose an active receiving office within your bureau range.',
-                ]);
-            }
-
-            $name = $field === 'office_id' ? $legacyRecord->longName : $legacyRecord->name;
-            $currentRecord = $currentModel::query()->firstOrCreate(['name' => $name]);
-            $request->merge([$field => $currentRecord->id]);
-        }
-    }
 }

@@ -1,6 +1,6 @@
 import axios from 'axios';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { FormEvent, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 
@@ -69,32 +69,25 @@ export default function UserAccountsIndex({
     const [lookupOpen, setLookupOpen] = useState(false);
     const [lookupBusy, setLookupBusy] = useState(false);
     const [lookupError, setLookupError] = useState('');
-    const [officeCode, setOfficeCode] = useState('');
     const [officeTableId, setOfficeTableId] = useState('');
     const lookupVersion = useRef(0);
 
     const resetLookup = () => {
         lookupVersion.current++;
         setLookup(null); setLookupOpen(false); setLookupBusy(false);
-        setLookupError(''); setEmployeeCode(''); setOfficeCode(''); setOfficeTableId('');
+        setLookupError(''); setEmployeeCode(''); setOfficeTableId('');
     };
     const selectType = (type: 'dots' | 'employee') => {
         resetLookup(); setAccountType(type); setForm(emptyForm); setErrors({});
     };
     const searchEmployee = async () => {
         const version = ++lookupVersion.current;
-        setLookupBusy(true); setLookupError(''); setLookup(null); setForm(emptyForm); setOfficeCode(''); setOfficeTableId('');
+        setLookupBusy(true); setLookupError(''); setLookup(null); setForm(emptyForm); setOfficeTableId('');
         try {
             const response = await axios.post<EmployeeLookup>('/user-accounts/lookup-employee', { employee_code: employeeCode.trim() });
             if (version !== lookupVersion.current) return;
             const result = response.data;
             setLookup(result); setLookupOpen(false);
-            setOfficeCode(result.offices[0]?.office_code ?? '');
-            const divisionCode = result.employee.division_code?.trim().toLowerCase();
-            const matchingOffice = divisionCode
-                ? officeTableOptions.find((office) => office.code?.trim().toLowerCase() === divisionCode)
-                : undefined;
-            setOfficeTableId(matchingOffice?.id ?? '');
             setForm({ ...emptyForm, firstname: result.employee.first_name, lastname: result.employee.last_name,
                 username: result.employee.username, email: '' });
         } catch (error) {
@@ -121,10 +114,7 @@ export default function UserAccountsIndex({
     const officeOptions = editingRow?.office_id && !offices.some((office) => office.id === editingRow.office_id)
         ? [...offices, { id: editingRow.office_id, name: `${editingRow.office_name} (Inactive)` }]
         : offices;
-    const divisionCode = lookup?.employee.division_code?.trim().toLowerCase();
-    const divisionOffice = divisionCode
-        ? officeTableOptions.find((office) => office.code?.trim().toLowerCase() === divisionCode)
-        : undefined;
+    const selectedOffice = officeTableOptions.find((office) => office.id === officeTableId);
 
     const closeModal = () => {
         resetLookup();
@@ -138,7 +128,7 @@ export default function UserAccountsIndex({
     const openEdit = (user: UserRow) => {
         setEditingRow(user);
         setForm({
-            employee_role: ['super admin', 'executive', 'admin staff'].includes(user.role.toLowerCase()) ? user.role.toLowerCase() : '',
+            employee_role: ['Super Admin', 'Executive', 'Admin Staff'].includes(user.role) ? user.role : '',
             firstname: user.firstname ?? '', lastname: user.lastname ?? '',
             username: user.username ?? '', email: user.email ?? '', role_id: user.role_id ?? '',
             officeId: user.office_id == null ? '' : String(user.office_id),
@@ -156,7 +146,6 @@ export default function UserAccountsIndex({
             ...form,
             account_type: accountType,
             employee_code: lookup?.employee.employee_code,
-            office_code: officeCode,
             office_table_id: officeTableId,
             operation: editingRow ? 'update' : 'create',
             status: editingRow ? form.status : undefined,
@@ -275,18 +264,19 @@ export default function UserAccountsIndex({
                                     ['Username', lookup.employee.username],
                                 ].map(([label, value]) => <div key={label}><dt className="text-slate-500">{label}</dt><dd className="mt-1 font-medium text-slate-800">{value || '—'}</dd></div>)}
                             </dl>
-                            {divisionOffice ? <div className="grid gap-3 sm:grid-cols-2">
-                                <Field label="Office"><input aria-label="Office" readOnly value={divisionOffice.name} className="w-full rounded-md border-slate-300 bg-slate-50 text-slate-700 read-only:cursor-default" /></Field>
-                                <Field label="Range"><input aria-label="Range" readOnly value={divisionOffice.range_name || 'No range assigned'} className="w-full rounded-md border-slate-300 bg-slate-50 text-slate-700 read-only:cursor-default" /></Field>
-                            </div> : <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-900">
-                                <p className="whitespace-normal leading-6">No registered Office matches division <span className="font-semibold">{lookup.employee.division || '(unknown)'}</span>.
-                                    Register the Office first in the <Link href="/offices" className="font-semibold text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-900">Offices module</Link>, then search for this employee again.
-                                </p>
-                            </div>}
+                            <p className="text-sm text-slate-600">HRIS division: {lookup.employee.division || lookup.employee.division_code || 'Not provided'}. Select the employee’s assigned office below.</p>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <Field label="Assigned office"><select required aria-label="Assigned office" value={officeTableId} onChange={(event) => setOfficeTableId(event.target.value)} className="w-full rounded-md border-slate-300">
+                                    <option value="">Select existing office</option>
+                                    {officeTableOptions.map((office) => <option key={office.id} value={office.id}>{office.name}{office.code ? ` (${office.code})` : ''} — {office.range_name || 'No range assigned'}</option>)}
+                                </select></Field>
+                                <Field label="Range"><input aria-label="Range" readOnly value={selectedOffice ? selectedOffice.range_name || 'No range assigned' : ''} className="w-full rounded-md border-slate-300 bg-slate-50 text-slate-700" /></Field>
+                            </div>
+                            {selectedOffice && !selectedOffice.range_name && <p role="alert" className="text-sm text-amber-800">Assign a range to this office in the Offices module before creating the account.</p>}
                             {errors.office_table_id && <p className="text-xs text-red-600">{errors.office_table_id}</p>}
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <Field label="Email" error={errors.email}><input required type="email" maxLength={255} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
-                                <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option><option value="super admin">Super Admin</option><option value="executive">Executive</option><option value="admin staff">Admin Staff</option></select></Field>
+                                <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option><option value="Super Admin">Super Admin</option><option value="Executive">Executive</option><option value="Admin Staff">Admin Staff</option></select></Field>
                             </div>
                             {/* <p className="text-xs text-slate-500">Login details will be sent to this email.</p> */}
                         </>}
@@ -296,7 +286,7 @@ export default function UserAccountsIndex({
                         <Field label="Last Name" error={errors.lastname}><input required value={form.lastname} onChange={(e) => setForm({ ...form, lastname: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
                         <Field label="Username" error={errors.username}><input required maxLength={50} disabled={!!editingRow?.username} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="w-full rounded-md border-slate-300 disabled:bg-slate-100" /></Field>
                         {editingRow && <Field label="Email" error={errors.email}><input required={!editingRow} type="email" maxLength={255} disabled={!!editingRow} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-md border-slate-300 disabled:bg-slate-100" /></Field>}
-                        {editingRow?.employee_code ? <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option><option value="super admin">Super Admin</option><option value="executive">Executive</option><option value="admin staff">Admin Staff</option></select></Field> : <Field label="Role" error={errors.role_id}><select required value={form.role_id} onChange={(e) => setForm({ ...form, role_id: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></Field>}
+                        {editingRow?.employee_code ? <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option><option value="Super Admin">Super Admin</option><option value="Executive">Executive</option><option value="Admin Staff">Admin Staff</option></select></Field> : <Field label="Role" error={errors.role_id}><select required value={form.role_id} onChange={(e) => setForm({ ...form, role_id: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></Field>}
                         <Field label="Office" error={errors.officeId}>{editingRow?.employee_code && !editingRow.office_id ? <p className="rounded-md border bg-slate-50 p-2">{editingRow.office_name}</p> : <select required value={form.officeId} onChange={(e) => { setErrors({}); setForm({ ...form, officeId: e.target.value, email: accountType === 'dots' ? offices.find((office) => String(office.id) === e.target.value)?.email ?? '' : form.email }); }} className="w-full rounded-md border-slate-300"><option value="">Select office</option>{officeOptions.map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}</select>}</Field>
                         {!editingRow && accountType === 'dots' && form.officeId && <p className="text-sm text-slate-600 sm:col-span-2">{form.email ? <>Login details will be sent to <span className="font-medium">{form.email}</span>.</> : <span className="text-red-600">The selected office has no email address. Update the office email before creating an account.</span>}</p>}
                         {editingRow && <Field label="Account Status" error={errors.status}><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full rounded-md border-slate-300"><option value="1">Active</option><option value="0">Inactive</option></select></Field>}
@@ -306,7 +296,7 @@ export default function UserAccountsIndex({
                     </div>}
                     {Object.entries(errors).filter(([key]) => !['firstname', 'lastname', 'role_id', 'officeId', 'office_table_id', 'password', 'password_confirmation', 'status', 'isLocked', 'user'].includes(key)).map(([key, message]) => <p key={key} className="text-sm text-red-600">{message}</p>)}
                     {errors.user && <p className="text-sm text-red-600">{errors.user}</p>}
-                    <div className="flex justify-end gap-2 border-t pt-4"><button type="button" onClick={closeModal} className="rounded-md border px-4 py-2 text-sm">Cancel</button><button disabled={processing || (!editingRow && (!accountType || (accountType === 'dots' && !form.email) || (accountType === 'employee' && (!lookup || lookupOpen || lookupBusy || !officeCode || !officeTableId || !divisionOffice || !form.employee_role || !form.email))))} className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{processing ? 'Saving...' : 'Save account'}</button></div>
+                    <div className="flex justify-end gap-2 border-t pt-4"><button type="button" onClick={closeModal} className="rounded-md border px-4 py-2 text-sm">Cancel</button><button disabled={processing || (!editingRow && (!accountType || (accountType === 'dots' && !form.email) || (accountType === 'employee' && (!lookup || lookupOpen || lookupBusy || !selectedOffice?.range_name || !officeTableId || !form.employee_role || !form.email))))} className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{processing ? 'Saving...' : 'Save account'}</button></div>
                 </form>
             </div>}
         </AuthenticatedLayout>

@@ -9,6 +9,17 @@ class DocumentLegacy extends Model
 {
     use HasFactory;
 
+    protected static function booted(): void
+    {
+        static::addGlobalScope('not_migrated', function ($query) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('documents', 'legacy_doc_id')) {
+                // Integer literals avoid MySQL's bound-parameter limit on large imports.
+                $ids = \Illuminate\Support\Facades\DB::table('documents')->whereNotNull('legacy_doc_id')->pluck('legacy_doc_id')->all();
+                if ($ids) $query->whereIntegerNotInRaw('docId', $ids);
+            }
+        });
+    }
+
     protected $connection = 'legacy';
     protected $table = 'document';
     protected $primaryKey = 'docId';
