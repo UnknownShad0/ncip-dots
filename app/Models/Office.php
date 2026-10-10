@@ -12,6 +12,7 @@ class Office extends Model
     use HasFactory;
 
     protected $fillable = [
+        'legacy_bureau_id',
         'parent_id',
         'range_id',
         'legacy_range_id',
@@ -20,6 +21,10 @@ class Office extends Model
         'code',
         'email',
         'location',
+    ];
+
+    protected $casts = [
+        'legacy_bureau_id' => 'integer',
     ];
 
     public function parent(): BelongsTo

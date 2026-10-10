@@ -13,10 +13,15 @@ class Range extends Model
     protected $table = 'ranges';
 
     protected $fillable = [
+        'legacy_range_id',
         'name',
         'description',
         'is_active',
         'created_by',
+    ];
+
+    protected $casts = [
+        'legacy_range_id' => 'integer',
     ];
 
     public function creator(): BelongsTo
