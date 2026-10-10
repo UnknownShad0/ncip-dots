@@ -79,8 +79,14 @@ class DocumentAccess
                 $visible->whereIn('office_id', $officeIds)
                     ->orWhereHas('trails', fn (Builder $trails) => $trails
                         ->whereIn('from_office_id', $officeIds)
-                        ->orWhereIn('to_office_id', $officeIds));
+                        ->orWhereIn('to_office_id', $officeIds)
+                        ->orWhereIn('holder_office_id', $officeIds)
+                        ->orWhereIn('legacy_receiving_office_id', $officeIds));
             }
+
+            $visible->orWhere(function (Builder $importedOwner) use ($user) {
+                $importedOwner->whereNotNull('legacy_doc_id')->where('created_by', $user->id);
+            });
 
             $visible->orWhere(function (Builder $ownDraft) use ($user) {
                 $ownDraft->where('created_by', $user->id)

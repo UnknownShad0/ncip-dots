@@ -194,8 +194,8 @@ class DocumentController extends Controller
             $newDocumentQuery->where('created_at', '>=', now()->subDays(15));
         }
         $newDocuments = $newDocumentQuery
-            ->with(['office', 'documentType', 'purposeType', 'creator', 'files', 'latestTrail.creator', 'latestTrail.fromOffice', 'latestTrail.toOffice', 'trails.creator', 'trails.fromOffice', 'trails.toOffice'])
-            ->select(['id', 'tracking_number', 'title', 'status', 'office_id', 'created_by', 'is_finalized', 'remarks', 'document_type_id', 'action_type_id', 'other_action', 'purpose_type_id', 'other_document_type', 'other_purpose', 'origin_type', 'received_from', 'urgent', 'notify_by_email', 'created_at'])
+            ->with(['office', 'documentType', 'purposeType', 'creator', 'files', 'latestTrail.creator', 'latestTrail.fromOffice', 'latestTrail.toOffice', 'trails.creator', 'trails.fromOffice', 'trails.toOffice', 'trails.holderOffice', 'trails.legacyReceivingOffice'])
+            ->select(['id', 'legacy_doc_id', 'legacy_needs_review', 'is_archived', 'tracking_number', 'title', 'status', 'office_id', 'created_by', 'is_finalized', 'remarks', 'document_type_id', 'action_type_id', 'other_action', 'purpose_type_id', 'other_document_type', 'other_purpose', 'origin_type', 'received_from', 'urgent', 'notify_by_email', 'created_at'])
             ->orderBy('created_at', 'desc')
             ->limit(200)
             ->get()
@@ -210,14 +210,15 @@ class DocumentController extends Controller
                 $isIncoming = strtolower((string) ($latest?->status ?? '')) === 'available'
                     && $officeId !== null && (int) $latest?->to_office_id === (int) $officeId;
                 $isOriginOffice = $officeId !== null && (int) $document->office_id === (int) $officeId;
-                $isDraft = !$document->is_finalized && strtolower((string) $document->status) === 'draft';
+                $isDraft = !$document->legacy_needs_review && !$document->is_finalized && strtolower((string) $document->status) === 'draft';
 
                 return [
                     'id' => $document->id,
                     'tracking_number' => $document->tracking_number ?? '',
                     'tracking_url' => $document->tracking_number ? route('documents.track', ['trackingNumber' => $document->tracking_number]) : null,
                     'title' => $document->title ?? '',
-                    'status' => $this->workflowStatus($document->latestTrail?->status ?? $document->status),
+                    'status' => $document->is_archived ? 'archived' : $this->workflowStatus($document->latestTrail?->status ?? $document->status),
+                    'needs_review' => (bool) $document->legacy_needs_review,
                     'office_name' => $document->office?->name ?? '',
                     'office_short_name' => $document->office?->short_name,
                     'document_type' => $document->documentType?->name ?? '',
@@ -230,12 +231,12 @@ class DocumentController extends Controller
                         ($document->creator?->lastname ?? '')
                     ) ?: $document->creator?->name,
                     'file_name' => $latestFile?->original_name ?? $latestFile?->file_name,
-                    'file_url' => $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null,
+                    'file_url' => $latestFile?->downloadUrl(),
                     'files' => $document->files->sortBy('id')->map(fn ($file) => [
                         'id' => $file->id,
                         'name' => $file->original_name ?: $file->file_name,
                         'type' => $file->type ?: 'original',
-                        'url' => Storage::disk('public')->url($file->file_path),
+                        'url' => $file->downloadUrl(),
                         'uploaded_at' => $file->created_at?->toDateTimeString(),
                     ])->values(),
                     'origin_type' => $document->origin_type ?? '',
@@ -246,10 +247,10 @@ class DocumentController extends Controller
                         'remarks' => $trail->remarks,
                         'from_office' => $trail->fromOffice?->name,
                         'from_office_short_name' => $trail->fromOffice?->short_name,
-                        'to_office' => $trail->toOffice?->name,
-                        'to_office_short_name' => $trail->toOffice?->short_name,
-                        'holder' => $trail->toOffice?->name,
-                        'holder_short_name' => $trail->toOffice?->short_name,
+                        'to_office' => $trail->legacy_doc_trail_id ? $trail->legacyReceivingOffice?->name : $trail->toOffice?->name,
+                        'to_office_short_name' => $trail->legacy_doc_trail_id ? $trail->legacyReceivingOffice?->short_name : $trail->toOffice?->short_name,
+                        'holder' => $trail->legacy_doc_trail_id ? $trail->holderOffice?->name : $trail->toOffice?->name,
+                        'holder_short_name' => $trail->legacy_doc_trail_id ? $trail->holderOffice?->short_name : $trail->toOffice?->short_name,
                         'created_by' => $trail->creator?->name,
                         'created_by_short_name' => trim(
                             (filled($trail->creator?->firstname) ? mb_substr(trim($trail->creator->firstname), 0, 1).'. ' : '').
@@ -270,9 +271,9 @@ class DocumentController extends Controller
                     'source' => 'New DB',
                     'is_finalized' => (bool) $document->is_finalized,
                     'can_update' => $isDraft && ($admin || ($isOriginOffice && (int) $document->created_by === (int) $user?->id)),
-                    'can_release' => $isPendingHolder,
-                    'can_terminal' => $isPendingHolder,
-                    'can_receive' => $isIncoming,
+                    'can_release' => !$document->legacy_needs_review && !$document->is_archived && $isPendingHolder,
+                    'can_terminal' => !$document->legacy_needs_review && !$document->is_archived && $isPendingHolder,
+                    'can_receive' => !$document->legacy_needs_review && !$document->is_archived && $isIncoming,
                     'can_delete' => $isDraft && ($admin || ($isOriginOffice && (int) $document->created_by === (int) $user?->id)),
                 ];
             });
@@ -557,6 +558,7 @@ class DocumentController extends Controller
         $canReceiveAcrossOffices = app(DocumentAccess::class)->canViewAllDocuments($user);
         $document = DB::transaction(function () use ($id, $officeId, $user, $canReceiveAcrossOffices) {
             $document = Document::query()->lockForUpdate()->findOrFail($id);
+            abort_if($document->legacy_needs_review || $document->is_archived, 403, 'This document needs review or is archived.');
             $latestTrail = $document->trails()->orderByDesc('id')->lockForUpdate()->first();
 
             if (!(
@@ -653,7 +655,7 @@ class DocumentController extends Controller
     {
         $user = auth()->user();
         $admin = $user?->isAdministrator() ?? false;
-        $draft = !$document->is_finalized && strtolower((string) $document->status) === 'draft';
+        $draft = !$document->legacy_needs_review && !$document->is_finalized && strtolower((string) $document->status) === 'draft';
         $officeId = $user ? app(DocumentAccess::class)->currentOfficeId($user) : null;
         $originOffice = $officeId && (int) $document->office_id === (int) $officeId;
 
@@ -705,6 +707,7 @@ class DocumentController extends Controller
 
     private function authorizeCurrentHolder(Document $document): void
     {
+        abort_if($document->legacy_needs_review || $document->is_archived, 403, 'This document needs review or is archived.');
         $officeId = app(DocumentAccess::class)->currentOfficeId(auth()->user());
         $latest = $document->latestTrail;
         $holderOfficeId = $latest?->to_office_id ?? $document->office_id;

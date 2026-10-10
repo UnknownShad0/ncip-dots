@@ -43,7 +43,7 @@ class PublicDocumentTrackingController extends Controller
                         'name' => $file->original_name ?: $file->file_name,
                         'type' => $file->type ?: 'original',
                         'mime_type' => $file->mime_type,
-                        'url' => Storage::disk('public')->url($file->file_path),
+                        'url' => $file->downloadUrl(),
                     ]),
                 ],
             ]);

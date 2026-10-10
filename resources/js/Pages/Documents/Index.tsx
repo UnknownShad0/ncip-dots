@@ -9,6 +9,7 @@ import type { FormEvent } from 'react';
 type DocumentItem = {
     id?: number | string | null;
     tracking_number?: string;
+    needs_review?: boolean;
     tracking_url?: string;
     title?: string;
     status?: string;
@@ -20,8 +21,8 @@ type DocumentItem = {
     created_by_name?: string;
     created_by_short_name?: string | null;
     file_name?: string;
-    file_url?: string;
-    files?: Array<{ id: number; name: string; type: 'original' | 'version' | string; url: string; uploaded_at?: string | null }>;
+    file_url?: string | null;
+    files?: Array<{ id: number; name: string; type: 'original' | 'version' | string; url: string | null; uploaded_at?: string | null }>;
     origin_type?: string;
     last_transaction?: string;
     created_at?: string;
@@ -577,6 +578,7 @@ export default function DocumentsIndex({
                                         >
                                             <td className="whitespace-nowrap px-4 py-4 text-xs font-semibold text-blue-800">
                                                 <span className="font-mono">{document.tracking_number || 'N/A'}</span>
+                                                {document.needs_review && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">Needs review</span>}
                                                 {isUrgent && <span className="ml-2 inline-flex rounded-full bg-rose-100 px-2 py-0.5 font-sans text-[10px] font-bold uppercase text-rose-800">Urgent</span>}
                                                 {isLegacy && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 font-sans text-[10px] font-medium text-slate-600">Legacy</span>}
                                             </td>
@@ -729,7 +731,7 @@ export default function DocumentsIndex({
                                 </div>
                                 <div className="sm:col-span-2">
                                     <p className="text-xs font-semibold uppercase text-[#898984]">File</p>
-                                    {releasingRow.files?.length ? <ul className="mt-1 space-y-1">{releasingRow.files.map((file) => <li key={file.id} className="flex flex-wrap items-baseline gap-x-2 text-sm"><span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium uppercase text-slate-600">{file.type}</span><a href={file.url} target="_blank" rel="noreferrer" className="break-all font-medium text-blue-700 underline">{file.name}</a>{file.uploaded_at && <span className="text-xs text-slate-500">{file.uploaded_at}</span>}</li>)}</ul> : releasingRow.file_url ? <a href={releasingRow.file_url} target="_blank" rel="noreferrer" className="mt-1 inline-block break-all text-sm font-medium text-blue-700 underline">{releasingRow.file_name || 'View attached file'}</a> : <p className="mt-1 text-sm text-slate-700">{releasingRow.file_name || 'No file attached'}</p>}
+                                    {releasingRow.files?.length ? <ul className="mt-1 space-y-1">{releasingRow.files.map((file) => <li key={file.id} className="flex flex-wrap items-baseline gap-x-2 text-sm"><span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium uppercase text-slate-600">{file.type}</span>{file.url ? <a href={file.url} target="_blank" rel="noreferrer" className="break-all font-medium text-blue-700 underline">{file.name}</a> : <span className="break-all text-slate-600">{file.name} — File not yet available</span>}{file.uploaded_at && <span className="text-xs text-slate-500">{file.uploaded_at}</span>}</li>)}</ul> : releasingRow.file_url ? <a href={releasingRow.file_url} target="_blank" rel="noreferrer" className="mt-1 inline-block break-all text-sm font-medium text-blue-700 underline">{releasingRow.file_name || 'View attached file'}</a> : <p className="mt-1 text-sm text-slate-700">{releasingRow.file_name || 'No file attached'}</p>}
                                 </div>
                             </section>
 

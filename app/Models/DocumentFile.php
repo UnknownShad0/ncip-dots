@@ -22,6 +22,13 @@ class DocumentFile extends Model
         'uploaded_by',
     ];
 
+    protected $casts = ['is_available' => 'boolean'];
+
+    public function downloadUrl(): ?string
+    {
+        return $this->is_available === false ? null : \Illuminate\Support\Facades\Storage::disk('public')->url($this->file_path);
+    }
+
     public function document(): BelongsTo
     {
         return $this->belongsTo(Document::class);

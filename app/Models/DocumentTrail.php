@@ -37,6 +37,16 @@ class DocumentTrail extends Model
         return $this->belongsTo(Office::class, 'to_office_id');
     }
 
+    public function holderOffice(): BelongsTo
+    {
+        return $this->belongsTo(Office::class, 'holder_office_id');
+    }
+
+    public function legacyReceivingOffice(): BelongsTo
+    {
+        return $this->belongsTo(Office::class, 'legacy_receiving_office_id');
+    }
+
     public function assignedUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_to_user_id');

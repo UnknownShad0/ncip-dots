@@ -38,6 +38,7 @@ class Document extends Model
     ];
 
     protected $casts = [
+        'legacy_needs_review' => 'boolean',
         'received_at' => 'datetime',
         'is_archived' => 'boolean',
         'urgent' => 'boolean',

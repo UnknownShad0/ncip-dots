@@ -46,7 +46,7 @@ class DashboardController extends Controller
             ->groupBy('trackingNo');
 
         $incomingDocumentsCount = ($officeId || $canViewAllDocuments)
-            ? Document::query()->whereHas('latestTrail', function ($trail) use ($officeId, $canViewAllDocuments) {
+            ? Document::query()->where('is_archived', false)->where('legacy_needs_review', false)->whereHas('latestTrail', function ($trail) use ($officeId, $canViewAllDocuments) {
                 $trail->whereRaw('LOWER(status) = ?', ['available']);
                 if (!$canViewAllDocuments) $trail->where('to_office_id', $officeId);
             })->count()
@@ -67,6 +67,7 @@ class DashboardController extends Controller
             'awaiting_verification' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'awaiting_verification')->count(),
             'incoming_documents' => $incomingDocumentsCount + $incomingLegacyCount,
             'pending_documents' => (($officeId || $canViewAllDocuments) ? Document::query()
+                ->where('is_archived', false)->where('legacy_needs_review', false)
                 ->whereHas('latestTrail', function ($trail) use ($officeId, $canViewAllDocuments) {
                     $trail->whereRaw('LOWER(status) = ?', ['pending']);
                     if (!$canViewAllDocuments) $trail->where('to_office_id', $officeId);
@@ -104,6 +105,7 @@ class DashboardController extends Controller
         $incomingDocuments = $canReceiveDocuments
             ? Document::query()
                 ->with(['latestTrail.fromOffice', 'creator', 'office'])
+                ->where('is_archived', false)->where('legacy_needs_review', false)
                 ->whereHas('latestTrail', function ($trail) use ($officeId, $canViewAllDocuments) {
                     $trail->whereRaw('LOWER(status) = ?', ['available']);
                     if (!$canViewAllDocuments) $trail->where('to_office_id', $officeId);
