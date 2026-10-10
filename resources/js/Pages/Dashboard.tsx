@@ -54,6 +54,7 @@ const relativeTime = (date: string | undefined, index: number) => {
 
 export default function Dashboard({
     documentTypeCounts = [],
+    chartStats, canFilterCharts = false, chartOffices = [], selectedChartOfficeId = null,
     stats = {},
     recentDocuments = [],
     incomingDocuments = [],
@@ -61,10 +62,16 @@ export default function Dashboard({
 }: {
     documentTypeCounts?: { name: string; count: number }[];
     stats?: DashboardStats;
+    chartStats?: DashboardStats;
+    canFilterCharts?: boolean;
+    chartOffices?: { id: number; name: string; range_name?: string | null }[];
+    selectedChartOfficeId?: number | null;
     recentDocuments?: RecentDocument[];
     incomingDocuments?: IncomingDocument[];
     canReceiveDocuments?: boolean;
 }) {
+    const [chartLoading, setChartLoading] = useState(false);
+    const [chartError, setChartError] = useState('');
     const [query, setQuery] = useState('');
     const [incomingQuery, setIncomingQuery] = useState('');
     const [trackingNumber, setTrackingNumber] = useState('');
@@ -180,7 +187,25 @@ export default function Dashboard({
                     ))}
                 </section>
 
-                <DashboardCharts stats={stats} documentTypes={documentTypeCounts} />
+                {canFilterCharts && <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+                    <div><label htmlFor="chart-office" className="mb-1 block text-sm font-medium text-slate-700">Filter graphs by office</label>
+                        <select id="chart-office" disabled={chartLoading} value={selectedChartOfficeId ?? ''} onChange={(event) => {
+                            setChartError('');
+                            router.get(route('dashboard'), event.target.value ? { chart_office_id: event.target.value } : {}, {
+                                preserveState: true, preserveScroll: true, replace: true,
+                                only: ['documentTypeCounts', 'chartStats', 'selectedChartOfficeId'],
+                                onStart: () => setChartLoading(true), onFinish: () => setChartLoading(false),
+                                onError: () => setChartError('Could not apply this office filter. Please try again.'),
+                            });
+                        }} className="max-w-full rounded-lg border-slate-300 text-sm disabled:opacity-50">
+                            <option value="">All offices</option>
+                            {chartOffices.map((office) => <option key={office.id} value={office.id}>{office.name}{office.range_name ? ` — ${office.range_name}` : ''}</option>)}
+                        </select>
+                    </div>
+                    <p role="status" className="text-sm text-slate-600">{chartLoading ? 'Updating graphs…' : `Showing: ${chartOffices.find((office) => office.id === selectedChartOfficeId)?.name ?? 'All offices'}`}</p>
+                    {chartError && <p role="alert" className="w-full text-sm text-red-600">{chartError}</p>}
+                </div>}
+                <DashboardCharts stats={chartStats ?? stats} documentTypes={documentTypeCounts} officeFiltered={selectedChartOfficeId !== null} />
 
                 <section aria-labelledby="creation-tasks-title" className="mb-8 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 sm:p-6">
                     <div className="mb-4 flex flex-wrap items-end justify-between gap-2">

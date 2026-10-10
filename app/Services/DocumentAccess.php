@@ -30,6 +30,18 @@ class DocumentAccess
         return $user->office_id ? (int) $user->office_id : ($this->officeIds($user)[0] ?? null);
     }
 
+    public function scopeForOffices(Builder $query, array $officeIds): Builder
+    {
+        return $query->where(function (Builder $visible) use ($officeIds) {
+            $visible->whereIn('office_id', $officeIds)
+                ->orWhereHas('trails', fn (Builder $trails) => $trails
+                    ->whereIn('from_office_id', $officeIds)
+                    ->orWhereIn('to_office_id', $officeIds)
+                    ->orWhereIn('holder_office_id', $officeIds)
+                    ->orWhereIn('legacy_receiving_office_id', $officeIds));
+        });
+    }
+
     public function scope(Builder $query, User $user): Builder
     {
         if ($this->canViewAllDocuments($user)) {
@@ -40,12 +52,7 @@ class DocumentAccess
 
         return $query->where(function (Builder $visible) use ($officeIds, $user) {
             if ($officeIds !== []) {
-                $visible->whereIn('office_id', $officeIds)
-                    ->orWhereHas('trails', fn (Builder $trails) => $trails
-                        ->whereIn('from_office_id', $officeIds)
-                        ->orWhereIn('to_office_id', $officeIds)
-                        ->orWhereIn('holder_office_id', $officeIds)
-                        ->orWhereIn('legacy_receiving_office_id', $officeIds));
+                $this->scopeForOffices($visible, $officeIds);
             }
 
             $visible->orWhere(function (Builder $importedOwner) use ($user) {

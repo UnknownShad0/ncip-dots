@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Document;
+use App\Models\Office;
 use App\Models\DocumentCreationDraft;
 use App\Services\DocumentAccess;
 use App\Services\DashboardCharts;
@@ -74,9 +75,30 @@ class DashboardController extends Controller
                 ->values()
             : collect();
 
+        $role = str($user->role)->lower()->replace(['_', '-'], ' ')->squish()->toString();
+        $canFilterCharts = $user->role_id !== null
+            ? in_array((int) $user->role_id, [1, 2], true)
+            : in_array($role, ['system admin', 'super admin', 'executive', 'executives'], true);
+        $selectedChartOfficeId = null;
+        if (request()->filled('chart_office_id')) {
+            abort_unless($canFilterCharts, 403);
+            $validated = request()->validate(['chart_office_id' => ['integer', 'exists:offices,id']]);
+            $selectedChartOfficeId = (int) $validated['chart_office_id'];
+        }
+        $charts = app(DashboardCharts::class)->forOffice(
+            $canFilterCharts ? $selectedChartOfficeId : $officeId,
+            allOffices: $canFilterCharts && $selectedChartOfficeId === null,
+        );
+
         return Inertia::render('Dashboard', [
-            'documentTypeCounts' => app(DashboardCharts::class)->documentTypes($documents, $legacyDocuments),
+            'documentTypeCounts' => $charts['documentTypes'],
             'stats' => $stats,
+            'chartStats' => $charts['stats'],
+            'canFilterCharts' => $canFilterCharts,
+            'selectedChartOfficeId' => $selectedChartOfficeId,
+            'chartOffices' => $canFilterCharts ? Office::query()->with('range:id,name')->orderBy('name')->get(['id', 'name', 'range_id'])->map(fn (Office $office) => [
+                'id' => $office->id, 'name' => $office->name, 'range_name' => $office->range?->name,
+            ]) : [],
             'recentDocuments' => $recentDocuments,
             'incomingDocuments' => $incomingDocuments,
             'canReceiveDocuments' => $canReceiveDocuments,

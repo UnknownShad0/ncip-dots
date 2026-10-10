@@ -7,7 +7,7 @@ type DocumentStats = {
     archived_documents?: number;
 };
 
-export default function DashboardCharts({ stats, documentTypes }: { stats: DocumentStats; documentTypes: { name: string; count: number }[] }) {
+export default function DashboardCharts({ stats, documentTypes, officeFiltered = false }: { officeFiltered?: boolean; stats: DocumentStats; documentTypes: { name: string; count: number }[] }) {
     const data = [
         { name: 'Incoming', count: stats.incoming_documents ?? 0, color: '#3b82f6' },
         { name: 'Pending for Release', count: stats.pending_documents ?? 0, color: '#d97706' },
@@ -20,7 +20,7 @@ export default function DashboardCharts({ stats, documentTypes }: { stats: Docum
         <div className="mb-8 grid gap-6 xl:grid-cols-2">
         <section aria-labelledby="document-overview-title" className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <h2 id="document-overview-title" className="text-lg font-semibold text-slate-900">Document Overview</h2>
-            <p className="mt-1 text-sm text-slate-500">Current document counts matching the summary cards above.</p>
+            <p className="mt-1 text-sm text-slate-500">{officeFiltered ? 'Incoming, pending, released, and archived counts for the selected office.' : 'Current counts within your office scope; All offices shows the system-wide view.'}</p>
             {hasDocuments ? <div className="mt-5 h-72">
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={data} layout="vertical" margin={{ top: 8, right: 60, bottom: 4, left: 0 }} accessibilityLayer>
@@ -43,7 +43,7 @@ export default function DashboardCharts({ stats, documentTypes }: { stats: Docum
         </section>
         <section aria-labelledby="document-types-title" className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <h2 id="document-types-title" className="text-lg font-semibold text-slate-900">Documents by Type</h2>
-            <p className="mt-1 text-sm text-slate-500">All-time counts for accessible documents, including legacy records.</p>
+            <p className="mt-1 text-sm text-slate-500">{officeFiltered ? 'All-time counts for documents accessible to the selected office, including imported records.' : 'All-time counts within the office scope, including imported records. Personal-only access is excluded.'}</p>
             {documentTypes.length ? <div className="mt-5 h-72 overflow-y-auto">
                 <div style={{ height: Math.max(288, documentTypes.length * 44) }}>
                     <ResponsiveContainer width="100%" height="100%">
