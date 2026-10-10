@@ -78,6 +78,29 @@ class EmployeeOfficeAssignmentTest extends TestCase
         $this->assertSame($same->id, $document->fresh()->latestTrail->to_office_id);
     }
 
+    public function test_new_employee_roles_have_fixed_ids_without_existing_role_holders(): void
+    {
+        Notification::fake();
+        $range = Range::create(['name' => 'Central']);
+        $operator = User::factory()->create(['role_id' => 1, 'role' => 'System Admin']);
+        foreach (['Super Admin' => 1, 'Executive' => 2, 'Admin Staff' => 3] as $role => $roleId) {
+            $office = Office::create(['name' => $role.' office', 'range_id' => $range->id]);
+            $lookup = $this->lookup();
+            $lookup['hris_employee_lookup']['employee']['employee_code'] = 'EMP-'.$roleId;
+            $lookup['hris_employee_lookup']['employee']['username'] = 'employee'.$roleId;
+            $payload = array_replace($this->payload('new-'.$office->id), [
+                'employee_code' => 'EMP-'.$roleId, 'email' => 'employee'.$roleId.'@example.test', 'employee_role' => $role,
+            ]);
+            $this->actingAs($operator)->withSession($lookup)->post('/user-accounts', $payload)
+                ->assertSessionHasNoErrors()->assertRedirect();
+            $user = User::where('employee_code', 'EMP-'.$roleId)->firstOrFail();
+            $this->assertSame($roleId, $user->role_id);
+            $this->assertSame($roleId !== 2, $user->isAdministrator());
+            $this->get('/document-creation')->assertInertia(fn (Assert $page) => $page
+                ->where('approverOffices', fn ($offices) => collect($offices)->contains('id', $office->id) === ($roleId !== 2)));
+        }
+    }
+
     private function lookup(): array
     {
         return ['hris_employee_lookup' => ['employee' => ['employee_code' => 'EMP-TEST', 'username' => 'employee.test', 'first_name' => 'Test', 'last_name' => 'Employee', 'division_code' => 'DIV-NEW'], 'offices' => []]];

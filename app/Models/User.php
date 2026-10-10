@@ -94,7 +94,7 @@ class User extends Authenticatable
 
         $role = Str::of((string) $this->role)->lower()->replace(['_', '-'], ' ')->squish()->toString();
 
-        return in_array($role, ['Admin', 'Administrator', 'System Admin', 'Super Admin', 'Admin Staff'], true);
+        return in_array($role, ['admin', 'administrator', 'system admin', 'super admin', 'admin staff'], true);
     }
 
     public function canManageLibraries(): bool

@@ -92,12 +92,38 @@ class DocumentCreationOfficeApprovalTest extends TestCase
         $this->assertSame($secondOfficeAdmin->id, $draft->fresh()->decided_by);
     }
 
+    public function test_admin_role_names_without_ids_can_approve_but_cannot_approve_their_own_submission(): void
+    {
+        $office = $this->office('Approval Office');
+        foreach (['Admin', 'Administrator', 'System Admin', ' Super_Admin ', 'ADMIN-STAFF'] as $role) {
+            $admin = $this->user($office, $role, null);
+            $this->assertTrue($admin->isAdministrator());
+            $draft = $this->draft($admin);
+            $this->actingAs($admin)->get('/document-creation')->assertInertia(fn (Assert $page) => $page
+                ->has('approverOffices', 1)->where('approverOffices.0.id', $office->id));
+            $this->post("/document-creation/{$draft->id}/submit", ['approver_office_id' => $office->id])->assertRedirect();
+            $this->post("/document-creation/{$draft->id}/decision", [
+                'decision' => 'approved', 'version_number' => $draft->fresh()->version_number,
+            ])->assertForbidden();
+        }
+        foreach (['Executive', 'Encoder', 'User'] as $role) {
+            $this->assertFalse((new User(['role' => $role]))->isAdministrator());
+        }
+        $creator = $this->user($office, 'Encoder', 14);
+        $draft = $this->draft($creator);
+        $this->actingAs($creator)->post("/document-creation/{$draft->id}/submit", ['approver_office_id' => $office->id])->assertRedirect();
+        $this->actingAs($admin)->post("/document-creation/{$draft->id}/decision", [
+            'decision' => 'approved', 'version_number' => $draft->fresh()->version_number,
+        ])->assertRedirect();
+        $this->assertSame('approved', $draft->fresh()->status);
+    }
+
     private function office(string $name): Office
     {
         return Office::query()->create(['name' => $name, 'code' => str($name)->slug()->upper()->value()]);
     }
 
-    private function user(Office $office, string $role, int $roleId, bool $active = true): User
+    private function user(Office $office, string $role, ?int $roleId, bool $active = true): User
     {
         return User::factory()->create([
             'name' => $role.' '.$office->name,

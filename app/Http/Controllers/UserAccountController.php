@@ -237,14 +237,13 @@ class UserAccountController extends Controller
         return redirect()->route('user-accounts.index')->with('success', 'User account updated.');
     }
 
-    private function employeeRoleId(string $role): ?int
+    private function employeeRoleId(string $role): int
     {
-        $id = User::query()
-            ->whereRaw('LOWER(TRIM(role)) = ?', [mb_strtolower(trim($role))])
-            ->whereNotNull('role_id')
-            ->value('role_id');
-
-        return $id === null ? null : (int) $id;
+        return match (mb_strtolower(trim($role))) {
+            'super admin', 'system admin' => 1,
+            'executive' => 2,
+            'admin staff' => 3,
+        };
     }
 
     private function roleIds(): array
