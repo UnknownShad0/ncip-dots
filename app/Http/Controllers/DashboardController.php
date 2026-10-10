@@ -4,9 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Document;
 use App\Models\DocumentCreationDraft;
-use App\Models\DocumentLegacy;
-use App\Models\DocumentTrailLegacy;
-use App\Models\UserLegacy;
 use App\Services\DocumentAccess;
 use Inertia\Inertia;
 
@@ -18,32 +15,8 @@ class DashboardController extends Controller
         $access = app(DocumentAccess::class);
         $documents = $access->scope(Document::query(), $user);
         $officeId = $access->currentOfficeId($user);
-        $bureauId = $access->legacyBureauId($user);
-        $legacyDocuments = DocumentLegacy::query();
 
         $canViewAllDocuments = $access->canViewAllDocuments($user);
-        if (!$canViewAllDocuments) {
-            if ($bureauId) {
-                $creatorIds = UserLegacy::query()->where('bureauId', $bureauId)->pluck('userUuid');
-                $trackingNumbers = DocumentTrailLegacy::query()
-                    ->where('originating', $bureauId)
-                    ->orWhere('receiving', $bureauId)
-                    ->orWhere('holder', $bureauId)
-                    ->pluck('trackingNo')
-                    ->merge(DocumentLegacy::query()->whereIn('createdBy', $creatorIds)->pluck('trackingNo'))
-                    ->unique()
-                    ->values();
-                $legacyDocuments->whereIn('trackingNo', $trackingNumbers);
-            } else {
-                $legacyDocuments->whereRaw('1 = 0');
-            }
-        }
-
-        $legacyTrackingNumbers = (clone $legacyDocuments)->pluck('trackingNo');
-        $latestLegacyTrails = DocumentTrailLegacy::query()
-            ->whereIn('trackingNo', $legacyTrackingNumbers)
-            ->selectRaw('MAX(docTrailId)')
-            ->groupBy('trackingNo');
 
         $incomingDocumentsCount = ($officeId || $canViewAllDocuments)
             ? Document::query()->where('is_archived', false)->where('legacy_needs_review', false)->whereHas('latestTrail', function ($trail) use ($officeId, $canViewAllDocuments) {
@@ -51,48 +24,26 @@ class DashboardController extends Controller
                 if (!$canViewAllDocuments) $trail->where('to_office_id', $officeId);
             })->count()
             : 0;
-        $incomingLegacyCount = ($bureauId || $canViewAllDocuments)
-            ? DocumentTrailLegacy::query()
-                ->whereIn('docTrailId', $latestLegacyTrails)
-                ->where('status', 'AVAILABLE')
-                ->when(!$canViewAllDocuments, fn ($query) => $query->where('receiving', $bureauId))
-                ->distinct('trackingNo')
-                ->count('trackingNo')
-            : 0;
-
         $stats = [
             'awaiting_my_approval' => DocumentCreationDraft::query()->where('approver_id', $user->id)->where('status', 'pending_approval')->count(),
             'my_submissions_awaiting_approval' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'pending_approval')->count(),
             'returned_for_revision' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'revision_requested')->count(),
             'awaiting_verification' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'awaiting_verification')->count(),
-            'incoming_documents' => $incomingDocumentsCount + $incomingLegacyCount,
-            'pending_documents' => (($officeId || $canViewAllDocuments) ? Document::query()
+            'incoming_documents' => $incomingDocumentsCount,
+            'pending_documents' => ($officeId || $canViewAllDocuments) ? Document::query()
                 ->where('is_archived', false)->where('legacy_needs_review', false)
                 ->whereHas('latestTrail', function ($trail) use ($officeId, $canViewAllDocuments) {
                     $trail->whereRaw('LOWER(status) = ?', ['pending']);
                     if (!$canViewAllDocuments) $trail->where('to_office_id', $officeId);
                 })
-                ->count() : 0)
-                + (($bureauId || $canViewAllDocuments) ? DocumentTrailLegacy::query()
-                    ->whereIn('docTrailId', $latestLegacyTrails)
-                    ->where('status', 'PENDING')
-                    ->when(!$canViewAllDocuments, fn ($query) => $query->where('holder', $bureauId))
-                    ->distinct('trackingNo')
-                    ->count('trackingNo') : 0),
-            'released_documents' => (($officeId || $canViewAllDocuments) ? Document::query()
+                ->count() : 0,
+            'released_documents' => ($officeId || $canViewAllDocuments) ? Document::query()
                 ->whereHas('trails', function ($trail) use ($officeId, $canViewAllDocuments) {
                     $trail->whereRaw('LOWER(status) = ?', ['available']);
                     if (!$canViewAllDocuments) $trail->where('from_office_id', $officeId);
                 })
-                ->count() : 0)
-                + (($bureauId || $canViewAllDocuments) ? DocumentTrailLegacy::query()
-                    ->whereIn('trackingNo', $legacyTrackingNumbers)
-                    ->where('status', 'AVAILABLE')
-                    ->when(!$canViewAllDocuments, fn ($query) => $query->where('originating', $bureauId))
-                    ->distinct('trackingNo')
-                    ->count('trackingNo') : 0),
-            'archived_documents' => (clone $documents)->where('is_archived', true)->count()
-                + (clone $legacyDocuments)->where('Archived', 'Y')->count(),
+                ->count() : 0,
+            'archived_documents' => (clone $documents)->where('is_archived', true)->count(),
         ];
 
         $recentDocuments = $access->scope(Document::query(), $user)

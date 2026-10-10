@@ -2,12 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\BureauLegacy;
 use App\Models\Document;
 use App\Models\DocumentCreationDraft;
 use App\Models\DocumentType;
 use App\Models\Office;
-use App\Models\RangeLegacy;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Http\Request;
@@ -29,7 +27,7 @@ class DocumentCreationController extends Controller
             'approverOffice:id,name,short_name',
             'decisionMaker:id,name,firstname,lastname',
             'documentType:id,name',
-            'events.user:id,name,firstname,lastname,office_id,office_code,legacy_office_id',
+            'events.user:id,name,firstname,lastname,office_id,office_code',
             'events.user.office:id,name,short_name',
             'events.user.officeByCode:id,name,short_name',
         ])->where(function ($query) use ($user, $userOffice, $canReviewOfficeApprovals) {
@@ -244,28 +242,7 @@ class DocumentCreationController extends Controller
             return $office;
         }
 
-        if (! $user->legacy_office_id) {
-            return null;
-        }
-
-        $bureau = BureauLegacy::query()->whereKey($user->legacy_office_id)->first(['officeCode', 'longName']);
-        if (! $bureau) {
-            return null;
-        }
-
-        $officeQuery = Office::query();
-        if (filled($bureau->officeCode)) {
-            $officeQuery->where('code', $bureau->officeCode);
-        }
-        if (filled($bureau->longName)) {
-            if (filled($bureau->officeCode)) {
-                $officeQuery->orWhere('name', $bureau->longName);
-            } else {
-                $officeQuery->where('name', $bureau->longName);
-            }
-        }
-
-        return $officeQuery->first();
+        return null;
     }
 
     private function userCanApproveForOffice(User $user, int $officeId): bool
@@ -286,13 +263,6 @@ class DocumentCreationController extends Controller
             return $range;
         }
 
-        if ($user->legacy_office_id) {
-            $bureau = BureauLegacy::query()->whereKey($user->legacy_office_id)->first(['bureauId', 'range']);
-            if ($bureau && ($range = $this->legacyBureauRangeIdentity($bureau))) {
-                return $range;
-            }
-        }
-
         return null;
     }
 
@@ -302,26 +272,6 @@ class DocumentCreationController extends Controller
             return ['source' => 'new', 'id' => (int) $office->range_id];
         }
 
-        if ($office->legacy_range_id !== null && RangeLegacy::query()->whereKey($office->legacy_range_id)->exists()) {
-            return ['source' => 'legacy', 'id' => (int) $office->legacy_range_id];
-        }
-
-        $bureau = BureauLegacy::query()->where('longName', $office->name)->first(['bureauId', 'range']);
-
-        return $bureau ? $this->legacyBureauRangeIdentity($bureau) : null;
-    }
-
-    private function legacyBureauRangeIdentity(BureauLegacy $bureau): ?array
-    {
-        $value = trim((string) ($bureau->range ?? ''));
-        if ($value === '') {
-            return null;
-        }
-
-        $range = ctype_digit($value)
-            ? RangeLegacy::query()->whereKey((int) $value)->first(['id'])
-            : RangeLegacy::query()->whereRaw('LOWER(name) = ?', [mb_strtolower($value)])->first(['id']);
-
-        return $range ? ['source' => 'legacy', 'id' => (int) $range->id] : null;
+        return null;
     }
 }

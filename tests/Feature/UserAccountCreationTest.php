@@ -37,6 +37,9 @@ class UserAccountCreationTest extends TestCase
             'bureauId' => 7, 'longName' => 'Test Office', 'officeCode' => 'OFF-7', 'officeEmail' => 'office@example.test', 'status' => '1',
         ]);
         DB::connection('legacy')->table('role')->insert(['roleId' => 14, 'rolename' => 'Encoder']);
+        DB::table('offices')->insert([
+            'id' => 7, 'name' => 'Test Office', 'code' => 'OFF-7', 'email' => 'office@example.test',
+        ]);
         $this->actingAs(User::create([
             'name' => 'Administrator', 'email' => 'admin@example.test', 'password' => 'password', 'role_id' => 1,
         ]));
@@ -47,7 +50,7 @@ class UserAccountCreationTest extends TestCase
     {
         $this->post('/user-accounts', [
             'account_type' => 'dots', 'operation' => 'create', 'firstname' => 'Test', 'lastname' => 'Account',
-            'username' => 'test.account', 'email' => 'test@example.test', 'role_id' => 14, 'officeId' => 7,
+            'username' => 'test.account', 'email' => 'test@example.test', 'role_id' => 1, 'officeId' => 7,
         ])->assertSessionHasNoErrors()->assertRedirect('/user-accounts');
 
         $user = User::where('username', 'test.account')->firstOrFail();
@@ -108,7 +111,7 @@ class UserAccountCreationTest extends TestCase
         Notification::shouldReceive('send')->once()->andThrow(new \RuntimeException('Mail service unavailable'));
         $this->post('/user-accounts', [
             'account_type' => 'dots', 'operation' => 'create', 'firstname' => 'Test', 'lastname' => 'Account',
-            'username' => 'mail.failure', 'email' => 'failure@example.test', 'role_id' => 14, 'officeId' => 7,
+            'username' => 'mail.failure', 'email' => 'failure@example.test', 'role_id' => 1, 'officeId' => 7,
         ])->assertSessionHasNoErrors()->assertRedirect('/user-accounts')->assertSessionHas('warning');
         $this->assertTrue(User::where('username', 'mail.failure')->exists());
     }
@@ -122,10 +125,10 @@ class UserAccountCreationTest extends TestCase
 
     public function test_dots_account_cannot_be_created_without_office_email(): void
     {
-        DB::connection('legacy')->table('bureau')->update(['officeEmail' => null]);
+        DB::table('offices')->where('id', 7)->update(['email' => null]);
         $this->post('/user-accounts', [
             'account_type' => 'dots', 'operation' => 'create', 'firstname' => 'Test', 'lastname' => 'Account',
-            'username' => 'test.account', 'email' => 'override@example.test', 'role_id' => 14, 'officeId' => 7,
+            'username' => 'test.account', 'email' => 'override@example.test', 'role_id' => 1, 'officeId' => 7,
         ])->assertSessionHasErrors('officeId');
         $this->assertSame(1, User::count());
         Notification::assertNothingSent();

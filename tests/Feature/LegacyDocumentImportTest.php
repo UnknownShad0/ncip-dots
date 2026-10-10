@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class LegacyDocumentImportTest extends TestCase
@@ -143,6 +144,38 @@ class LegacyDocumentImportTest extends TestCase
         $this->assertSame(3, DB::table('document_trails')->whereNotNull('legacy_doc_trail_id')->count());
         $this->assertSame(2, DB::table('document_files')->whereNotNull('legacy_file_id')->count());
         $this->assertSame(2, DB::table('legacy_document_exceptions')->count());
+
+        $admin = User::query()->create([
+            'name' => 'Local Administrator',
+            'username' => 'local-admin',
+            'email' => 'local-admin@example.test',
+            'password' => 'password',
+            'role' => 'System Admin',
+            'role_id' => 1,
+            'email_verified_at' => now(),
+            'is_active' => true,
+        ]);
+        config(['database.connections.legacy' => [
+            'driver' => 'sqlite',
+            'database' => '/tmp/legacy-database-must-not-be-used.sqlite',
+            'prefix' => '',
+        ]]);
+        DB::purge('legacy');
+        $this->actingAs($admin)
+            ->get('/ranges')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->component('Ranges/Index')->has('ranges', 1));
+        $this->get('/user-accounts')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('UserAccounts/Index')
+                ->has('users', 2)
+                ->where('users.0.source', 'New DB')
+                ->where('users.1.source', 'New DB'));
+        $this->get('/offices')->assertOk();
+        $this->get('/documents')->assertOk();
+        $this->get('/dashboard')->assertOk();
+        $this->get('/track/OLD-52')->assertOk();
     }
 
     public function test_failure_rolls_back_lookup_and_document_changes(): void

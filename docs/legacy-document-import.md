@@ -94,7 +94,7 @@ After `migrate:fresh`, run the directory importer first, then this document impo
 - Source zero dates become null. Existing lookup rows matched by name keep their local fields; ambiguous matches stop the import.
 - Orphan history/files are saved in `legacy_document_exceptions` with a source key, reason and complete original payload. Do not delete them. Restore the true parent/source relationship before attempting reconciliation; never invent a parent document.
 - Attachments are metadata-only, as requested. `is_available=false` prevents links to old server paths. Actual files will need a separate verified copy process before marking them available.
-- Migrated documents are excluded from legacy-model listing queries, including dashboard counts. Keep the legacy connection for remaining office/library dependencies and unresolved records; this change does not remove every legacy dependency.
+- Runtime pages and workflows use the imported local tables only; they do not query the legacy database. The one-time import/preview commands still need the legacy source connection. Preserve it until no further import or reconciliation is required.
 
 No email, notification, file download or session is created by the import.
 

@@ -1,6 +1,6 @@
 # Legacy directory import (local first)
 
-Source: `legacy_dots`. Target: `new_dots`. This imports directory records only; documents, trails, and files still use their existing workflows. Do not disable the legacy connection yet.
+Source: `legacy_dots`. Target: `new_dots`. This imports directory records only; documents, trails, and files still use their existing workflows. The application uses the new database for runtime pages after import, but this one-time importer still needs the configured legacy source connection if it is run again.
 
 ## Terminal commands
 
