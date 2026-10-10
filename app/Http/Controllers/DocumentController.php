@@ -445,9 +445,6 @@ class DocumentController extends Controller
                 ->where('created_by', auth()->id())
                 ->first();
             abort_unless($approvedDraft, 422, 'The approved document is no longer available for finalization.');
-            if ($approvedDraft->status === 'registered' && $approvedDraft->official_document_id) {
-                return redirect()->route('documents.index')->with('success', 'The existing document is ready for another trail action. Select Release from its row.');
-            }
             $validated['title'] = $approvedDraft->title;
             $validated['document_type_id'] = $approvedDraft->document_type_id;
             $validated['is_finalized'] = true;
@@ -502,11 +499,13 @@ class DocumentController extends Controller
             }
 
             if ($approvedDraft) {
-                $approvedDraft->update(['official_document_id' => $document->id, 'status' => 'registered']);
+                $approvedDraft = DocumentCreationDraft::query()->lockForUpdate()->findOrFail($approvedDraft->id);
+                // Keep the first registration link; events link every subsequent submission.
+                $approvedDraft->update(['official_document_id' => $approvedDraft->official_document_id ?? $document->id, 'status' => 'registered']);
                 $approvedDraft->events()->create([
                     'user_id' => auth()->id(),
                     'event' => 'Registered in DOTS',
-                    'metadata' => ['document_id' => $document->id],
+                    'metadata' => ['document_id' => $document->id, 'tracking_number' => $document->tracking_number],
                 ]);
             }
 

@@ -817,9 +817,9 @@ export default function DocumentsIndex({
                                         setForm({ ...form, approved_draft_id: event.target.value, title: selected?.title ?? form.title, document_type_id: selected ? String(selected.document_type_id) : form.document_type_id });
                                     }} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10">
                                         <option value="">Select an approved document</option>
-                                        {approvedDocuments.map((document) => <option key={document.id} value={document.id} disabled={document.disabled}>{document.title} · {document.document_type ?? 'Document'}{document.status === 'registered' ? ' (Registered document)' : ''}</option>)}
+                                        {approvedDocuments.map((document) => <option key={document.id} value={document.id} disabled={document.disabled}>{document.title} · {document.document_type ?? 'Document'}{document.status === 'registered' ? ' (Previously registered; reusable)' : ''}</option>)}
                                     </select>
-                                    <p className="mt-1 text-xs text-slate-500">Registered documents reuse the existing DOTS record. Select Release from that record to add another trail action.</p>
+                                    <p className="mt-1 text-xs text-slate-500">Each submission creates a new tracking record from this approved document. Release the new record to the intended office.</p>
                                 </div>}
                                 <label className="mb-1 block text-sm font-medium text-slate-700">Title</label>
                                 <input
