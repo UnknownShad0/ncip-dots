@@ -268,7 +268,7 @@ class DocumentController extends Controller
                     'can_update' => $isDraft && ($admin || ($isOriginOffice && (int) $document->created_by === (int) $user?->id)),
                     'can_release' => !$document->legacy_needs_review && !$document->is_archived && $isPendingHolder,
                     'can_terminal' => !$document->legacy_needs_review && !$document->is_archived && $isPendingHolder,
-                    'can_receive' => !$document->legacy_needs_review && !$document->is_archived && $isIncoming,
+                    'can_receive' => !$document->legacy_needs_review && !$document->is_archived && $isIncoming && $user->canReceiveDocuments(),
                     'can_delete' => $isDraft && ($admin || ($isOriginOffice && (int) $document->created_by === (int) $user?->id)),
                 ];
             });
@@ -374,7 +374,7 @@ class DocumentController extends Controller
                     'can_update' => $isDraft && ($isAdministrator || ($isOriginOffice && (int) $document->created_by === (int) $user?->id)),
                     'can_release' => ! $document->legacy_needs_review && ! $document->is_archived && $isPendingHolder,
                     'can_terminal' => ! $document->legacy_needs_review && ! $document->is_archived && $isPendingHolder,
-                    'can_receive' => ! $document->legacy_needs_review && ! $document->is_archived && $isIncoming,
+                    'can_receive' => ! $document->legacy_needs_review && ! $document->is_archived && $isIncoming && $user->canReceiveDocuments(),
                     'can_delete' => $isDraft && ($isAdministrator || ($isOriginOffice && (int) $document->created_by === (int) $user?->id)),
                 ];
             });
@@ -648,8 +648,7 @@ class DocumentController extends Controller
         $officeId = app(DocumentAccess::class)->currentOfficeId($user);
         abort_unless($officeId, 403, 'Your account is not assigned to an office.');
 
-        $canReceiveAcrossOffices = app(DocumentAccess::class)->canViewAllDocuments($user);
-        $document = DB::transaction(function () use ($id, $officeId, $user, $canReceiveAcrossOffices) {
+        $document = DB::transaction(function () use ($id, $officeId, $user) {
             $document = Document::query()->lockForUpdate()->findOrFail($id);
             abort_if($document->legacy_needs_review || $document->is_archived, 403, 'This document needs review or is archived.');
             $latestTrail = $document->trails()->orderByDesc('id')->lockForUpdate()->first();
@@ -657,7 +656,7 @@ class DocumentController extends Controller
             if (!(
                 $latestTrail
                     && strtolower((string) $latestTrail->status) === 'available'
-                    && ($canReceiveAcrossOffices || (int) $latestTrail->to_office_id === $officeId)
+                    && (int) $latestTrail->to_office_id === $officeId
             )) {
                 throw ValidationException::withMessages([
                     'tracking_number' => 'This document is no longer available for your office to receive.',

@@ -95,6 +95,7 @@ export default function Dashboard({
     };
 
     const confirmReceive = (document: IncomingDocument) => {
+        if (!canReceiveDocuments || receivingId !== null) return;
         setCrudAlert({
             title: 'Receive document?',
             message: `Confirm receipt of ${document.tracking_number || 'this document'}?`,
@@ -107,6 +108,7 @@ export default function Dashboard({
     };
 
     const receiveByTrackingNumber = () => {
+        if (!canReceiveDocuments || receivingId !== null) return;
         const normalized = trackingNumber.trim().toLowerCase();
         const document = incomingDocuments.find((item) => item.tracking_number.toLowerCase() === normalized);
         if (!document) {
@@ -210,15 +212,16 @@ export default function Dashboard({
                         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700"><ArrowDownToLine size={22} /></span>
                         <div>
                             <h2 id="receive-document-title" className="text-xl font-semibold tracking-tight">Receive Document</h2>
-                            <p className="mt-1 text-sm text-[#73736e]">Receive documents addressed to your office. Allowed roles: System Admin, Executive, Admin Staff, and Encoder.</p>
+                            <p className="mt-1 text-sm text-[#73736e]">Receive documents addressed to your office. Allowed roles: Executive, Admin Staff, and Encoder.</p>
                         </div>
                     </div>
 
-                    {canReceiveDocuments ? <>
+                    <>
+                        {!canReceiveDocuments && <p className="mb-4 rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">View only. Your role or office assignment does not allow receiving documents.</p>}
                         <form onSubmit={(event) => { event.preventDefault(); receiveByTrackingNumber(); }} className="mb-5 flex flex-col gap-2 sm:flex-row">
                             <label className="sr-only" htmlFor="receive-tracking-number">Tracking number</label>
-                            <input id="receive-tracking-number" value={trackingNumber} onChange={(event) => { setTrackingNumber(event.target.value); setReceiveError(''); }} placeholder="Enter tracking number" className="min-w-0 flex-1 rounded-xl border-slate-300 text-sm" />
-                            <button type="submit" disabled={!trackingNumber.trim() || receivingId !== null} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+                            <input id="receive-tracking-number" disabled={!canReceiveDocuments} value={trackingNumber} onChange={(event) => { setTrackingNumber(event.target.value); setReceiveError(''); }} placeholder="Enter tracking number" className="min-w-0 flex-1 rounded-xl border-slate-300 text-sm" />
+                            <button type="submit" disabled={!canReceiveDocuments || !trackingNumber.trim() || receivingId !== null} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
                                 <ArrowDownToLine size={17} /> Receive
                             </button>
                         </form>
@@ -237,13 +240,13 @@ export default function Dashboard({
                                         <p className="truncate font-medium text-slate-800">{document.title || 'Untitled document'}</p>
                                         <p className="mt-0.5 truncate text-sm text-[#73736e]">{[document.tracking_number, document.from_office && `From ${document.from_office}`].filter(Boolean).join(' · ')}</p>
                                     </div>
-                                    <button type="button" onClick={() => confirmReceive(document)} disabled={receivingId !== null} className="shrink-0 rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50">
+                                    <button type="button" onClick={() => confirmReceive(document)} disabled={!canReceiveDocuments || receivingId !== null} className="shrink-0 rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50">
                                         {receivingId === document.id ? 'Receiving…' : 'Receive'}
                                     </button>
                                 </div>
                             ))}
                         </div>
-                    </> : <p className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">Your role or office assignment does not allow receiving documents.</p>}
+                    </>
                 </section>
 
                 <section className="rounded-[20px] border border-[#e2e2df] bg-white px-5 py-6 sm:px-8">

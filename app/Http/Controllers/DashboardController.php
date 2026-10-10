@@ -53,13 +53,13 @@ class DashboardController extends Controller
             ->get();
 
         $canReceiveDocuments = $user->canReceiveDocuments() && $officeId !== null;
-        $incomingDocuments = $canReceiveDocuments
+        $incomingDocuments = $officeId !== null
             ? Document::query()
                 ->with(['latestTrail.fromOffice', 'creator', 'office'])
                 ->where('is_archived', false)->where('legacy_needs_review', false)
-                ->whereHas('latestTrail', function ($trail) use ($officeId, $canViewAllDocuments) {
+                ->whereHas('latestTrail', function ($trail) use ($officeId) {
                     $trail->whereRaw('LOWER(status) = ?', ['available']);
-                    if (!$canViewAllDocuments) $trail->where('to_office_id', $officeId);
+                    $trail->where('to_office_id', $officeId);
                 })
                 ->latest('updated_at')
                 ->get(['id', 'tracking_number', 'title', 'created_by'])
