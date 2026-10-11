@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\LegacyAuditImport;
 use App\Services\LegacyDirectoryImport;
 use App\Services\LegacyDocumentImport;
 use Illuminate\Console\Command;
@@ -14,115 +15,83 @@ use Throwable;
 
 class ImportLegacyAll extends Command
 {
-    protected $signature = 'legacy:import-all {--apply : Commit directory and document imports; otherwise preview only} {--target= : Exact target database name required for apply} {--unassign-mismatched-divisions : Retain the bureau and leave conflicting divisions unassigned}';
+    protected $signature = 'legacy:import-all {--apply : Commit all three imports in one transaction} {--target= : Exact target database name required for apply} {--unassign-mismatched-divisions : Retain user bureau and leave conflicting division null}';
 
-    protected $description = 'Preview or import the legacy directory and document data together';
+    protected $description = 'Preview or import legacy directory, documents and audit history in dependency order';
 
-    public function handle(LegacyDirectoryImport $directory, LegacyDocumentImport $documents): int
+    public function handle(LegacyDirectoryImport $directory, LegacyDocumentImport $documents, LegacyAuditImport $audit): int
     {
-        $connection = DB::connection();
-        $target = $connection->getDatabaseName();
-        $source = DB::connection('legacy')->getDatabaseName();
+        $target = DB::connection();
         $apply = (bool) $this->option('apply');
-        $this->info("Source: $source → Target: $target");
-
-        if ($connection->getDriverName() === 'mysql' && $source === $target) {
-            $this->error('Source and target database names must differ.');
-
-            return self::FAILURE;
-        }
-        if ($apply && $this->option('target') !== $target) {
-            $this->error('Specify --target with the exact target database name.');
-
-            return self::FAILURE;
-        }
-        if (! Schema::hasTable('legacy_document_exceptions')) {
-            $this->error('Run the migrations first, including the document import preparation migration.');
-
-            return self::FAILURE;
-        }
-
-        foreach (['ranges' => 'legacy_range_id', 'offices' => 'legacy_bureau_id', 'divisions' => 'legacy_division_id', 'users' => 'legacy_user_uuid'] as $table => $column) {
-            if (! Schema::hasColumn($table, $column)) {
-                $this->error('Run the legacy identity migration first.');
-
-                return self::FAILURE;
-            }
-        }
-
+        $stage = 'preflight';
         try {
-            if ($apply) {
-                $report = $connection->transaction(function () use ($directory, $documents) {
-                    $plan = $directory->plan((bool) $this->option('unassign-mismatched-divisions'));
-                    $directory->apply($plan);
-
-                    return [
-                        'directory' => ['counts' => $plan['counts'], 'warnings' => $plan['warnings']],
-                        'documents' => $documents->run(true),
-                    ];
-                });
-            } else {
-                $connection->beginTransaction();
-                try {
-                    $plan = $directory->plan((bool) $this->option('unassign-mismatched-divisions'));
-                    $directory->apply($plan);
-                    $documentReport = $documents->run(false);
-                    $report = [
-                        'directory' => ['counts' => $plan['counts'], 'warnings' => $plan['warnings']],
-                        'documents' => $documentReport,
-                    ];
-                } finally {
-                    if ($connection->transactionLevel() > 0) {
-                        $connection->rollBack();
-                    }
+            if ($apply && $this->option('target') !== $target->getDatabaseName()) {
+                throw new RuntimeException('Specify --target with the exact target database name.');
+            }
+            $this->info('Source: '.DB::connection('legacy')->getDatabaseName().' → Target: '.$target->getDatabaseName());
+            foreach (['ranges' => ['legacy_range_id', 'record_source'], 'offices' => ['legacy_bureau_id', 'record_source'], 'divisions' => ['legacy_division_id', 'record_source'], 'users' => ['legacy_user_uuid', 'record_source'], 'documents' => ['legacy_doc_id', 'record_source'], 'audit_trails' => ['legacy_trail_uuid']] as $table => $columns) {
+                if (! Schema::hasColumns($table, $columns)) {
+                    throw new RuntimeException('Import schema is incomplete. Run php artisan migrate first (never migrate:fresh for an existing database).');
                 }
             }
+            if (! Schema::hasTable('legacy_document_exceptions')) {
+                throw new RuntimeException('Run php artisan migrate before importing.');
+            }
+            $work = function () use ($directory, $documents, $audit, $apply, &$stage) {
+                $stage = 'directory';
+                $this->line('1/3 Directory');
+                $plan = $directory->plan((bool) $this->option('unassign-mismatched-divisions'));
+                $preview = [];
+                if ($apply) {
+                    $directory->apply($plan);
+                } else {
+                    // Project planned identities in memory: dependent previews work on an
+                    // empty target without inserting and rolling back temporary records.
+                    foreach (['users' => 'legacy_user_uuid', 'offices' => 'legacy_bureau_id'] as $table => $identity) {
+                        $preview[$table] = DB::table($table)->whereNotNull($identity)->pluck('id', $identity)->all();
+                        foreach ($plan['operations'] as $op) {
+                            if ($op['table'] === $table && isset($op['values'][$identity])) {
+                                $preview[$table][$op['values'][$identity]] = $op['id'];
+                            }
+                        }
+                    }
+                }
+                $stage = 'documents';
+                $this->line('2/3 Documents, history and attachment metadata');
+                $documentReport = $documents->run($apply, $apply ? null : $preview);
+                $stage = 'audit';
+                $this->line('3/3 Audit history');
+                $auditReport = $audit->run($apply, $apply ? null : $preview['users']);
+
+                return ['mode' => $apply ? 'applied' : 'preview', 'directory' => ['counts' => $plan['counts'], 'warnings' => $plan['warnings']], 'documents' => $documentReport, 'audit' => $auditReport];
+            };
+            $report = $apply ? $target->transaction($work) : $work();
         } catch (Throwable $e) {
-            $this->error($e instanceof QueryException
-                ? 'Database failure; the import transaction was rolled back. Query bindings omitted to protect source data.'
-                : $e->getMessage());
+            $message = $e instanceof QueryException ? 'Database error; query bindings withheld.' : $e->getMessage();
+            $this->error("Failed at $stage: $message");
+            $this->line($apply ? 'No import changes from this run were committed.' : 'Preview stopped; no database rows changed.');
 
             return self::FAILURE;
         }
-
-        $this->newLine();
-        $this->info('Directory import');
-        $this->table(
-            ['Table', 'New', 'Existing to link', 'Already imported'],
-            collect($report['directory']['counts'])->map(fn ($counts, $table) => [
-                $table, $counts['insert'] ?? 0, $counts['linked'] ?? 0, $counts['unchanged'] ?? 0,
-            ])->all()
-        );
+        $this->table(['Directory table', 'New', 'Linked', 'Existing'], collect($report['directory']['counts'])->map(fn ($c, $t) => [$t, $c['insert'] ?? 0, $c['linked'] ?? 0, $c['unchanged'] ?? 0])->all());
         foreach ($report['directory']['warnings'] as $warning) {
             $this->warn($warning);
         }
-
-        $this->newLine();
-        $this->info('Document import');
-        $documentReport = $report['documents'];
-        $this->table(
-            ['Table', 'New', 'Linked', 'Existing', 'Exceptions retained'],
-            collect($documentReport['counts'])->map(fn ($counts, $table) => [
-                $table, $counts['new'] ?? 0, $counts['linked'] ?? 0, $counts['existing'] ?? 0, $counts['quarantined'] ?? 0,
-            ])->all()
-        );
-        foreach ($documentReport['issues'] as $reason => $issue) {
+        $this->table(['Document table', 'New', 'Linked', 'Existing', 'Exceptions'], collect($report['documents']['counts'])->map(fn ($c, $t) => [$t, $c['new'] ?? 0, $c['linked'] ?? 0, $c['existing'] ?? 0, $c['quarantined'] ?? 0])->all());
+        foreach ($report['documents']['issues'] as $reason => $issue) {
             $this->warn($reason.': '.$issue['count']);
         }
-
+        $this->table(['Audit new', 'Audit existing', 'New without actor'], [[$report['audit']['new'], $report['audit']['existing'], $report['audit']['without_actor']]]);
+        $path = 'legacy-import-reports/all-'.now()->format('Ymd-His-u').'.json';
         try {
-            $path = 'legacy-import-reports/all-'.now()->format('Ymd-His-u').'.json';
             if (! Storage::disk('local')->put($path, json_encode($report, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR))) {
-                throw new RuntimeException('Report could not be saved.');
+                throw new RuntimeException;
             }
             $this->line('Report: '.Storage::disk('local')->path($path));
         } catch (Throwable) {
             $this->warn('Report file could not be saved; the results above are authoritative.');
         }
-
-        $this->info($apply
-            ? 'Directory and document imports committed. Attachment metadata is imported; physical files are not copied.'
-            : 'Preview only: all temporary directory writes were rolled back; no database records changed.');
+        $this->info($apply ? 'All imports committed. Attachments remain metadata-only.' : 'Full preview complete. No database rows changed.');
 
         return self::SUCCESS;
     }

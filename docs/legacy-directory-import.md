@@ -138,3 +138,6 @@ Private target backups (filenames use UTC):
 The first data attempt rolled back on MySQL's rejection of legacy zero dates. After adding explicit zero-date conversion, the retry committed and passed verification. Source records were not changed.
 
 Validation: six importer tests passed (37 assertions), covering read-only preview, matching/remapping, existing-account preservation, repeat imports, conflict rejection, transaction rollback, approved division handling, bcrypt preservation and zero dates. The eight failures in the previously run account/HRIS tests were reproduced on an isolated HEAD checkout without these changes (17 tests, 54 assertions, 8 failures; one risky-test warning). They remain separate account-workflow issues.
+
+
+Related: [legacy audit import instructions](legacy-audit-import.md). Audit import depends on these user mappings and has its own migration and preview command.

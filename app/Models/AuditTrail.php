@@ -20,6 +20,8 @@ class AuditTrail extends Model
         'user_agent',
     ];
 
+    protected $hidden = ['legacy_payload'];
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

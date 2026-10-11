@@ -39,7 +39,7 @@ class LegacyDocumentImportTest extends TestCase
             'document_trail' => [$t, array_replace($t, ['docTrailId' => 71, 'holder' => 20, 'status' => 'PENDING', 'dateCreated' => '2020-01-02 00:00:00']), array_replace($t, ['docTrailId' => 72, 'trackingNo' => 'MISSING']), array_replace($t, ['docTrailId' => 73, 'trackingNo' => 'OLD-52'])],
             'file' => [$f, array_replace($f, ['fileId' => 91, 'docId' => 999]), array_replace($f, ['fileId' => 92, 'docTrailId' => 999])],
         ];
-        Schema::connection('legacy')->drop('file');
+        Schema::connection('legacy')->dropIfExists('file');
         foreach ($fixtures as $table => $rows) {
             Schema::connection('legacy')->create($table, function ($schema) use ($rows) {
                 foreach (array_keys($rows[0]) as $column) {
@@ -113,6 +113,7 @@ class LegacyDocumentImportTest extends TestCase
     {
         Storage::fake('local');
         $fixtures = [
+            'audit_trail' => [['trailUuid' => 'audit-1', 'event' => 'Imported historical action', 'module' => 'Documents', 'query' => 'SELECT 1', 'logDate' => '2022-01-01 00:00:00', 'userUuid' => 'actor']],
             'rangeregion' => [['id' => 1, 'name' => 'Central Region', 'status' => 'Active']],
             'bureau' => [
                 ['bureauId' => 10, 'longName' => 'Origin', 'shortName' => 'ORG', 'officeCode' => 'ORG', 'officeEmail' => null, 'dateAdded' => null, 'parentbureauId' => null, 'range' => 'Central Region'],
@@ -142,9 +143,9 @@ class LegacyDocumentImportTest extends TestCase
         }
 
         $this->artisan('legacy:import-all')
-            ->expectsOutputToContain('Directory import')
-            ->expectsOutputToContain('Document import')
-            ->expectsOutputToContain('Preview only: all temporary directory writes were rolled back')
+            ->expectsOutputToContain('1/3 Directory')
+            ->expectsOutputToContain('2/3 Documents')
+            ->expectsOutputToContain('Full preview complete. No database rows changed.')
             ->assertSuccessful();
         $this->assertSame(0, DB::table('ranges')->count());
         $this->assertSame(0, DB::table('divisions')->count());
@@ -194,6 +195,17 @@ class LegacyDocumentImportTest extends TestCase
         $this->get('/documents')->assertOk();
         $this->get('/dashboard')->assertOk();
         $this->get('/track/OLD-52')->assertOk();
+    }
+
+    public function test_preview_accepts_planned_directory_ids_without_inserting_them(): void
+    {
+        DB::table('users')->delete();
+        $report = (new LegacyDocumentImport)->run(false, [
+            'users' => ['actor' => -200], 'offices' => [10 => -101, 20 => -102],
+        ]);
+        $this->assertSame(3, $report['counts']['documents']['new']);
+        $this->assertSame(0, DB::table('users')->count());
+        $this->assertSame(0, DB::table('documents')->count());
     }
 
     public function test_failure_rolls_back_lookup_and_document_changes(): void

@@ -21,7 +21,7 @@ All 267,891 trails and 58,733 file rows are accounted for by the imported record
 
 ## Run from the terminal, not mysql>
 
-After `migrate:fresh`, the identity columns exist but the target directory tables are empty. The document-only command will therefore stop until users and offices are imported. Use the combined command below to preview or import the directory and documents in order. It does not run `migrate:fresh`; preview writes are rolled back, while `--apply` commits both imports in one target transaction.
+After `migrate:fresh`, the identity columns exist but the target directory tables are empty. The document-only command will therefore stop until users and offices are imported. Use the combined command below to preview or import the directory, documents, and audit history in order. It does not run `migrate:fresh`; preview projects directory mappings in memory without database writes, while `--apply` commits all three imports in one target transaction. See [combined import instructions](legacy-import-all.md).
 
 Preview both imports without changing the target:
 

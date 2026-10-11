@@ -18,7 +18,7 @@ class LegacyDocumentImport
 
     private array $offices;
 
-    public function run(bool $apply = false): array
+    public function run(bool $apply = false, ?array $directoryPreview = null): array
     {
         $this->apply = $apply;
         $this->counts = $this->issues = [];
@@ -27,8 +27,8 @@ class LegacyDocumentImport
         if ($target->getDriverName() === 'mysql' && $source->getDatabaseName() === $target->getDatabaseName()) {
             throw new RuntimeException('Source and target database must differ.');
         }
-        $this->users = DB::table('users')->whereNotNull('legacy_user_uuid')->pluck('id', 'legacy_user_uuid')->all();
-        $this->offices = DB::table('offices')->whereNotNull('legacy_bureau_id')->pluck('id', 'legacy_bureau_id')->all();
+        $this->users = ! $apply && $directoryPreview !== null ? $directoryPreview['users'] : DB::table('users')->whereNotNull('legacy_user_uuid')->pluck('id', 'legacy_user_uuid')->all();
+        $this->offices = ! $apply && $directoryPreview !== null ? $directoryPreview['offices'] : DB::table('offices')->whereNotNull('legacy_bureau_id')->pluck('id', 'legacy_bureau_id')->all();
         if (! $this->users || ! $this->offices) {
             throw new RuntimeException('Import the legacy directory first.');
         }
