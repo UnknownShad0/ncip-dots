@@ -81,6 +81,7 @@ class DocumentCreationController extends Controller
         return Inertia::render('DocumentCreation/Index', [
             'drafts' => $drafts,
             'documentTypes' => $this->documentTypeOptions(),
+            'savedDraftId' => session('savedDraftId'),
             'approverOffices' => $this->approverOffices()
                 ->map(fn (Office $office) => ['id' => $office->id, 'name' => $office->name, 'short_name' => $office->short_name])
                 ->all(),
@@ -95,7 +96,7 @@ class DocumentCreationController extends Controller
         $draft = DocumentCreationDraft::create([...$data, 'created_by' => $request->user()->id, 'status' => 'draft']);
         $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Draft created']);
 
-        return back()->with('success', 'Draft saved.');
+        return back()->with('success', 'Draft saved.')->with('savedDraftId', $draft->id);
     }
 
     public function update(Request $request, DocumentCreationDraft $draft)
@@ -105,7 +106,7 @@ class DocumentCreationController extends Controller
         $draft->update([...$data, 'status' => 'draft']);
         $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Draft updated']);
 
-        return back()->with('success', 'Draft updated.');
+        return back()->with('success', 'Draft updated.')->with('savedDraftId', $draft->id);
     }
 
     public function submit(Request $request, DocumentCreationDraft $draft)

@@ -445,9 +445,6 @@ class DocumentController extends Controller
                 ->where('created_by', auth()->id())
                 ->first();
             abort_unless($approvedDraft, 422, 'The approved document is no longer available for finalization.');
-            if ($approvedDraft->status === 'registered' && $approvedDraft->official_document_id) {
-                return redirect()->route('documents.index')->with('success', 'The existing document is ready for another trail action. Select Release from its row.');
-            }
             $validated['title'] = $approvedDraft->title;
             $validated['document_type_id'] = $approvedDraft->document_type_id;
             $validated['is_finalized'] = true;
@@ -502,11 +499,13 @@ class DocumentController extends Controller
             }
 
             if ($approvedDraft) {
-                $approvedDraft->update(['official_document_id' => $document->id, 'status' => 'registered']);
+                $approvedDraft = DocumentCreationDraft::query()->lockForUpdate()->findOrFail($approvedDraft->id);
+                // Keep the first registration link; events link every subsequent submission.
+                $approvedDraft->update(['official_document_id' => $approvedDraft->official_document_id ?? $document->id, 'status' => 'registered']);
                 $approvedDraft->events()->create([
                     'user_id' => auth()->id(),
                     'event' => 'Registered in DOTS',
-                    'metadata' => ['document_id' => $document->id],
+                    'metadata' => ['document_id' => $document->id, 'tracking_number' => $document->tracking_number],
                 ]);
             }
 
@@ -853,39 +852,11 @@ class DocumentController extends Controller
 
     private function approvedDraftHtml(DocumentCreationDraft $draft): string
     {
-        $content = $draft->content ?? [];
-        $field = static fn (string $key): string => e((string) ($content[$key] ?? ''));
-        $paragraphs = collect(preg_split('/\R/', (string) ($content['body'] ?? '')))
-            ->filter(fn (string $paragraph) => trim($paragraph) !== '')
-            ->map(fn (string $paragraph) => '<p>'.e($paragraph).'</p>')
-            ->implode('');
-        $cc = collect($content['cc'] ?? [])
-            ->filter(fn ($recipient) => filled($recipient))
-            ->map(fn ($recipient) => e((string) $recipient))
-            ->implode('; ');
-
-        return '<!doctype html><html><head><meta charset="utf-8"><style>
-            @page { margin: 0.65in; }
-            body { font-family: DejaVu Sans, sans-serif; font-size: 11pt; line-height: 1.55; color: #111; }
-            h1 { text-align: center; font-size: 14pt; margin: 0 0 28px; }
-            .meta { margin-bottom: 26px; }
-            .meta div { margin: 4px 0; }
-            .label { display: inline-block; width: 82px; font-weight: bold; }
-            .body { min-height: 360px; }
-            p { margin: 0 0 10px; }
-        </style></head><body>
-            <h1>'.e($draft->title).'</h1>
-            <div class="meta">
-                <div><span class="label">FOR:</span> '.$field('for').'</div>
-                <div><span class="label">THRU:</span> '.$field('thru').'</div>
-                <div><span class="label">ATTENTION:</span> '.$field('attention').'</div>
-                <div><span class="label">FROM:</span> '.$field('from').'</div>
-                <div><span class="label">SUBJECT:</span> '.$field('subject').'</div>
-                <div><span class="label">DATE:</span> '.$field('date').'</div>
-            </div>
-            <div class="body">'.$paragraphs.'</div>
-            '.($cc !== '' ? '<div><strong>CC:</strong> '.$cc.'</div>' : '').'
-        </body></html>';
+        return view('documents.generated', [
+            'title' => $draft->title,
+            'content' => $draft->content ?? [],
+            'header' => 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('images/header.png'))),
+        ])->render();
     }
 
     private function formatTrailTransaction(?DocumentTrail $trail): string
