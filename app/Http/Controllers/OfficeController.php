@@ -6,6 +6,7 @@ use App\Models\Office;
 use App\Models\OfficeList;
 use App\Models\Range;
 use App\Models\User;
+use App\Services\AuditTrailWriter;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -89,7 +90,7 @@ class OfficeController extends Controller
         [$rangeId, $legacyRangeId] = $this->resolveRangeSelection($validated['range_id'] ?? null);
 
         $officeList = OfficeList::query()->where('division_code', $validated['division_code'])->firstOrFail();
-        Office::query()->create([
+        $office = Office::query()->create([
             'name' => $officeList->long_name ?: $officeList->division_name,
             'short_name' => $validated['short_name'] ?? null,
             'code' => $officeList->division_code,
@@ -97,6 +98,11 @@ class OfficeController extends Controller
             'location' => $officeList->office_address,
             'range_id' => $rangeId,
             'legacy_range_id' => $legacyRangeId,
+        ]);
+        app(AuditTrailWriter::class)->record('library.bureau_created', $office, [
+            'name' => $office->name,
+            'code' => $office->code,
+            'range_id' => $office->range_id,
         ]);
 
         return redirect()->route('offices.index')->with('success', 'Office added.');
@@ -118,6 +124,7 @@ class OfficeController extends Controller
         [$rangeId, $legacyRangeId] = $this->resolveRangeSelection($validated['range_id'] ?? null);
 
         $officeList = OfficeList::query()->where('division_code', $validated['division_code'])->firstOrFail();
+        $before = $office->only(['name', 'short_name', 'code', 'email', 'range_id']);
         $office->update([
             'name' => $officeList->long_name ?: $officeList->division_name,
             'short_name' => $validated['short_name'] ?? null,
@@ -126,6 +133,10 @@ class OfficeController extends Controller
             'location' => $officeList->office_address,
             'range_id' => $rangeId,
             'legacy_range_id' => $legacyRangeId,
+        ]);
+        app(AuditTrailWriter::class)->record('library.bureau_updated', $office, [
+            'before' => $before,
+            'after' => $office->only(array_keys($before)),
         ]);
 
         return redirect()->route('offices.index')->with('success', 'Office updated.');
@@ -143,5 +154,4 @@ class OfficeController extends Controller
 
         return [(int) $selection, null];
     }
-
 }

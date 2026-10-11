@@ -2,15 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActionType;
 use App\Models\Document;
 use App\Models\DocumentCreationDraft;
-use App\Models\AuditTrail;
 use App\Models\DocumentTrail;
 use App\Models\DocumentType;
-use App\Models\ActionType;
-use App\Models\PurposeType;
 use App\Models\Office;
+use App\Models\PurposeType;
 use App\Models\User;
+use App\Services\AuditTrailWriter;
 use App\Services\DocumentAccess;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -25,7 +25,9 @@ use Inertia\Inertia;
 class DocumentController extends Controller
 {
     private const MAX_DOCUMENT_UPLOAD_KB = 102400;
+
     private bool $userRangeResolved = false;
+
     private ?array $userRangeIdentity = null;
 
     public function index()
@@ -527,7 +529,18 @@ class DocumentController extends Controller
                 'type' => 'original',
                 'document_trail_id' => $initialTrail?->id,
             ]);
+            app(AuditTrailWriter::class)->record('document.attachment_uploaded', $document, [
+                'tracking_number' => $document->tracking_number,
+                'file_name' => $document->title.'.pdf',
+                'type' => 'original',
+            ]);
         }
+
+        app(AuditTrailWriter::class)->record(
+            $approvedDraft ? 'document.registered' : 'document.created',
+            $document,
+            ['tracking_number' => $document->tracking_number, 'title' => $document->title],
+        );
 
         return redirect()->route('documents.index')->with('success', 'Document created successfully.');
     }
@@ -555,6 +568,11 @@ class DocumentController extends Controller
         $document = Document::findOrFail($id);
         abort_unless($this->canManageDraft($document), 403);
 
+        $before = $document->only([
+            'title', 'remarks', 'document_type_id', 'action_type_id', 'other_action',
+            'purpose_type_id', 'other_document_type', 'other_purpose', 'origin_type',
+            'urgent', 'notify_by_email', 'is_finalized',
+        ]);
         $document->update([
             'title' => $validated['title'],
             'status' => $validated['is_finalized'] ? 'pending' : 'draft',
@@ -585,6 +603,14 @@ class DocumentController extends Controller
             $this->storeDocumentFile($document, $file, 'version', $finalizationTrail);
         }
 
+        $after = $document->only(array_keys($before));
+        $changes = collect($after)->filter(fn ($value, $key) => $value !== $before[$key])
+            ->map(fn ($value, $key) => ['before' => $before[$key], 'after' => $value])->all();
+        app(AuditTrailWriter::class)->record('document.updated', $document, [
+            'tracking_number' => $document->tracking_number,
+            'changes' => $changes,
+        ]);
+
         return redirect()->route('documents.index')->with('success', 'Document updated successfully.');
     }
 
@@ -604,7 +630,7 @@ class DocumentController extends Controller
                 'to_office_id' => 'Choose a receiving office within your assigned office range.',
             ]);
         }
-        if (!$this->officeHasActiveUsers($targetOffice)) {
+        if (! $this->officeHasActiveUsers($targetOffice)) {
             throw ValidationException::withMessages([
                 'to_office_id' => 'Choose a receiving office with at least one active user.',
             ]);
@@ -612,8 +638,9 @@ class DocumentController extends Controller
         $document = Document::with('latestTrail')->findOrFail($id);
         $this->authorizeCurrentHolder($document);
         $officeId = app(DocumentAccess::class)->currentOfficeId(auth()->user());
+        $sourceOfficeName = Office::query()->whereKey($officeId)->value('name');
 
-        $trail = DB::transaction(function () use ($document, $validated, $officeId) {
+        $trail = DB::transaction(function () use ($document, $validated, $officeId, $sourceOfficeName, $targetOffice) {
             $trail = $document->trails()->create([
                 'from_office_id' => $officeId,
                 'to_office_id' => $validated['to_office_id'],
@@ -623,6 +650,14 @@ class DocumentController extends Controller
                 'remarks' => $validated['remarks'] ?? null,
             ]);
             $document->update(['status' => 'available']);
+            app(AuditTrailWriter::class)->record('document.released', $document, [
+                'tracking_number' => $document->tracking_number,
+                'from_office_id' => $officeId,
+                'from_office_name' => $sourceOfficeName,
+                'to_office_id' => $targetOffice->id,
+                'to_office_name' => $targetOffice->name,
+                'action_type' => $validated['action_type_name'],
+            ]);
 
             return $trail;
         });
@@ -647,7 +682,7 @@ class DocumentController extends Controller
             abort_if($document->legacy_needs_review || $document->is_archived, 403, 'This document needs review or is archived.');
             $latestTrail = $document->trails()->orderByDesc('id')->lockForUpdate()->first();
 
-            if (!(
+            if (! (
                 $latestTrail
                     && strtolower((string) $latestTrail->status) === 'available'
                     && (int) $latestTrail->to_office_id === $officeId
@@ -677,20 +712,13 @@ class DocumentController extends Controller
             ]);
 
             $document->loadMissing('creator');
-            AuditTrail::query()->create([
-                'user_id' => $user->id,
-                'action' => 'document.received',
-                'model_type' => Document::class,
-                'model_id' => $document->id,
-                'details' => sprintf(
-                    'Received %s at office %d from office %s.',
-                    $document->tracking_number,
-                    $officeId,
-                    $latestTrail->from_office_id ?? 'unknown'
-                ),
-                'ip_address' => request()->ip(),
-                'user_agent' => request()->userAgent(),
-            ]);
+            app(AuditTrailWriter::class)->record('document.received', $document, [
+                'tracking_number' => $document->tracking_number,
+                'office_id' => $officeId,
+                'from_office_id' => $latestTrail->from_office_id,
+                'from_office_name' => $latestTrail->fromOffice?->name,
+                'office_name' => $user->office?->name,
+            ], actor: $user);
 
             return $document;
         });
@@ -723,6 +751,15 @@ class DocumentController extends Controller
                 'action' => 'Tagged as Terminal',
             ]);
             $document->update(['status' => 'terminal', 'is_archived' => true]);
+            $writer = app(AuditTrailWriter::class);
+            $writer->record('document.terminal_tagged', $document, [
+                'tracking_number' => $document->tracking_number,
+                'office_id' => $officeId,
+            ]);
+            $writer->record('document.archived', $document, [
+                'tracking_number' => $document->tracking_number,
+                'reason' => 'Tagged as terminal',
+            ]);
         });
 
         return back()->with('success', 'Document tagged as terminal.');
@@ -732,6 +769,10 @@ class DocumentController extends Controller
     {
         $document = Document::findOrFail($id);
         abort_unless($this->canManageDraft($document), 403);
+        app(AuditTrailWriter::class)->record('document.deleted', $document, [
+            'tracking_number' => $document->tracking_number,
+            'title' => $document->title,
+        ]);
         $document->delete();
 
         return back()->with('success', 'Draft deleted successfully.');
@@ -741,7 +782,7 @@ class DocumentController extends Controller
     {
         $user = auth()->user();
         $admin = $user?->isAdministrator() ?? false;
-        $draft = !$document->legacy_needs_review && !$document->is_finalized && strtolower((string) $document->status) === 'draft';
+        $draft = ! $document->legacy_needs_review && ! $document->is_finalized && strtolower((string) $document->status) === 'draft';
         $officeId = $user ? app(DocumentAccess::class)->currentOfficeId($user) : null;
         $originOffice = $officeId && (int) $document->office_id === (int) $officeId;
 
@@ -754,7 +795,7 @@ class DocumentController extends Controller
         $actionTypeName = trim((string) $actionType?->name);
         $isOtherAction = mb_strtolower($actionTypeName) === 'others';
 
-        if ($isOtherAction && !filled($validated['other_action'] ?? null)) {
+        if ($isOtherAction && ! filled($validated['other_action'] ?? null)) {
             throw ValidationException::withMessages([
                 'other_action' => 'Please specify the action when selecting Others.',
             ]);
@@ -773,13 +814,13 @@ class DocumentController extends Controller
         $isOtherDocumentType = mb_strtolower(trim((string) $documentType?->name)) === 'others';
         $isOtherPurpose = mb_strtolower(trim((string) $purposeType?->name)) === 'others';
 
-        if ($isOtherDocumentType && !filled($validated['other_document_type'] ?? null)) {
+        if ($isOtherDocumentType && ! filled($validated['other_document_type'] ?? null)) {
             throw ValidationException::withMessages([
                 'other_document_type' => 'Please specify the document type when selecting Others.',
             ]);
         }
 
-        if ($isOtherPurpose && !filled($validated['other_purpose'] ?? null)) {
+        if ($isOtherPurpose && ! filled($validated['other_purpose'] ?? null)) {
             throw ValidationException::withMessages([
                 'other_purpose' => 'Please specify the purpose when selecting Others.',
             ]);
@@ -861,7 +902,7 @@ class DocumentController extends Controller
 
     private function formatTrailTransaction(?DocumentTrail $trail): string
     {
-        if (!$trail) {
+        if (! $trail) {
             return 'No transactions recorded';
         }
 
@@ -897,11 +938,15 @@ class DocumentController extends Controller
 
     private function currentUserRangeIdentity(): ?array
     {
-        if ($this->userRangeResolved) return $this->userRangeIdentity;
+        if ($this->userRangeResolved) {
+            return $this->userRangeIdentity;
+        }
         $this->userRangeResolved = true;
 
         $user = auth()->user();
-        if (! $user) return null;
+        if (! $user) {
+            return null;
+        }
 
         $office = $user->office_id
             ? Office::query()->with('range')->find($user->office_id, ['id', 'name', 'code', 'range_id', 'legacy_range_id'])
@@ -945,7 +990,7 @@ class DocumentController extends Controller
         ]);
         $path = $file->store($directory, 'public');
 
-        $document->files()->create([
+        $storedFile = $document->files()->create([
             'document_trail_id' => $trail?->id,
             'type' => $type,
             'file_name' => basename($path),
@@ -955,6 +1000,15 @@ class DocumentController extends Controller
             'size_bytes' => $file->getSize(),
             'uploaded_by' => auth()->id(),
         ]);
+        app(AuditTrailWriter::class)->record(
+            $type === 'version' ? 'document.version_added' : 'document.attachment_uploaded',
+            $document,
+            [
+                'tracking_number' => $document->tracking_number,
+                'file_name' => $storedFile->original_name,
+                'type' => $type,
+                'size_bytes' => $storedFile->size_bytes,
+            ],
+        );
     }
-
 }

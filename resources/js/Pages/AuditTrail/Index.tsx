@@ -21,7 +21,7 @@ export default function AuditTrailIndex({ trail = [], pagination, canFilterBurea
                         <option value="">All bureaus</option>
                         {bureaus.map((bureau) => <option key={bureau.id} value={bureau.id}>{bureau.name}</option>)}
                     </select>
-                    <p className="mt-1 text-xs text-slate-500">Based on each user's current bureau assignment. Entries without a recorded user appear under All bureaus.</p>
+                    <p className="mt-1 text-xs text-slate-500">Native entries use the bureau recorded at the time. Legacy entries without a bureau snapshot are matched using the actor's current bureau assignment.</p>
                 </div>}
 
                 <div className="space-y-3">
@@ -32,12 +32,14 @@ export default function AuditTrailIndex({ trail = [], pagination, canFilterBurea
                             <div key={entry.id} className="rounded-lg border border-slate-200 p-4">
                                 <div className="flex items-center justify-between gap-4">
                                     <div>
-                                        <div className="font-medium text-slate-800">{entry.action || 'Unspecified action'}{entry.record_source === 'legacy_import' && <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">Legacy</span>}</div>
+                                        <div className="font-medium text-slate-800">{entry.action || 'Unspecified action'}{entry.record_source === 'legacy_import' && <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">Legacy</span>}{entry.result && <span className={`ml-2 rounded px-2 py-0.5 text-xs ${entry.result === 'failure' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{entry.result}</span>}</div>
                                         {entry.legacy_module && <div className="mt-1 text-xs text-slate-500">{entry.legacy_module}</div>}
                                         <div className="text-sm text-slate-500">
-                                            {entry.user ? (entry.user.short_name || entry.user.name) : entry.record_source === 'legacy_import' ? 'User not recorded or unavailable' : 'System'}
-                                            {entry.user?.office?.name && <span className="block text-xs">{entry.user.office.name}</span>}
+                                            {entry.actor_name || (entry.user ? (entry.user.short_name || entry.user.name) : entry.action === 'login.failed' || entry.action === 'login.rate_limited' || entry.action === 'password.reset_requested' ? 'Unauthenticated request' : entry.record_source === 'legacy_import' ? 'User not recorded or unavailable' : 'System')}
+                                            {entry.actor_office_name && <span className="block text-xs">{entry.actor_office_name}</span>}
+                                            {entry.bureau_filter_uses_current_assignment && <span className="block text-xs">Historical bureau unavailable; matched by current assignment</span>}
                                         </div>
+                                        {entry.details && <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-slate-600">{entry.details}</pre>}
                                     </div>
                                     <div className="text-xs text-slate-400">
                                         {entry.created_at ? new Date(entry.created_at).toLocaleString() : 'Date not recorded'}

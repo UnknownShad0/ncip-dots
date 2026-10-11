@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Services\AuditTrailWriter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -33,6 +34,7 @@ class AuthenticatedSessionController extends Controller
             return $passwordSetupRedirect;
         }
 
+        app(AuditTrailWriter::class)->record('login.succeeded', $request->user());
         $request->session()->regenerate();
 
         return redirect()->intended(route('dashboard', absolute: false));
@@ -43,6 +45,7 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        app(AuditTrailWriter::class)->record('logout.succeeded', $request->user());
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();

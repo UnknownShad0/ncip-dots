@@ -3,6 +3,8 @@
 namespace App\Http\Requests\Auth;
 
 use App\Models\User;
+use App\Services\AuditTrailWriter;
+use App\Services\HrisDirectory;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -61,7 +63,7 @@ class LoginRequest extends FormRequest
 
             if ($localUser->is_active && ! $localUser->is_locked && filled($localUser->username)) {
                 try {
-                    $verified = app(\App\Services\HrisDirectory::class)->verifyCredentials(
+                    $verified = app(HrisDirectory::class)->verifyCredentials(
                         $localUser->username,
                         (string) $this->input('password'),
                     );
@@ -76,6 +78,9 @@ class LoginRequest extends FormRequest
                 $token = Password::broker()->createToken($localUser);
 
                 RateLimiter::clear($this->throttleKey());
+                app(AuditTrailWriter::class)->record('login.hris_verified', $localUser, [
+                    'result' => 'Password setup required',
+                ]);
 
                 return redirect()->route('password.reset', [
                     'token' => $token,
@@ -84,6 +89,10 @@ class LoginRequest extends FormRequest
             }
 
             RateLimiter::hit($this->throttleKey());
+            app(AuditTrailWriter::class)->record('login.failed', $localUser, [
+                'identifier' => $identifier,
+                'reason' => 'credentials_rejected',
+            ], 'failure');
 
             throw ValidationException::withMessages([
                 'username' => trans('auth.failed'),
@@ -92,6 +101,10 @@ class LoginRequest extends FormRequest
 
         if (! Auth::attempt($credentials, $this->boolean('remember'))) {
             RateLimiter::hit($this->throttleKey());
+            app(AuditTrailWriter::class)->record('login.failed', $localUser, [
+                'identifier' => $identifier,
+                'reason' => 'credentials_rejected',
+            ], 'failure');
 
             throw ValidationException::withMessages([
                 'username' => trans('auth.failed'),
@@ -114,6 +127,10 @@ class LoginRequest extends FormRequest
             return;
         }
 
+        app(AuditTrailWriter::class)->record('login.rate_limited', details: [
+            'identifier' => $this->string('username')->toString(),
+            'reason' => 'too_many_attempts',
+        ], result: 'failure');
         event(new Lockout($this));
 
         $seconds = RateLimiter::availableIn($this->throttleKey());

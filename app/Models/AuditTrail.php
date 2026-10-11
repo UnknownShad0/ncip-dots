@@ -12,10 +12,14 @@ class AuditTrail extends Model
 
     protected $fillable = [
         'user_id',
+        'actor_name',
+        'actor_office_id',
+        'actor_office_name',
         'action',
         'model_type',
         'model_id',
         'details',
+        'result',
         'ip_address',
         'user_agent',
     ];

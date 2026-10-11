@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\AuditTrailWriter;
 use App\Services\LegacyDocumentImport;
 use Illuminate\Console\Command;
 use Illuminate\Database\QueryException;
@@ -30,12 +31,40 @@ class ImportLegacyDocuments extends Command
 
             return self::FAILURE;
         }
+        $auditStarted = false;
+        $source = DB::connection('legacy')->getDatabaseName();
         try {
+            if ($this->option('apply')) {
+                app(AuditTrailWriter::class)->record('import.started', details: [
+                    'import' => 'legacy:import-documents',
+                    'source' => $source,
+                    'target' => $target,
+                ]);
+                $auditStarted = true;
+            }
             $report = $import->run((bool) $this->option('apply'));
         } catch (Throwable $e) {
-            $this->error($e instanceof QueryException ? 'Database failure; import transaction rolled back. Query bindings omitted to protect source data.' : $e->getMessage());
+            $message = $e instanceof QueryException ? 'Database failure; import transaction rolled back. Query bindings omitted to protect source data.' : $e->getMessage();
+            $this->error($message);
+            if ($auditStarted) {
+                app(AuditTrailWriter::class)->record('import.failed', details: [
+                    'import' => 'legacy:import-documents',
+                    'source' => $source,
+                    'target' => $target,
+                    'reason' => $message,
+                ], result: 'failure');
+            }
 
             return self::FAILURE;
+        }
+        if ($this->option('apply')) {
+            app(AuditTrailWriter::class)->record('import.completed', details: [
+                'import' => 'legacy:import-documents',
+                'source' => $report['source'],
+                'target' => $report['target'],
+                'counts' => $report['counts'],
+                'exceptions' => $report['issues'],
+            ]);
         }
         $this->table(['Table', 'New', 'Linked', 'Existing', 'Exceptions retained'], collect($report['counts'])->map(fn ($v, $t) => [$t, $v['new'] ?? 0, $v['linked'] ?? 0, $v['existing'] ?? 0, $v['quarantined'] ?? 0])->all());
         foreach ($report['issues'] as $reason => $issue) {

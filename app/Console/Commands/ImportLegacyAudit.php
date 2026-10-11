@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\AuditTrailWriter;
 use App\Services\LegacyAuditImport;
 use Illuminate\Console\Command;
 use Illuminate\Database\QueryException;
@@ -29,12 +30,47 @@ class ImportLegacyAudit extends Command
 
             return self::FAILURE;
         }
+        $auditStarted = false;
+        $source = DB::connection('legacy')->getDatabaseName();
         try {
+            if ($this->option('apply')) {
+                app(AuditTrailWriter::class)->record('import.started', details: [
+                    'import' => 'legacy:import-audit',
+                    'source' => $source,
+                    'target' => $target,
+                ]);
+                $auditStarted = true;
+            }
             $report = $import->run((bool) $this->option('apply'));
         } catch (Throwable $e) {
-            $this->error($e instanceof QueryException ? 'Database operation failed; any audit import writes were rolled back. SQL and bindings withheld.' : $e->getMessage());
+            $message = $e instanceof QueryException ? 'Database operation failed; any audit import writes were rolled back. SQL and bindings withheld.' : $e->getMessage();
+            $this->error($message);
+            if ($auditStarted) {
+                app(AuditTrailWriter::class)->record('import.failed', details: [
+                    'import' => 'legacy:import-audit',
+                    'source' => $source,
+                    'target' => $target,
+                    'reason' => $message,
+                ], result: 'failure');
+            }
 
             return self::FAILURE;
+        }
+        if ($this->option('apply')) {
+            app(AuditTrailWriter::class)->record('import.completed', details: [
+                'import' => 'legacy:import-audit',
+                'source' => $report['source'],
+                'target' => $report['target'],
+                'counts' => [
+                    'total' => $report['total'],
+                    'new' => $report['new'],
+                    'existing' => $report['existing'],
+                    'without_actor' => $report['without_actor'],
+                    'unmapped_actor' => $report['unmapped_actor'],
+                    'missing_action' => $report['missing_action'],
+                    'missing_date' => $report['missing_date'],
+                ],
+            ]);
         }
         $this->info($report['source'].' → '.$report['target']);
         $this->table(['Total source', 'New', 'Existing', 'New without actor', 'New without date'], [[$report['total'], $report['new'], $report['existing'], $report['without_actor'], $report['missing_date']]]);

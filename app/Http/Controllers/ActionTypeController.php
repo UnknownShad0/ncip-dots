@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActionType;
+use App\Services\AuditTrailWriter;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -39,13 +40,14 @@ class ActionTypeController extends Controller
             'is_active' => ['nullable', 'boolean'],
         ]);
 
-        ActionType::create([
+        $actionType = ActionType::create([
             'name' => $validated['name'],
             'code' => $validated['code'] ?? null,
             'description' => $validated['description'] ?? null,
             'is_active' => $validated['is_active'] ?? true,
-            'created_by' => auth()->id(),
+            'created_by' => $request->user()?->getAuthIdentifier(),
         ]);
+        app(AuditTrailWriter::class)->record('library.action_type_created', $actionType, $actionType->only(['name', 'code', 'description', 'is_active']));
 
         return redirect()->route('action-types.index')->with('success', 'Action type added.');
     }
@@ -60,13 +62,18 @@ class ActionTypeController extends Controller
         ]);
 
         $actionType = ActionType::findOrFail($id);
+        $before = $actionType->only(['name', 'code', 'description', 'is_active']);
 
         $actionType->update([
             'name' => $validated['name'],
             'code' => $validated['code'] ?? null,
             'description' => $validated['description'] ?? null,
             'is_active' => $validated['is_active'],
-            'created_by' => auth()->id(),
+            'created_by' => $request->user()?->getAuthIdentifier(),
+        ]);
+        app(AuditTrailWriter::class)->record('library.action_type_updated', $actionType, [
+            'before' => $before,
+            'after' => $actionType->only(array_keys($before)),
         ]);
 
         return redirect()->route('action-types.index')->with('success', 'Action type updated.');

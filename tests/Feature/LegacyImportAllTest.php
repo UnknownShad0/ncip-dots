@@ -71,8 +71,10 @@ class LegacyImportAllTest extends TestCase
         $this->stages(true);
         $this->artisan('legacy:import-all', ['--apply' => true, '--target' => ':memory:', '--unassign-mismatched-divisions' => true])->assertSuccessful();
         $this->assertSame(1, DB::table('users')->count());
-        $this->assertSame(2, DB::table('audit_trails')->count());
+        $this->assertSame(4, DB::table('audit_trails')->count());
         $this->assertSame(DB::table('users')->value('id'), DB::table('audit_trails')->where('legacy_trail_uuid', 'audit-1')->value('user_id'));
+        $this->assertDatabaseHas('audit_trails', ['action' => 'import.started', 'result' => 'success']);
+        $this->assertDatabaseHas('audit_trails', ['action' => 'import.completed', 'result' => 'success']);
     }
 
     public function test_audit_failure_rolls_back_directory_and_document_stage_writes(): void
@@ -82,7 +84,9 @@ class LegacyImportAllTest extends TestCase
         $this->artisan('legacy:import-all', ['--apply' => true, '--target' => ':memory:', '--unassign-mismatched-divisions' => true])->assertFailed();
         $this->assertSame(0, DB::table('users')->count());
         $this->assertSame(0, DB::table('offices')->count());
-        $this->assertSame(0, DB::table('audit_trails')->count());
+        $this->assertSame(2, DB::table('audit_trails')->count());
+        $this->assertDatabaseHas('audit_trails', ['action' => 'import.started', 'result' => 'success']);
+        $this->assertDatabaseHas('audit_trails', ['action' => 'import.failed', 'result' => 'failure']);
     }
 
     public function test_wrong_target_is_rejected_before_running_importers(): void

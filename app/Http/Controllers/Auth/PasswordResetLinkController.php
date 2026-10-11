@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\AuditTrailWriter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -34,18 +35,35 @@ class PasswordResetLinkController extends Controller
             'username' => 'required|string|max:255',
         ]);
 
-        abort_if($this->usesLogMailer(config('mail.default')), 503, 'Password recovery email is not configured. Please contact support.');
+        $username = $request->input('username');
+        if ($this->usesLogMailer(config('mail.default'))) {
+            app(AuditTrailWriter::class)->record('password.reset_requested', details: [
+                'identifier' => $username,
+                'reason' => 'email_not_configured',
+            ], result: 'failure');
+            abort(503, 'Password recovery email is not configured. Please contact support.');
+        }
 
         // We will send the password reset link to this user. Once we have attempted
         // to send the link, we will examine the response then see the message we
         // need to show to the user. Finally, we'll send out a proper response.
-        try {
-            $user = User::query()->where('username', $request->input('username'))->first();
-            if ($user) {
-                Password::sendResetLink(['email' => $user->email]);
+        $user = User::query()->where('username', $username)->first();
+        if (! $user) {
+            app(AuditTrailWriter::class)->record('password.reset_requested', details: [
+                'identifier' => $username,
+                'reason' => 'account_not_found',
+            ], result: 'failure');
+        } else {
+            $status = null;
+            try {
+                $status = Password::sendResetLink(['email' => $user->email]);
+            } catch (\Throwable $exception) {
+                report($exception);
+                Log::warning('Password recovery email delivery failed.');
             }
-        } catch (\Throwable) {
-            Log::warning('Password recovery email delivery failed.');
+            app(AuditTrailWriter::class)->record('password.reset_requested', $user, [
+                'status' => $status,
+            ], $status === Password::RESET_LINK_SENT ? 'success' : 'failure');
         }
 
         return back()->with('status', 'If an account matches that username, we’ll send a password reset link shortly.');

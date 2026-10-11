@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\AuditTrailWriter;
 use App\Services\LegacyAuditImport;
 use App\Services\LegacyDirectoryImport;
 use App\Services\LegacyDocumentImport;
@@ -24,11 +25,14 @@ class ImportLegacyAll extends Command
         $target = DB::connection();
         $apply = (bool) $this->option('apply');
         $stage = 'preflight';
+        $auditStarted = false;
+        $sourceName = null;
         try {
             if ($apply && $this->option('target') !== $target->getDatabaseName()) {
                 throw new RuntimeException('Specify --target with the exact target database name.');
             }
-            $this->info('Source: '.DB::connection('legacy')->getDatabaseName().' → Target: '.$target->getDatabaseName());
+            $sourceName = DB::connection('legacy')->getDatabaseName();
+            $this->info('Source: '.$sourceName.' → Target: '.$target->getDatabaseName());
             foreach (['ranges' => ['legacy_range_id', 'record_source'], 'offices' => ['legacy_bureau_id', 'record_source'], 'divisions' => ['legacy_division_id', 'record_source'], 'users' => ['legacy_user_uuid', 'record_source'], 'documents' => ['legacy_doc_id', 'record_source'], 'audit_trails' => ['legacy_trail_uuid']] as $table => $columns) {
                 if (! Schema::hasColumns($table, $columns)) {
                     throw new RuntimeException('Import schema is incomplete. Run php artisan migrate first (never migrate:fresh for an existing database).');
@@ -37,7 +41,15 @@ class ImportLegacyAll extends Command
             if (! Schema::hasTable('legacy_document_exceptions')) {
                 throw new RuntimeException('Run php artisan migrate before importing.');
             }
-            $work = function () use ($directory, $documents, $audit, $apply, &$stage) {
+            if ($apply) {
+                app(AuditTrailWriter::class)->record('import.started', details: [
+                    'import' => 'legacy:import-all',
+                    'source' => $sourceName,
+                    'target' => $target->getDatabaseName(),
+                ]);
+                $auditStarted = true;
+            }
+            $work = function () use ($directory, $documents, $audit, $apply, &$stage, $sourceName, $target) {
                 $stage = 'directory';
                 $this->line('1/3 Directory');
                 $plan = $directory->plan((bool) $this->option('unassign-mismatched-divisions'));
@@ -63,13 +75,43 @@ class ImportLegacyAll extends Command
                 $this->line('3/3 Audit history');
                 $auditReport = $audit->run($apply, $apply ? null : $preview['users']);
 
-                return ['mode' => $apply ? 'applied' : 'preview', 'directory' => ['counts' => $plan['counts'], 'warnings' => $plan['warnings']], 'documents' => $documentReport, 'audit' => $auditReport];
+                $report = ['mode' => $apply ? 'applied' : 'preview', 'directory' => ['counts' => $plan['counts'], 'warnings' => $plan['warnings']], 'documents' => $documentReport, 'audit' => $auditReport];
+                if ($apply) {
+                    app(AuditTrailWriter::class)->record('import.completed', details: [
+                        'import' => 'legacy:import-all',
+                        'source' => $sourceName,
+                        'target' => $target->getDatabaseName(),
+                        'counts' => [
+                            'directory' => $plan['counts'],
+                            'documents' => $documentReport['counts'],
+                            'audit' => [
+                                'total' => $auditReport['total'],
+                                'new' => $auditReport['new'],
+                                'existing' => $auditReport['existing'],
+                                'without_actor' => $auditReport['without_actor'],
+                                'unmapped_actor' => $auditReport['unmapped_actor'],
+                            ],
+                        ],
+                        'exceptions' => $documentReport['issues'],
+                    ]);
+                }
+
+                return $report;
             };
             $report = $apply ? $target->transaction($work) : $work();
         } catch (Throwable $e) {
             $message = $e instanceof QueryException ? 'Database error; query bindings withheld.' : $e->getMessage();
             $this->error("Failed at $stage: $message");
             $this->line($apply ? 'No import changes from this run were committed.' : 'Preview stopped; no database rows changed.');
+            if ($auditStarted) {
+                app(AuditTrailWriter::class)->record('import.failed', details: [
+                    'import' => 'legacy:import-all',
+                    'source' => $sourceName,
+                    'target' => $target->getDatabaseName(),
+                    'stage' => $stage,
+                    'reason' => $message,
+                ], result: 'failure');
+            }
 
             return self::FAILURE;
         }

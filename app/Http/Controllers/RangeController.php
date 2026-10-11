@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Range;
+use App\Services\AuditTrailWriter;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -28,12 +29,13 @@ class RangeController extends Controller
             'is_active' => ['nullable', 'boolean'],
         ]);
 
-        Range::create([
+        $range = Range::create([
             'name' => $validated['name'],
             'description' => $validated['description'] ?? null,
             'is_active' => $validated['is_active'] ?? true,
             'created_by' => auth()->id(),
         ]);
+        app(AuditTrailWriter::class)->record('library.range_created', $range, $range->only(['name', 'description', 'is_active']));
 
         return redirect()->route('ranges.index')->with('success', 'Range added.');
     }
@@ -47,12 +49,17 @@ class RangeController extends Controller
         ]);
 
         $range = Range::findOrFail($id);
+        $before = $range->only(['name', 'description', 'is_active']);
 
         $range->update([
             'name' => $validated['name'],
             'description' => $validated['description'] ?? null,
             'is_active' => $validated['is_active'],
             'created_by' => auth()->id(),
+        ]);
+        app(AuditTrailWriter::class)->record('library.range_updated', $range, [
+            'before' => $before,
+            'after' => $range->only(array_keys($before)),
         ]);
 
         return redirect()->route('ranges.index')->with('success', 'Range updated.');

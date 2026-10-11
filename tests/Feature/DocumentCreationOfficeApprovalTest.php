@@ -90,6 +90,16 @@ class DocumentCreationOfficeApprovalTest extends TestCase
 
         $this->assertSame('approved', $draft->fresh()->status);
         $this->assertSame($secondOfficeAdmin->id, $draft->fresh()->decided_by);
+        $this->assertDatabaseHas('audit_trails', [
+            'action' => 'document.approval.submitted',
+            'model_id' => $draft->id,
+            'actor_office_id' => $creatorOffice->id,
+        ]);
+        $this->assertDatabaseHas('audit_trails', [
+            'action' => 'document.approval.approved',
+            'model_id' => $draft->id,
+            'actor_office_id' => $approverOffice->id,
+        ]);
     }
 
     public function test_admin_role_names_without_ids_can_approve_but_cannot_approve_their_own_submission(): void

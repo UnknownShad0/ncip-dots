@@ -2,7 +2,14 @@
 
 namespace Tests\Feature;
 
-use App\Models\{ActionType, Document, DocumentCreationDraft, DocumentType, Office, Range, User};
+use App\Models\ActionType;
+use App\Models\AuditTrail;
+use App\Models\Document;
+use App\Models\DocumentCreationDraft;
+use App\Models\DocumentType;
+use App\Models\Office;
+use App\Models\Range;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -50,6 +57,12 @@ class ApprovedDocumentReuseTest extends TestCase
         $this->actingAs($receiverB)->post('/documents/'.$second->id.'/receive')->assertSessionHasNoErrors();
         $this->assertSame('pending', $first->fresh()->status);
         $this->assertSame('pending', $second->fresh()->status);
+        $this->assertSame(2, AuditTrail::where('action', 'document.registered')->count());
+        $this->assertSame(2, AuditTrail::where('action', 'document.attachment_uploaded')->count());
+        $this->assertSame(2, AuditTrail::where('action', 'document.released')->count());
+        $this->assertSame(2, AuditTrail::where('action', 'document.received')->count());
+        $this->assertSame($officeA->id, AuditTrail::where('action', 'document.received')
+            ->where('model_id', $first->id)->value('actor_office_id'));
     }
 
     public function test_unapproved_or_other_users_documents_cannot_be_reused(): void

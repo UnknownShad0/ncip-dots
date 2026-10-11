@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\AuditTrailWriter;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -49,6 +50,10 @@ class NewPasswordController extends Controller
 
         $user = User::query()->where('username', $request->input('username'))->first();
         if (! $user) {
+            app(AuditTrailWriter::class)->record('password.reset_failed', details: [
+                'identifier' => $request->input('username'),
+                'reason' => 'account_not_found',
+            ], result: 'failure');
             throw ValidationException::withMessages([
                 'username' => [trans('passwords.token')],
             ]);
@@ -78,9 +83,16 @@ class NewPasswordController extends Controller
         // the application's home authenticated view. If there is an error we can
         // redirect them back to where they came from with their error message.
         if ($status == Password::PASSWORD_RESET) {
+            app(AuditTrailWriter::class)->record('password.reset', $user, [
+                'method' => 'reset_link',
+            ], actor: $user);
+
             return redirect()->route('login')->with('status', __($status));
         }
 
+        app(AuditTrailWriter::class)->record('password.reset_failed', $user, [
+            'reason' => $status,
+        ], 'failure');
         throw ValidationException::withMessages([
             'username' => [trans($status)],
         ]);

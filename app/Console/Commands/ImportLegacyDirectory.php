@@ -2,12 +2,14 @@
 
 namespace App\Console\Commands;
 
+use App\Services\AuditTrailWriter;
 use App\Services\LegacyDirectoryImport;
 use Illuminate\Console\Command;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
+use Throwable;
 
 class ImportLegacyDirectory extends Command
 {
@@ -18,7 +20,9 @@ class ImportLegacyDirectory extends Command
     public function handle(LegacyDirectoryImport $import): int
     {
         $target = DB::connection()->getDatabaseName();
-        $this->info('Source: '.DB::connection('legacy')->getDatabaseName().' → Target: '.$target);
+        $source = DB::connection('legacy')->getDatabaseName();
+        $auditStarted = false;
+        $this->info('Source: '.$source.' → Target: '.$target);
         try {
             if ($this->option('apply') && $this->option('target') !== $target) {
                 throw new RuntimeException('Specify --target with the exact target database name.');
@@ -28,6 +32,14 @@ class ImportLegacyDirectory extends Command
                     throw new RuntimeException('Apply the legacy identity migration first.');
                 }
             }
+            if ($this->option('apply')) {
+                app(AuditTrailWriter::class)->record('import.started', details: [
+                    'import' => 'legacy:import-directory',
+                    'source' => $source,
+                    'target' => $target,
+                ]);
+                $auditStarted = true;
+            }
             $plan = $import->plan((bool) $this->option('unassign-mismatched-divisions'));
             $this->table(['Table', 'New', 'Existing to link', 'Already imported'], collect($plan['counts'])->map(fn ($c, $t) => [$t, $c['insert'] ?? 0, $c['linked'] ?? 0, $c['unchanged'] ?? 0])->all());
             foreach ($plan['warnings'] as $warning) {
@@ -35,15 +47,31 @@ class ImportLegacyDirectory extends Command
             }
             if ($this->option('apply')) {
                 $import->apply($plan);
+                app(AuditTrailWriter::class)->record('import.completed', details: [
+                    'import' => 'legacy:import-directory',
+                    'source' => $source,
+                    'target' => $target,
+                    'counts' => $plan['counts'],
+                    'warnings' => $plan['warnings'],
+                ]);
                 $this->info('Import committed. Existing matched account passwords and permissions were preserved.');
             } else {
                 $this->info('Preview only. No records written.');
             }
 
             return self::SUCCESS;
-        } catch (RuntimeException $e) {
+        } catch (Throwable $e) {
             // Do not print query bindings: they may contain password hashes or personal data.
-            $this->error($e instanceof QueryException ? 'Database operation failed; the import transaction was rolled back. Check schema and conflicts.' : $e->getMessage());
+            $message = $e instanceof QueryException ? 'Database operation failed; the import transaction was rolled back. Check schema and conflicts.' : $e->getMessage();
+            $this->error($message);
+            if ($auditStarted) {
+                app(AuditTrailWriter::class)->record('import.failed', details: [
+                    'import' => 'legacy:import-directory',
+                    'source' => $source,
+                    'target' => $target,
+                    'reason' => $message,
+                ], result: 'failure');
+            }
 
             return self::FAILURE;
         }

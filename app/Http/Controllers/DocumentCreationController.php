@@ -7,8 +7,9 @@ use App\Models\DocumentCreationDraft;
 use App\Models\DocumentType;
 use App\Models\Office;
 use App\Models\User;
-use Illuminate\Support\Collection;
+use App\Services\AuditTrailWriter;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -95,6 +96,9 @@ class DocumentCreationController extends Controller
         $data = $this->validateDraft($request);
         $draft = DocumentCreationDraft::create([...$data, 'created_by' => $request->user()->id, 'status' => 'draft']);
         $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Draft created']);
+        app(AuditTrailWriter::class)->record('document.draft_created', $draft, [
+            'title' => $draft->title,
+        ]);
 
         return back()->with('success', 'Draft saved.')->with('savedDraftId', $draft->id);
     }
@@ -105,6 +109,9 @@ class DocumentCreationController extends Controller
         $data = $this->validateDraft($request);
         $draft->update([...$data, 'status' => 'draft']);
         $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Draft updated']);
+        app(AuditTrailWriter::class)->record('document.draft_updated', $draft, [
+            'title' => $draft->title,
+        ]);
 
         return back()->with('success', 'Draft updated.')->with('savedDraftId', $draft->id);
     }
@@ -128,6 +135,12 @@ class DocumentCreationController extends Controller
             'decision_remarks' => null,
         ]);
         $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Submitted for approval', 'metadata' => ['version' => $number, 'approver_office_id' => $approverOffice->id]]);
+        app(AuditTrailWriter::class)->record('document.approval.submitted', $draft, [
+            'title' => $draft->title,
+            'version' => $number,
+            'approver_office_id' => $approverOffice->id,
+            'approver_office_name' => $approverOffice->name,
+        ]);
 
         return back()->with('success', 'PDF version submitted for approval.');
     }
@@ -146,6 +159,11 @@ class DocumentCreationController extends Controller
         $nextStatus = $data['decision'];
         $draft->update(['status' => $nextStatus, 'decided_by' => $user->id, 'decision_at' => now(), 'decision_remarks' => $data['remarks'] ?? null]);
         $draft->events()->create(['user_id' => $user->id, 'event' => ucfirst(str_replace('_', ' ', $data['decision'])), 'remarks' => $data['remarks'] ?? null, 'metadata' => ['version' => $draft->version_number]]);
+        app(AuditTrailWriter::class)->record('document.approval.'.$nextStatus, $draft, [
+            'title' => $draft->title,
+            'version' => $draft->version_number,
+            'remarks' => $data['remarks'] ?? null,
+        ]);
 
         return back()->with('success', 'Approval decision recorded.');
     }
@@ -173,6 +191,11 @@ class DocumentCreationController extends Controller
 
             return $document;
         });
+        app(AuditTrailWriter::class)->record('document.registered', $document, [
+            'tracking_number' => $document->tracking_number,
+            'title' => $document->title,
+            'draft_id' => $draft->id,
+        ]);
 
         return back()->with('success', 'Registered as '.$document->tracking_number.'.');
     }

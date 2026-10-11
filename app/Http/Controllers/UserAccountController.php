@@ -4,13 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Office;
 use App\Models\User;
-use App\Services\HrisDirectory;
 use App\Notifications\UserAccountCreated;
-use Illuminate\Validation\ValidationException;
+use App\Services\AuditTrailWriter;
+use App\Services\HrisDirectory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class UserAccountController extends Controller
@@ -23,12 +24,14 @@ class UserAccountController extends Controller
             $result = $directory->lookup($validated['employee_code'], includeOffices: false);
         } catch (\Throwable $exception) {
             report($exception);
+
             return response()->json(['message' => 'Employee directory is unavailable. Please check the HRIS configuration or try again.'], 502);
         }
         if (! $result) {
             return response()->json(['message' => 'No employee found for that employee code.'], 404);
         }
         $request->session()->put('hris_employee_lookup', $result);
+
         return response()->json($result);
     }
 
@@ -180,6 +183,13 @@ class UserAccountController extends Controller
             'password' => null,
             'is_active' => true, 'is_locked' => false,
         ]));
+        app(AuditTrailWriter::class)->record('user.created', $user, [
+            'name' => $user->name,
+            'role' => $user->role,
+            'office_id' => $user->office_id,
+            'office_name' => $user->office?->name,
+            'account_type' => $type,
+        ]);
         if ($type === 'employee') {
             $request->session()->forget('hris_employee_lookup');
         }
@@ -190,6 +200,7 @@ class UserAccountController extends Controller
             $user->notify(new UserAccountCreated($setupUrl));
         } catch (\Throwable $exception) {
             report($exception);
+
             return redirect()->route('user-accounts.index')->with('warning', 'Account created, but the password setup email could not be sent. Ask the user to use Forgot password to set a password.');
         }
 
@@ -216,6 +227,15 @@ class UserAccountController extends Controller
         $roleId = $user->employee_code ? $this->employeeRoleId($validated['employee_role']) : (int) $validated['role_id'];
         $role = $user->employee_code ? $validated['employee_role'] : User::query()->where('role_id', $roleId)->value('role');
         $office = filled($validated['officeId'] ?? null) ? Office::query()->findOrFail($validated['officeId']) : $user->office;
+        $before = [
+            'name' => $user->name,
+            'role_id' => $user->role_id,
+            'role' => $user->role,
+            'office_id' => $user->office_id,
+            'office_name' => $user->office?->name,
+            'is_active' => (bool) $user->is_active,
+            'is_locked' => (bool) $user->is_locked,
+        ];
         $user->fill([
             'name' => trim($validated['firstname'].' '.$validated['lastname']),
             'firstname' => $validated['firstname'],
@@ -233,6 +253,49 @@ class UserAccountController extends Controller
         }
 
         $user->save();
+
+        $changes = [];
+        $after = [
+            'name' => $user->name,
+            'role_id' => $user->role_id,
+            'role' => $user->role,
+            'office_id' => $user->office_id,
+            'office_name' => $office?->name,
+            'is_active' => (bool) $user->is_active,
+            'is_locked' => (bool) $user->is_locked,
+            'credentials_changed' => filled($validated['password'] ?? null),
+        ];
+        foreach ($after as $key => $value) {
+            if ($key === 'credentials_changed' ? $value : $value !== ($before[$key] ?? null)) {
+                $changes[$key] = ['before' => $before[$key] ?? null, 'after' => $value];
+            }
+        }
+        if ($changes) {
+            $writer = app(AuditTrailWriter::class);
+            $writer->record('user.updated', $user, ['changes' => $changes]);
+            if ($before['is_active'] !== (bool) $user->is_active) {
+                $writer->record($user->is_active ? 'user.activated' : 'user.deactivated', $user, [
+                    'name' => $user->name,
+                ]);
+            }
+            if ($before['is_locked'] !== (bool) $user->is_locked) {
+                $writer->record($user->is_locked ? 'user.locked' : 'user.unlocked', $user, [
+                    'name' => $user->name,
+                ]);
+            }
+            if ($before['role_id'] !== $user->role_id || $before['role'] !== $user->role) {
+                $writer->record('user.role_changed', $user, [
+                    'before' => ['role_id' => $before['role_id'], 'role' => $before['role']],
+                    'after' => ['role_id' => $user->role_id, 'role' => $user->role],
+                ]);
+            }
+            if ($before['office_id'] !== $user->office_id) {
+                $writer->record('user.bureau_transferred', $user, [
+                    'before' => ['office_id' => $before['office_id'], 'office_name' => $before['office_name']],
+                    'after' => ['office_id' => $user->office_id, 'office_name' => $office?->name],
+                ]);
+            }
+        }
 
         return redirect()->route('user-accounts.index')->with('success', 'User account updated.');
     }

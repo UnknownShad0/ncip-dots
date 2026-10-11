@@ -49,6 +49,8 @@ The command prints the resolved source and target names. `--target` must exactly
 
 - The default is preview only. Planned directory identities are passed to the document and audit previews in memory, so all stages can be previewed before the first directory import. No temporary inserts are performed in the target during preview.
 - Apply uses one outer target transaction. If documents or audit fail, all directory/document/audit writes from that run roll back. Pre-existing records remain intact. Underlying importer transactions become nested savepoints.
+- Apply also records `import.started` before the transaction and `import.completed` with aggregate counts/exceptions on success. If a stage fails, its imported data rolls back and an `import.failed` entry records the stage and safe error summary. Read-only previews do not create audit rows.
+- New native audit events snapshot the acting user's display name and bureau ID/name at the time of the action. Imported history keeps no inferred bureau snapshot; when filtering, legacy entries without a snapshot are matched using the actor's current bureau assignment and explicitly labeled as such.
 - Aggregate reports are saved under `storage/app/private/legacy-import-reports/all-*.json`. Passwords, historical SQL and raw payloads are not included in this combined report.
 - Reruns skip existing legacy identities; they do not reset later local edits. Existing exception payloads may be refreshed without creating duplicate exceptions.
 - Attachment import remains metadata-only. Physical legacy files are still required before downloads can be enabled.

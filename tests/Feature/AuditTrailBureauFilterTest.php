@@ -6,6 +6,7 @@ use App\Models\AuditTrail;
 use App\Models\Office;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -19,15 +20,15 @@ class AuditTrailBureauFilterTest extends TestCase
         $b = Office::create(['name' => 'Bureau B']);
         $actor = User::factory()->create(['office_id' => $a->id]);
         $other = User::factory()->create(['office_id' => $b->id]);
-        AuditTrail::create(['user_id' => $actor->id, 'action' => 'A action']);
-        AuditTrail::create(['user_id' => $other->id, 'action' => 'B action']);
+        AuditTrail::create(['user_id' => $actor->id, 'actor_office_id' => $a->id, 'actor_office_name' => $a->name, 'action' => 'A action']);
+        AuditTrail::create(['user_id' => $other->id, 'actor_office_id' => $b->id, 'actor_office_name' => $b->name, 'action' => 'B action']);
         AuditTrail::create(['action' => 'Unknown actor']);
         foreach ([1, 2] as $role) {
             $viewer = User::factory()->create(['role_id' => $role]);
             $this->actingAs($viewer)->get('/audit-trail?office_id='.$a->id)->assertInertia(fn (Assert $page) => $page
                 ->where('canFilterBureaus', true)->has('bureaus', 2)
                 ->where('filters.office_id', $a->id)->has('trail', 1)
-                ->where('trail.0.action', 'A action')->where('trail.0.user.office.name', 'Bureau A'));
+                ->where('trail.0.action', 'A action')->where('trail.0.actor_office_name', 'Bureau A'));
             $this->get('/audit-trail')->assertInertia(fn (Assert $page) => $page->has('trail', 3)->where('filters.office_id', null));
         }
     }
@@ -49,9 +50,9 @@ class AuditTrailBureauFilterTest extends TestCase
         $colleague = User::factory()->create(['office_id' => $own->id]);
         $outsider = User::factory()->create(['office_id' => $other->id]);
         for ($i = 0; $i < 51; $i++) {
-            AuditTrail::create(['user_id' => $colleague->id, 'action' => 'Own bureau action']);
+            AuditTrail::create(['user_id' => $colleague->id, 'actor_office_id' => $own->id, 'actor_office_name' => $own->name, 'action' => 'Own bureau action']);
         }
-        AuditTrail::create(['user_id' => $outsider->id, 'action' => 'Other bureau secret']);
+        AuditTrail::create(['user_id' => $outsider->id, 'actor_office_id' => $other->id, 'actor_office_name' => $other->name, 'action' => 'Other bureau secret']);
         AuditTrail::create(['action' => 'Unknown actor']);
         foreach ([3, null] as $roleId) {
             $staff = User::factory()->create(['role_id' => $roleId, 'role' => 'Admin_Staff', 'office_id' => $own->id]);
@@ -84,13 +85,13 @@ class AuditTrailBureauFilterTest extends TestCase
         }
     }
 
-    public function test_pagination_keeps_filter_and_uses_current_assignment(): void
+    public function test_pagination_keeps_filter_and_uses_recorded_bureau_snapshot(): void
     {
         $office = Office::create(['name' => 'Bureau A']);
         $other = Office::create(['name' => 'Bureau B']);
         $actor = User::factory()->create(['office_id' => $office->id]);
         for ($i = 0; $i < 51; $i++) {
-            AuditTrail::create(['user_id' => $actor->id, 'action' => 'Recorded action']);
+            AuditTrail::create(['user_id' => $actor->id, 'actor_office_id' => $office->id, 'actor_office_name' => $office->name, 'action' => 'Recorded action']);
         }
         $viewer = User::factory()->create(['role_id' => 1]);
         $this->actingAs($viewer)->get('/audit-trail?office_id='.$office->id)->assertInertia(fn (Assert $page) => $page
@@ -98,6 +99,43 @@ class AuditTrailBureauFilterTest extends TestCase
             ->where('pagination.next_page_url', fn ($url) => str_contains($url, 'office_id='.$office->id) && str_contains($url, 'page=2')));
         $this->get('/audit-trail?office_id='.$office->id.'&page=2')->assertInertia(fn (Assert $page) => $page->has('trail', 1));
         $actor->update(['office_id' => $other->id]);
-        $this->get('/audit-trail?office_id='.$office->id)->assertInertia(fn (Assert $page) => $page->has('trail', 0));
+        $this->get('/audit-trail?office_id='.$office->id)->assertInertia(fn (Assert $page) => $page->has('trail', 50)->where('trail.0.actor_office_name', 'Bureau A'));
+        $this->get('/audit-trail?office_id='.$other->id)->assertInertia(fn (Assert $page) => $page->has('trail', 0));
+    }
+
+    public function test_legacy_imports_without_bureau_snapshot_use_current_actor_assignment_for_filtering(): void
+    {
+        $office = Office::create(['name' => 'Current Bureau']);
+        $other = Office::create(['name' => 'Other Bureau']);
+        $actor = User::factory()->create(['office_id' => $office->id]);
+        $otherActor = User::factory()->create(['office_id' => $other->id]);
+        DB::table('audit_trails')->insert([
+            'user_id' => $actor->id,
+            'action' => 'Legacy activity',
+            'record_source' => 'legacy_import',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('audit_trails')->insert([
+            'user_id' => $otherActor->id,
+            'action' => 'Other legacy activity',
+            'record_source' => 'legacy_import',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $viewer = User::factory()->create(['role_id' => 1]);
+
+        $this->actingAs($viewer)->get('/audit-trail?office_id='.$office->id)->assertInertia(fn (Assert $page) => $page
+            ->has('trail', 1)
+            ->where('trail.0.action', 'Legacy activity')
+            ->where('trail.0.record_source', 'legacy_import')
+            ->where('trail.0.actor_office_id', null)
+            ->where('trail.0.bureau_filter_uses_current_assignment', true));
+
+        $actor->update(['office_id' => $other->id]);
+        $this->get('/audit-trail?office_id='.$office->id)->assertInertia(fn (Assert $page) => $page
+            ->has('trail', 0));
+        $this->get('/audit-trail?office_id='.$other->id)->assertInertia(fn (Assert $page) => $page
+            ->has('trail', 2));
     }
 }

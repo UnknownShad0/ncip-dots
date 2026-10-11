@@ -20,6 +20,9 @@ class UserAccountCreationTest extends TestCase
         DB::purge('legacy');
         (require database_path('migrations/0001_01_01_000000_create_users_table.php'))->up();
         (require database_path('migrations/2026_09_23_000001_create_offices_table.php'))->up();
+        (require database_path('migrations/2026_09_23_000009_create_audit_trails_table.php'))->up();
+        (require database_path('migrations/2026_10_11_000001_prepare_legacy_audit_import.php'))->up();
+        (require database_path('migrations/2026_10_11_000002_add_native_audit_snapshots.php'))->up();
         (require database_path('migrations/2026_10_06_000001_add_hris_fields_to_users_table.php'))->up();
         Schema::connection('legacy')->create('bureau', function ($table) {
             $table->integer('bureauId')->primary();

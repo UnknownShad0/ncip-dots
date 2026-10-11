@@ -100,7 +100,7 @@ class LegacyAuditImportTest extends TestCase
             ->where('pagination.total', 53)->where('pagination.current_page', 2)
             ->where('trail.1.user.short_name', 'A. Molina')
             ->where('trail.1.action', 'Updated office')
-            ->missing('trail.1.legacy_payload')->missing('trail.1.details'));
+            ->missing('trail.1.legacy_payload')->where('trail.1.details', null));
     }
 
     public function test_rollback_refuses_to_erase_imported_history(): void

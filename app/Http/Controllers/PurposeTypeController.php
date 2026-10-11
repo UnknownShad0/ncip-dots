@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\PurposeType;
+use App\Services\AuditTrailWriter;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -37,12 +38,13 @@ class PurposeTypeController extends Controller
             'is_active' => ['nullable', 'boolean'],
         ]);
 
-        PurposeType::create([
+        $purposeType = PurposeType::create([
             'name' => $validated['name'],
             'description' => $validated['description'] ?? null,
             'is_active' => $validated['is_active'] ?? true,
             'created_by' => auth()->id(),
         ]);
+        app(AuditTrailWriter::class)->record('library.purpose_created', $purposeType, $purposeType->only(['name', 'description', 'is_active']));
 
         return redirect()->route('purpose-types.index')->with('success', 'Purpose type added.');
     }
@@ -56,12 +58,17 @@ class PurposeTypeController extends Controller
         ]);
 
         $purposeType = PurposeType::findOrFail($id);
+        $before = $purposeType->only(['name', 'description', 'is_active']);
 
         $purposeType->update([
             'name' => $validated['name'],
             'description' => $validated['description'] ?? null,
             'is_active' => $validated['is_active'],
             'updated_by' => auth()->id(),
+        ]);
+        app(AuditTrailWriter::class)->record('library.purpose_updated', $purposeType, [
+            'before' => $before,
+            'after' => $purposeType->only(array_keys($before)),
         ]);
 
         return redirect()->route('purpose-types.index')->with('success', 'Purpose type updated.');

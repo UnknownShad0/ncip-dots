@@ -26,6 +26,8 @@ The importer reads the live `legacy` connection (`legacy_dots.audit_trail`) and 
 
 Imported rows use `record_source=legacy_import`; pre-existing/native entries use `native`. No document/model ID, IP address, user agent, or action is inferred from stored SQL. Existing target rows are never overwritten, and imported IDs are skipped on reruns. This is a migration, not ongoing synchronization.
 
+Imported entries do not receive a bureau snapshot because the source audit row has no bureau-at-action field. Native bureau filtering uses the saved snapshot. For imported rows with no snapshot, a bureau filter uses the mapped actor's current bureau assignment as a retrieval fallback and labels the row accordingly; it does not write or imply a historical bureau. Successful and failed writes made through the import commands themselves are recorded as native `import.*` events with aggregate counts, source/target names, and safe error summaries. Preview commands remain read-only.
+
 Both MySQL sessions temporarily use UTC to avoid shifting TIMESTAMP values; their previous timezones are restored afterward. A missing/zero timestamp becomes null with its original value preserved in the payload. Malformed timestamps stop the import. Nonblank unknown user identities stop the entire import so directory mappings can be corrected first. Blank actors remain unknown rather than being falsely attributed to a system account.
 
 Raw `legacy_payload` is hidden on the model and excluded from the audit-page query. The page exposes action/module, user display name, date and record source, not historical SQL. Imported entries without a user/date have explicit fallback labels. Pagination displays 50 records per page, ordered by timestamp then ID, so older imports remain accessible.
@@ -48,10 +50,10 @@ mysqldump -u root -p --single-transaction --no-tablespaces new_dots \
   > storage/app/private/legacy-import-backups/new_dots_before_audit.sql
 ```
 
-3. Apply the new schema migration before opening the updated Audit Trail page:
+3. Apply all pending schema migrations before opening the updated Audit Trail page:
 
 ```bash
-php artisan migrate --path=database/migrations/2026_10_11_000001_prepare_legacy_audit_import.php
+php artisan migrate
 ```
 
 4. Preview — no database records are written:

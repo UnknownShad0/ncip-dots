@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Services\AuditTrailWriter;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,13 +30,22 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $user = $request->user();
+        $before = $user->only(['name', 'email']);
+        $user->fill($request->validated());
 
         if ($request->user()->isDirty('email')) {
             $request->user()->email_verified_at = null;
         }
 
-        $request->user()->save();
+        $user->save();
+        $after = $user->only(['name', 'email']);
+        if ($before !== $after) {
+            app(AuditTrailWriter::class)->record('user.profile_updated', $user, [
+                'before' => $before,
+                'after' => $after,
+            ]);
+        }
 
         return Redirect::route('profile.edit');
     }
@@ -50,6 +60,9 @@ class ProfileController extends Controller
         ]);
 
         $user = $request->user();
+        app(AuditTrailWriter::class)->record('user.deleted', $user, [
+            'name' => $user->name,
+        ]);
 
         Auth::logout();
 

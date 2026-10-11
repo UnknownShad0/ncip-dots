@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\DocumentType;
+use App\Services\AuditTrailWriter;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -39,13 +40,14 @@ class DocumentTypeController extends Controller
             'is_active' => ['nullable', 'boolean'],
         ]);
 
-        DocumentType::create([
+        $documentType = DocumentType::create([
             'name' => $validated['name'],
             'code' => $validated['code'] ?? null,
             'description' => $validated['description'] ?? null,
             'is_active' => $validated['is_active'] ?? true,
             'created_by' => auth()->id(),
         ]);
+        app(AuditTrailWriter::class)->record('library.document_type_created', $documentType, $documentType->only(['name', 'code', 'description', 'is_active']));
 
         return redirect()->route('document-types.index')->with('success', 'Document type added.');
     }
@@ -60,6 +62,7 @@ class DocumentTypeController extends Controller
         ]);
 
         $documentType = DocumentType::findOrFail($id);
+        $before = $documentType->only(['name', 'code', 'description', 'is_active']);
 
         $documentType->update([
             'name' => $validated['name'],
@@ -67,6 +70,10 @@ class DocumentTypeController extends Controller
             'description' => $validated['description'] ?? null,
             'is_active' => $validated['is_active'],
             'created_by' => auth()->id(),
+        ]);
+        app(AuditTrailWriter::class)->record('library.document_type_updated', $documentType, [
+            'before' => $before,
+            'after' => $documentType->only(array_keys($before)),
         ]);
 
         return redirect()->route('document-types.index')->with('success', 'Document type updated.');
