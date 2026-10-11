@@ -22,7 +22,7 @@ function CountBars({ rows }: { rows: { name: string; count: number; color: strin
 export default function DashboardCharts({ stats, documentTypes, officeFiltered = false }: { officeFiltered?: boolean; stats: DocumentStats; documentTypes: { name: string; count: number }[] }) {
     const [showAll, setShowAll] = useState(false);
     const counts = [
-        { name: 'Incoming', count: stats.incoming_documents ?? 0, color: 'bg-warning' },
+        { name: 'Incoming', count: stats.incoming_documents ?? 0, color: 'bg-blue-600' },
         { name: 'Pending release', count: stats.pending_documents ?? 0, color: 'bg-warning' },
         { name: 'Released', count: stats.released_documents ?? 0, color: 'bg-success' },
         { name: 'Archived', count: stats.archived_documents ?? 0, color: 'bg-violet-500' },

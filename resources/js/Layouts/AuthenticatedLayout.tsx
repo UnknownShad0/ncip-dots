@@ -14,7 +14,7 @@ const groups = [
         { name: 'Generate Document', href: 'document-creation.index', icon: FileText },
         { name: 'Approved Documents', href: 'approved-documents.index', icon: FileClock },
     ] },
-    { label: '', items: [{ name: 'Connected systems', href: 'connected-systems.index', icon: Database }] },
+    { label: 'External API', items: [{ name: 'Connected systems', href: 'connected-systems.index', icon: Database }] },
     { label: 'Archives', items: [
         { name: 'Archived documents', href: 'archives.index', icon: Archive },
     ] },

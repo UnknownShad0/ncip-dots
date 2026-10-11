@@ -127,7 +127,7 @@ export default function Dashboard({
     };
 
     const cards = [
-        { label: 'Incoming', value: stats.incoming_documents, detail: 'Documents awaiting receipt in your access scope.', icon: Files, statusClass: 'bg-warning-soft text-warning', iconClass: 'text-warning', borderColor: 'rgb(var(--color-warning))' },
+        { label: 'Incoming', value: stats.incoming_documents, detail: 'Documents awaiting receipt in your access scope.', icon: Files, statusClass: 'bg-blue-50 text-blue-600', iconClass: 'text-blue-600', borderColor: 'rgb(37 99 235)' },
         { label: 'Pending release', value: stats.pending_documents, detail: 'Documents with a pending latest transaction in your access scope.', icon: FileClock, statusClass: 'bg-warning-soft text-warning', iconClass: 'text-warning', borderColor: 'rgb(var(--color-warning))' },
         { label: 'Released', value: stats.released_documents, detail: 'Unique documents with a release transaction in your access scope; not a count of release events.', icon: Send, statusClass: 'bg-success-soft text-success', iconClass: 'text-success', borderColor: 'rgb(var(--color-success))' },
         { label: 'Archived', value: stats.archived_documents, detail: 'Archived documents you have access to.', icon: Archive, statusClass: 'bg-violet-100 text-violet-700', iconClass: 'text-violet-700', borderColor: 'rgb(124 58 237)' },
@@ -188,7 +188,7 @@ export default function Dashboard({
                             <div className="max-h-[420px] divide-y divide-border overflow-y-auto" role="region" aria-label="Incoming documents" tabIndex={0}>
                                 {visibleIncoming.length === 0 ? <p className="py-10 text-center text-sm text-muted">{incomingQuery ? 'No incoming documents match your search.' : 'No documents are waiting to be received.'}</p> : visibleIncoming.map((document) => <div key={document.id} className="flex items-start justify-between gap-3 py-4">
                                     <div className="min-w-0"><p className="break-words font-semibold">{document.title || 'Untitled document'}</p><p className="mt-1 break-all font-mono text-xs text-muted">{document.tracking_number}</p><p className="mt-1 text-xs text-muted">{document.from_office ? `From ${document.from_office}` : 'Sending office unavailable'}</p></div>
-                                    <button type="button" onClick={() => confirmReceive(document)} disabled={!canReceiveDocuments || receivingId !== null} className="dots-button-secondary shrink-0 px-3 text-primary">{receivingId === document.id ? 'Receiving…' : 'Receive'}</button>
+                                    <button type="button" onClick={() => confirmReceive(document)} disabled={!canReceiveDocuments || receivingId !== null} className="dots-button-secondary shrink-0 border-primary px-3 text-primary">{receivingId === document.id ? 'Receiving…' : 'Receive'}</button>
                                 </div>)}
                             </div>
                         </div>

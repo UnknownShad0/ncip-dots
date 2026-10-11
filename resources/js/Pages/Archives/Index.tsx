@@ -86,7 +86,7 @@ export default function ArchivesIndex({ documents, canFilterOffices = false, off
                                             {document.tracking_number} · {document.office?.name ?? 'Unassigned'}
                                         </p>
                                     </div>
-                                    <span className="text-xs font-semibold uppercase tracking-wide text-muted">Archived</span>
+                                    <span className="rounded-md bg-violet-100 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-violet-700">Archived</span>
                                 </article>
                             ))
                         )}
