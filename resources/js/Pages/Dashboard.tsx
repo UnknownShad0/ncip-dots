@@ -1,9 +1,10 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import CrudAlertModal from '@/Components/CrudAlertModal';
+import CrudAlertModal from '@/Components/WorkspaceAlert';
+import InfoTip from '@/Components/InfoTip';
 import DashboardCharts from '@/Components/DashboardCharts';
 import ProcessingPerformanceChart, { ProcessingPerformanceRow } from '@/Components/ProcessingPerformanceChart';
-import { Head, router } from '@inertiajs/react';
-import { Archive, ArrowDownToLine, FileClock, Files, Search, Send } from 'lucide-react';
+import { Head, Link, router } from '@inertiajs/react';
+import { Archive, ArrowDownToLine, FileClock, Files, Search, Send, ArrowUpRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 type DashboardStats = {
@@ -42,15 +43,9 @@ const formatNumber = (value?: number | string) => {
     return Number.isFinite(number) ? number.toLocaleString() : '0';
 };
 
-const relativeTime = (date: string | undefined, index: number) => {
-    if (date) {
-        const minutes = Math.max(1, Math.floor((Date.now() - new Date(date).getTime()) / 60000));
-        if (minutes < 60) return `${minutes} min ago`;
-        const hours = Math.floor(minutes / 60);
-        if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
-        return `${Math.floor(hours / 24)} days ago`;
-    }
-    return ['10 min ago', '1 hour ago', '3 hours ago'][index] ?? 'Recently';
+const displayDate = (date?: string) => {
+    if (!date || !Number.isFinite(new Date(date).getTime())) return 'Date unavailable';
+    return new Intl.DateTimeFormat('en', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Manila' }).format(new Date(date));
 };
 
 export default function Dashboard({
@@ -132,67 +127,92 @@ export default function Dashboard({
     };
 
     const cards = [
-        {
-            label: 'Incoming Documents',
-            value: formatNumber(stats.incoming_documents),
-            detail: 'Available documents addressed to your office',
-            icon: Files,
-            tone: 'border-blue-200 bg-blue-50 text-blue-800',
-            iconTone: 'bg-blue-100 text-blue-700',
-        },
-        {
-            label: 'Pending for Release Documents',
-            value: formatNumber(stats.pending_documents),
-            detail: 'Waiting to be released',
-            icon: FileClock,
-            tone: 'border-amber-200 bg-amber-50 text-amber-900',
-            iconTone: 'bg-amber-100 text-amber-700',
-        },
-        {
-            label: 'Released Documents',
-            value: formatNumber(stats.released_documents),
-            detail: 'Unique documents released by your office',
-            icon: Send,
-            tone: 'border-emerald-200 bg-emerald-50 text-emerald-900',
-            iconTone: 'bg-emerald-100 text-emerald-700',
-        },
-        {
-            label: 'Archived Documents',
-            value: formatNumber(stats.archived_documents),
-            detail: 'Moved to the archives',
-            icon: Archive,
-            tone: 'border-violet-200 bg-violet-50 text-violet-900',
-            iconTone: 'bg-violet-100 text-violet-700',
-        },
+        { label: 'Incoming', value: stats.incoming_documents, detail: 'Documents awaiting receipt in your access scope.', icon: Files, statusClass: 'bg-warning-soft text-warning', iconClass: 'text-warning', borderColor: 'rgb(var(--color-warning))' },
+        { label: 'Pending release', value: stats.pending_documents, detail: 'Documents with a pending latest transaction in your access scope.', icon: FileClock, statusClass: 'bg-warning-soft text-warning', iconClass: 'text-warning', borderColor: 'rgb(var(--color-warning))' },
+        { label: 'Released', value: stats.released_documents, detail: 'Unique documents with a release transaction in your access scope; not a count of release events.', icon: Send, statusClass: 'bg-success-soft text-success', iconClass: 'text-success', borderColor: 'rgb(var(--color-success))' },
+        { label: 'Archived', value: stats.archived_documents, detail: 'Archived documents you have access to.', icon: Archive, statusClass: 'bg-violet-100 text-violet-700', iconClass: 'text-violet-700', borderColor: 'rgb(124 58 237)' },
     ];
+    const taskRows: [string, number | undefined, string][] = [
+        ['Awaiting my approval', stats.awaiting_my_approval, 'approval'],
+        ['My pending submissions', stats.my_submissions_awaiting_approval, 'submitted'],
+        ['Returned for revision', stats.returned_for_revision, 'revision'],
+        ['Awaiting verification', stats.awaiting_verification, 'verification'],
+    ];
+    const tasks = taskRows.filter(([, count]) => Number(count ?? 0) > 0);
+    const chartScope = selectedChartOfficeId !== null
+        ? chartOffices.find((office) => office.id === selectedChartOfficeId)?.name ?? 'Selected office'
+        : canFilterCharts ? 'All offices' : 'Your office';
 
     return (
-        <AuthenticatedLayout header={
-            <div className="flex w-full items-center justify-between gap-4">
-                <h1 className="text-3xl font-bold tracking-tight sm:text-[42px]">Dashboard</h1>
-            </div>
-        }>
+        <AuthenticatedLayout header={<h1 className="text-2xl font-semibold tracking-tight text-foreground">Dashboard</h1>}>
             <Head title="Dashboard" />
-            {crudAlert && <CrudAlertModal {...crudAlert} onClose={() => setCrudAlert(null)} />}
-            <div className="mx-auto max-w-[1280px]">
-                <section aria-label="Document summary" className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    {cards.map(({ label, value, detail, icon: Icon, tone, iconTone }) => (
-                        <article key={label} className={`flex min-h-[190px] flex-col rounded-2xl border px-5 py-5 shadow-sm sm:px-6 ${tone}`}>
-                            <div className="flex items-start justify-between gap-3">
-                                <h2 className="max-w-[190px] text-[16px] font-semibold leading-5 text-slate-800">{label}</h2>
-                                <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconTone}`}>
-                                    <Icon size={22} strokeWidth={2} aria-hidden="true" />
-                                </span>
-                            </div>
-                            <p className="mt-auto pt-4 text-[36px] font-bold leading-none tracking-tight text-slate-900">{value}</p>
-                            <p className="mt-2 text-[13px] leading-5 text-slate-600">{detail}</p>
-                        </article>
-                    ))}
-                </section>
+            <div className="mx-auto max-w-[1440px] space-y-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-muted">Your document workspace</p>
+                    <Link href={route('documents.index')} className="dots-button-secondary">Open documents <ArrowUpRight size={16} /></Link>
+                </div>
+<section aria-label="Document summary" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    {cards.map(({ label, value, detail, icon: Icon, statusClass, iconClass, borderColor }) => (
+        <article
+            key={label}
+            style={{ borderTopColor: borderColor }}
+            className="rounded-xl border border-t-4 border-border bg-surface p-4 shadow-sm sm:p-5"
+        >
+            <div className="flex items-center justify-between gap-1">
+                <h2 className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}>{label}</h2>
+                <InfoTip label={`About ${label.toLowerCase()}`}>{detail} These totals are independent of the analytics office filter.</InfoTip>
+            </div>
+            <div className="mt-3 flex items-end justify-between">
+                <p className="text-3xl font-semibold tabular-nums tracking-tight">{formatNumber(value)}</p>
+                <Icon size={19} className={`mb-1 ${iconClass}`} aria-hidden="true" />
+            </div>
+        </article>
+    ))}
+</section>
 
-                {canFilterCharts && <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-                    <div><label htmlFor="chart-office" className="mb-1 block text-sm font-medium text-slate-700">Filter graphs by office</label>
-                        <select id="chart-office" disabled={chartLoading} value={selectedChartOfficeId ?? ''} onChange={(event) => {
+                <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+                    <section aria-labelledby="receive-document-title" className="min-w-0 rounded-xl border border-border bg-surface">
+                        <div className="border-b border-border p-5">
+                            <div className="mb-4 flex items-center gap-2"><ArrowDownToLine size={19} className="text-primary" /><h2 id="receive-document-title" className="text-lg font-semibold">Receive a document</h2><InfoTip label="How receiving works">Enter an incoming tracking number or choose Receive from the list. You will confirm before receipt is recorded. Only documents addressed to your office can be received here.</InfoTip></div>
+                            {!canReceiveDocuments && <p className="mb-4 rounded-lg bg-background p-3 text-sm text-muted">View only. Your role or office assignment does not allow receiving documents.</p>}
+                            <form onSubmit={(event) => { event.preventDefault(); receiveByTrackingNumber(); }} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                                <div className="min-w-0 flex-1"><label htmlFor="receive-tracking-number" className="mb-1 block text-sm font-medium">Tracking number</label><input id="receive-tracking-number" disabled={!canReceiveDocuments || receivingId !== null} value={trackingNumber} onChange={(event) => { setTrackingNumber(event.target.value); setReceiveError(''); }} placeholder="Enter tracking number" className="h-11 w-full rounded-lg border-border bg-surface text-base disabled:opacity-50" /></div>
+                                <button type="submit" disabled={!canReceiveDocuments || !trackingNumber.trim() || receivingId !== null} className="dots-button-primary min-h-11">Review receipt <ArrowUpRight size={16} /></button>
+                            </form>
+                            {receiveError && <p role="alert" className="mt-3 rounded-lg bg-danger-soft p-3 text-sm text-danger">{receiveError}</p>}
+                        </div>
+                        <div className="p-5">
+                            <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold">Incoming to your office <span className="ml-1 rounded-md bg-secondary px-2 py-0.5 text-xs font-medium text-primary">{incomingDocuments.length}</span></h3>
+                                <label className="relative w-full sm:w-60"><span className="sr-only">Search incoming documents</span><Search size={16} className="pointer-events-none absolute left-3 top-3 text-muted" /><input value={incomingQuery} onChange={(event) => setIncomingQuery(event.target.value)} placeholder="Search incoming" className="h-10 w-full rounded-lg border-border pl-9 text-sm" /></label>
+                            </div>
+                            <div className="max-h-[420px] divide-y divide-border overflow-y-auto" role="region" aria-label="Incoming documents" tabIndex={0}>
+                                {visibleIncoming.length === 0 ? <p className="py-10 text-center text-sm text-muted">{incomingQuery ? 'No incoming documents match your search.' : 'No documents are waiting to be received.'}</p> : visibleIncoming.map((document) => <div key={document.id} className="flex items-start justify-between gap-3 py-4">
+                                    <div className="min-w-0"><p className="break-words font-semibold">{document.title || 'Untitled document'}</p><p className="mt-1 break-all font-mono text-xs text-muted">{document.tracking_number}</p><p className="mt-1 text-xs text-muted">{document.from_office ? `From ${document.from_office}` : 'Sending office unavailable'}</p></div>
+                                    <button type="button" onClick={() => confirmReceive(document)} disabled={!canReceiveDocuments || receivingId !== null} className="dots-button-secondary shrink-0 px-3 text-primary">{receivingId === document.id ? 'Receiving…' : 'Receive'}</button>
+                                </div>)}
+                            </div>
+                        </div>
+                    </section>
+                    <div className="min-w-0 space-y-6">
+                        <section aria-labelledby="creation-tasks-title" className="rounded-xl border border-border bg-surface p-5">
+                            <div className="mb-3 flex items-center justify-between gap-2"><h2 id="creation-tasks-title" className="text-lg font-semibold">Approval tasks</h2><InfoTip label="About approval tasks">Your document creation approval, submission, revision, and verification queues. Select a queue to open its documents.</InfoTip></div>
+                            {tasks.length ? <div className="divide-y divide-border">{tasks.map(([label, count, queue]) => <Link key={queue} href={`${route('document-creation.index')}?queue=${queue}`} className="flex items-center justify-between gap-3 rounded-md py-3 text-sm hover:text-primary"><span>{label}</span><span className="rounded-md bg-warning-soft px-2 py-1 font-semibold tabular-nums text-warning">{formatNumber(count)}</span></Link>)}</div> : <p className="py-3 text-sm text-muted">No approval tasks need attention.</p>}
+                            <Link href={route('document-creation.index')} className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-primary">Open document creation <ArrowUpRight size={15} /></Link>
+                        </section>
+                        <section aria-labelledby="recent-documents-title" className="rounded-xl border border-border bg-surface p-5">
+                            <div className="mb-3 flex items-center justify-between"><h2 id="recent-documents-title" className="text-lg font-semibold">Recent documents</h2><InfoTip label="About recent documents">The latest {recentDocuments.length} accessible documents, ordered by creation date. Dates use Manila time.</InfoTip></div>
+                            <label className="sr-only" htmlFor="recent-document-search">Search recent documents</label><input id="recent-document-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search recent documents" className="mb-2 h-10 w-full rounded-lg border-border text-sm" />
+                            {documents.length === 0 ? <p className="py-6 text-sm text-muted">{query ? 'No documents match your search.' : 'No recent documents available.'}</p> : <ul className="divide-y divide-border">{documents.map((document, index) => <li key={document.id ?? index} className="py-3">
+                                <p className="break-words text-sm font-semibold">{document.title || document.tracking_number || 'Untitled document'}</p><p className="mt-1 break-words text-xs text-muted">{[document.tracking_number, document.office?.short_name || document.office?.name, document.status].filter(Boolean).join(' · ')}</p><time dateTime={document.created_at} className="mt-1 block text-xs text-muted">{displayDate(document.created_at)}</time>
+                            </li>)}</ul>}
+                        </section>
+                    </div>
+                </div>
+
+                <section aria-labelledby="analytics-title" className="space-y-4 border-t border-border pt-6" aria-busy={chartLoading}>
+                    <div className="flex flex-wrap items-end justify-between gap-4">
+                        <div><div className="flex items-center gap-2"><h2 id="analytics-title" className="text-xl font-semibold">Document insights</h2><InfoTip label="About analytics scope">The office filter applies only to the charts below. Your receiving list, summary totals, and approval tasks stay unchanged.</InfoTip></div><p role="status" className="mt-1 text-sm text-muted">{chartLoading ? 'Updating charts…' : chartScope}</p></div>
+                        {canFilterCharts && <div className="w-full sm:w-72"><label htmlFor="chart-office" className="mb-1 block text-sm font-medium">Chart office</label><select id="chart-office" disabled={chartLoading} value={selectedChartOfficeId ?? ''} onChange={(event) => {
                             setChartError('');
                             router.get(route('dashboard'), event.target.value ? { chart_office_id: event.target.value } : {}, {
                                 preserveState: true, preserveScroll: true, replace: true,
@@ -200,112 +220,14 @@ export default function Dashboard({
                                 onStart: () => setChartLoading(true), onFinish: () => setChartLoading(false),
                                 onError: () => setChartError('Could not apply this office filter. Please try again.'),
                             });
-                        }} className="max-w-full rounded-lg border-slate-300 text-sm disabled:opacity-50">
-                            <option value="">All offices</option>
-                            {chartOffices.map((office) => <option key={office.id} value={office.id}>{office.name}{office.range_name ? ` — ${office.range_name}` : ''}</option>)}
-                        </select>
+                        }} className="h-11 w-full rounded-lg border-border bg-surface text-sm"><option value="">All offices</option>{chartOffices.map((office) => <option key={office.id} value={office.id}>{office.name}{office.range_name ? ` — ${office.range_name}` : ''}</option>)}</select></div>}
                     </div>
-                    <p role="status" className="text-sm text-slate-600">{chartLoading ? 'Updating graphs…' : `Showing: ${chartOffices.find((office) => office.id === selectedChartOfficeId)?.name ?? 'All offices'}`}</p>
-                    {chartError && <p role="alert" className="w-full text-sm text-red-600">{chartError}</p>}
-                </div>}
-                <DashboardCharts stats={chartStats ?? stats} documentTypes={documentTypeCounts} officeFiltered={selectedChartOfficeId !== null} />
-
-                <ProcessingPerformanceChart data={processingPerformance} />
-
-                <section aria-labelledby="creation-tasks-title" className="mb-8 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 sm:p-6">
-                    <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-                        <div>
-                            <h2 id="creation-tasks-title" className="text-lg font-semibold text-slate-900">Document Creation tasks</h2>
-                            <p className="mt-1 text-sm text-slate-600">Items that need your attention in the approval workflow.</p>
-                        </div>
-                        <a href={route('document-creation.index')} className="text-sm font-medium text-indigo-700 hover:text-indigo-900">Open Document Creation</a>
-                    </div>
-                    {(() => {
-                        const taskRows: [string, number | undefined, string][] = [
-                            ['Awaiting my approval', stats.awaiting_my_approval, 'approval'],
-                            ['My submissions awaiting approval', stats.my_submissions_awaiting_approval, 'submitted'],
-                            ['Returned for revision', stats.returned_for_revision, 'revision'],
-                            ['Awaiting verification', stats.awaiting_verification, 'verification'],
-                        ];
-                        const tasks = taskRows.filter(([, count]) => Number(count ?? 0) > 0);
-
-                        return tasks.length > 0 ? (
-                            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                                {tasks.map(([label, count, queue]) => (
-                                    <a key={queue} href={`${route('document-creation.index')}?queue=${queue}`} className="flex min-h-24 items-center justify-between gap-4 rounded-xl border border-indigo-100 bg-white px-4 py-3 shadow-sm transition hover:border-indigo-300 hover:shadow">
-                                        <span className="text-sm font-medium leading-5 text-slate-700">{label}</span>
-                                        <span className="flex h-10 min-w-10 items-center justify-center rounded-full bg-indigo-100 px-3 text-lg font-semibold text-indigo-900">{formatNumber(count)}</span>
-                                    </a>
-                                ))}
-                            </div>
-                        ) : <p className="rounded-xl border border-dashed border-indigo-200 bg-white/70 px-4 py-5 text-sm text-slate-600">No document creation tasks need attention.</p>;
-                    })()}
-                </section>
-
-                <section aria-labelledby="receive-document-title" className="mb-8 rounded-[20px] border border-blue-200 bg-white p-5 shadow-sm sm:p-7">
-                    <div className="mb-5 flex items-start gap-3">
-                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700"><ArrowDownToLine size={22} /></span>
-                        <div>
-                            <h2 id="receive-document-title" className="text-xl font-semibold tracking-tight">Receive Document</h2>
-                            <p className="mt-1 text-sm text-[#73736e]">Receive documents addressed to your office. Allowed roles: Executive, Admin Staff, and Encoder.</p>
-                        </div>
-                    </div>
-
-                    <>
-                        {!canReceiveDocuments && <p className="mb-4 rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">View only. Your role or office assignment does not allow receiving documents.</p>}
-                        <form onSubmit={(event) => { event.preventDefault(); receiveByTrackingNumber(); }} className="mb-5 flex flex-col gap-2 sm:flex-row">
-                            <label className="sr-only" htmlFor="receive-tracking-number">Tracking number</label>
-                            <input id="receive-tracking-number" disabled={!canReceiveDocuments} value={trackingNumber} onChange={(event) => { setTrackingNumber(event.target.value); setReceiveError(''); }} placeholder="Enter tracking number" className="min-w-0 flex-1 rounded-xl border-slate-300 text-sm" />
-                            <button type="submit" disabled={!canReceiveDocuments || !trackingNumber.trim() || receivingId !== null} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
-                                <ArrowDownToLine size={17} /> Receive
-                            </button>
-                        </form>
-                        {receiveError && <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{receiveError}</p>}
-                        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <h3 className="font-semibold text-slate-800">Incoming to your office <span className="ml-1 text-sm font-normal text-[#898984]">({incomingDocuments.length})</span></h3>
-                            <label className="relative block w-full sm:max-w-xs">
-                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#898984]" />
-                                <input value={incomingQuery} onChange={(event) => setIncomingQuery(event.target.value)} placeholder="Search incoming documents" className="w-full rounded-lg border-slate-300 py-2 pl-9 text-sm" />
-                            </label>
-                        </div>
-                        <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200">
-                            {visibleIncoming.length === 0 ? <p className="px-4 py-8 text-center text-sm text-[#898984]">{incomingQuery ? 'No incoming documents match your search.' : 'No documents are waiting to be received.'}</p> : visibleIncoming.map((document) => (
-                                <div key={document.id} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                                    <div className="min-w-0">
-                                        <p className="truncate font-medium text-slate-800">{document.title || 'Untitled document'}</p>
-                                        <p className="mt-0.5 truncate text-sm text-[#73736e]">{[document.tracking_number, document.from_office && `From ${document.from_office}`].filter(Boolean).join(' · ')}</p>
-                                    </div>
-                                    <button type="button" onClick={() => confirmReceive(document)} disabled={!canReceiveDocuments || receivingId !== null} className="shrink-0 rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50">
-                                        {receivingId === document.id ? 'Receiving…' : 'Receive'}
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    </>
-                </section>
-
-                <section className="rounded-[20px] border border-[#e2e2df] bg-white px-5 py-6 sm:px-8">
-                    <div className="mb-4 flex items-center justify-between gap-3">
-                        <h2 className="text-[21px] font-semibold tracking-tight">Recent activity</h2>
-                        <span className="text-sm text-[#898984]">Latest {recentDocuments.length}</span>
-                    </div>
-                    {documents.length === 0 ? (
-                        <p className="py-8 text-center text-sm text-[#898984]">{query ? 'No documents match your search.' : 'No recent documents available.'}</p>
-                    ) : (
-                        <ul>
-                            {documents.map((document, index) => (
-                                <li key={document.id ?? `${document.title ?? 'document'}-${index}`} className="flex flex-col gap-1 border-b border-[#e2e2df] py-3 last:border-0 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-                                    <div className="min-w-0">
-                                        <p className="truncate text-[16px] font-medium">{document.title || document.tracking_number || 'Document activity'}</p>
-                                        <p className="mt-0.5 text-sm text-[#898984]">{[document.tracking_number, document.office?.short_name || document.office?.name, document.status].filter(Boolean).join(' · ') || 'Document updated'}</p>
-                                    </div>
-                                    <time className="shrink-0 text-sm text-[#898984]">{relativeTime(document.created_at, index)}</time>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
+                    {chartError && <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{chartError}</p>}
+                    <DashboardCharts stats={chartStats ?? stats} documentTypes={documentTypeCounts} officeFiltered={selectedChartOfficeId !== null} />
+                    <ProcessingPerformanceChart data={processingPerformance} />
                 </section>
             </div>
+            {crudAlert && <CrudAlertModal {...crudAlert} onClose={() => setCrudAlert(null)} />}
         </AuthenticatedLayout>
     );
 }

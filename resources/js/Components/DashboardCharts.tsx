@@ -1,4 +1,6 @@
-import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
+import InfoTip from './InfoTip';
 
 type DocumentStats = {
     incoming_documents?: number;
@@ -7,63 +9,37 @@ type DocumentStats = {
     archived_documents?: number;
 };
 
-export default function DashboardCharts({ stats, documentTypes, officeFiltered = false }: { officeFiltered?: boolean; stats: DocumentStats; documentTypes: { name: string; count: number }[] }) {
-    const data = [
-        { name: 'Incoming', count: stats.incoming_documents ?? 0, color: '#3b82f6' },
-        { name: 'Pending for Release', count: stats.pending_documents ?? 0, color: '#d97706' },
-        { name: 'Released', count: stats.released_documents ?? 0, color: '#059669' },
-        { name: 'Archived', count: stats.archived_documents ?? 0, color: '#8b5cf6' },
-    ];
-    const hasDocuments = data.some((item) => item.count > 0);
+// Independent bars share a scale, rather than implying mutually exclusive parts of a total.
+function CountBars({ rows }: { rows: { name: string; count: number; color: string }[] }) {
+    const reduced = useReducedMotion();
+    const maximum = Math.max(1, ...rows.map((row) => row.count));
+    return <ul className="space-y-5">{rows.map((row) => <li key={row.name}>
+        <div className="mb-2 flex items-baseline justify-between gap-4 text-sm"><span className="min-w-0 break-words">{row.name}</span><span className="shrink-0 font-semibold tabular-nums">{row.count.toLocaleString()}</span></div>
+        <div aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-background"><motion.div initial={false} animate={{width: `${Math.max(0, row.count) / maximum * 100}%`}} transition={{duration: reduced ? 0 : .2}} className={`h-full rounded-full ${row.color}`} /></div>
+    </li>)}</ul>;
+}
 
-    return (
-        <div className="mb-8 grid gap-6 xl:grid-cols-2">
-        <section aria-labelledby="document-overview-title" className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <h2 id="document-overview-title" className="text-lg font-semibold text-slate-900">Document Overview</h2>
-            <p className="mt-1 text-sm text-slate-500">{officeFiltered ? 'Incoming, pending, released, and archived counts for the selected office.' : 'Current counts within your office scope; All offices shows the system-wide view.'}</p>
-            {hasDocuments ? <div className="mt-5 h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data} layout="vertical" margin={{ top: 8, right: 60, bottom: 4, left: 0 }} accessibilityLayer>
-                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-                        <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
-                        <YAxis type="category" dataKey="name" width={115} tick={{ fontSize: 12 }} interval={0} />
-                        <Tooltip cursor={{ fill: '#f1f5f9' }} />
-                        <Bar dataKey="count" name="Documents" radius={[0, 4, 4, 0]} maxBarSize={32}>
-                            {data.map((item) => <Cell key={item.name} fill={item.color} />)}
-                            <LabelList dataKey="count" position="right" className="fill-slate-700" fontSize={12} />
-                        </Bar>
-                    </BarChart>
-                </ResponsiveContainer>
-            </div> : <p className="flex h-72 items-center justify-center text-sm text-slate-500">No incoming, pending, released, or archived documents available.</p>}
-            <p className="mt-3 text-xs text-slate-500">Counts may overlap: a document can appear in more than one category.</p>
-            <details className="mt-3 text-sm text-slate-600">
-                <summary className="cursor-pointer">View document counts</summary>
-                <ul className="mt-2 space-y-1">{data.map((item) => <li key={item.name} className="flex justify-between gap-3"><span>{item.name}</span><span>{item.count.toLocaleString()}</span></li>)}</ul>
-            </details>
+export default function DashboardCharts({ stats, documentTypes, officeFiltered = false }: { officeFiltered?: boolean; stats: DocumentStats; documentTypes: { name: string; count: number }[] }) {
+    const [showAll, setShowAll] = useState(false);
+    const counts = [
+        { name: 'Incoming', count: stats.incoming_documents ?? 0, color: 'bg-warning' },
+        { name: 'Pending release', count: stats.pending_documents ?? 0, color: 'bg-warning' },
+        { name: 'Released', count: stats.released_documents ?? 0, color: 'bg-success' },
+        { name: 'Archived', count: stats.archived_documents ?? 0, color: 'bg-violet-500' },
+    ];
+    const rankedTypes = [...documentTypes].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    const visibleTypes = showAll ? rankedTypes : rankedTypes.slice(0, 5);
+    return <div className="grid gap-4 lg:grid-cols-2">
+        <section aria-labelledby="document-overview-title" className="min-w-0 rounded-xl border border-border bg-surface p-5 sm:p-6">
+            <div className="mb-1 flex items-center justify-between gap-3"><h3 id="document-overview-title" className="text-lg font-semibold">Workflow overview</h3><InfoTip label="How workflow counts are counted">Counts for {officeFiltered ? 'the selected office' : 'the current chart scope'}. A document can appear in more than one category, so the bars are independent counts, not portions of a total.</InfoTip></div>
+            <p className="mb-6 text-xs text-muted">Independent counts · categories may overlap</p>
+            {counts.some((item) => item.count > 0) ? <CountBars rows={counts} /> : <p className="flex min-h-48 items-center justify-center text-sm text-muted">No documents in this chart scope.</p>}
         </section>
-        <section aria-labelledby="document-types-title" className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <h2 id="document-types-title" className="text-lg font-semibold text-slate-900">Documents by Type</h2>
-            <p className="mt-1 text-sm text-slate-500">{officeFiltered ? 'All-time counts for documents accessible to the selected office, including imported records.' : 'All-time counts within the office scope, including imported records. Personal-only access is excluded.'}</p>
-            {documentTypes.length ? <div className="mt-5 h-72 overflow-y-auto">
-                <div style={{ height: Math.max(288, documentTypes.length * 44) }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={documentTypes} layout="vertical" margin={{ top: 8, right: 60, bottom: 4, left: 0 }} accessibilityLayer>
-                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-                            <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
-                            <YAxis type="category" dataKey="name" width={115} tick={{ fontSize: 11 }} interval={0} tickFormatter={(name: string) => name.length > 19 ? `${name.slice(0, 18)}…` : name} />
-                            <Tooltip cursor={{ fill: '#f1f5f9' }} />
-                            <Bar dataKey="count" name="Documents" fill="#6366f1" radius={[0, 4, 4, 0]} maxBarSize={24}>
-                                <LabelList dataKey="count" position="right" className="fill-slate-700" fontSize={12} />
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-            </div> : <p className="flex h-72 items-center justify-center text-sm text-slate-500">No documents available.</p>}
-            <details className="mt-3 text-sm text-slate-600">
-                <summary className="cursor-pointer">View document type counts</summary>
-                <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">{documentTypes.map((item) => <li key={item.name} className="flex justify-between gap-3"><span>{item.name}</span><span>{item.count.toLocaleString()}</span></li>)}</ul>
-            </details>
+        <section aria-labelledby="document-types-title" className="min-w-0 rounded-xl border border-border bg-surface p-5 sm:p-6">
+            <div className="mb-1 flex items-center justify-between gap-3"><h3 id="document-types-title" className="text-lg font-semibold">Documents by type</h3><InfoTip label="About document type counts">All-time document counts in {officeFiltered ? 'the selected office' : 'the current chart scope'}, including imported records. Personal-only access is excluded. Types are ranked from most to least documents.</InfoTip></div>
+            <p className="mb-6 text-xs text-muted">All time · {showAll ? 'All types' : 'Top 5 types'}</p>
+            {rankedTypes.some((item) => item.count > 0) ? <div id="document-type-bars" className="max-h-80 overflow-y-auto"><CountBars rows={visibleTypes.map((item) => ({...item, color: 'bg-primary'}))} /></div> : <p className="flex min-h-48 items-center justify-center text-sm text-muted">No document types in this chart scope.</p>}
+            {rankedTypes.length > 5 && <button type="button" aria-expanded={showAll} aria-controls="document-type-bars" onClick={() => setShowAll((value) => !value)} className="mt-5 text-sm font-semibold text-primary hover:underline">{showAll ? 'Show top 5' : `Show all ${rankedTypes.length} types`}</button>}
         </section>
-        </div>
-    );
+    </div>;
 }

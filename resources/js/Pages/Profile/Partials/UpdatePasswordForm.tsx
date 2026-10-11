@@ -2,9 +2,9 @@ import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
-import { Transition } from '@headlessui/react';
+import WorkspaceAlert from '@/Components/WorkspaceAlert';
 import { useForm } from '@inertiajs/react';
-import { FormEventHandler, useRef } from 'react';
+import { FormEventHandler, useRef, useState } from 'react';
 
 export default function UpdatePasswordForm({
     className = '',
@@ -13,6 +13,7 @@ export default function UpdatePasswordForm({
 }) {
     const passwordInput = useRef<HTMLInputElement>(null);
     const currentPasswordInput = useRef<HTMLInputElement>(null);
+    const [saved, setSaved] = useState(false);
 
     const {
         data,
@@ -21,7 +22,6 @@ export default function UpdatePasswordForm({
         put,
         reset,
         processing,
-        recentlySuccessful,
     } = useForm({
         current_password: '',
         password: '',
@@ -33,7 +33,10 @@ export default function UpdatePasswordForm({
 
         put(route('password.update'), {
             preserveScroll: true,
-            onSuccess: () => reset(),
+            onSuccess: () => {
+                reset();
+                setSaved(true);
+            },
             onError: (errors) => {
                 if (errors.password) {
                     reset('password', 'password_confirmation');
@@ -127,20 +130,9 @@ export default function UpdatePasswordForm({
 
                 <div className="flex items-center gap-4">
                     <PrimaryButton disabled={processing}>Save</PrimaryButton>
-
-                    <Transition
-                        show={recentlySuccessful}
-                        enter="transition ease-in-out"
-                        enterFrom="opacity-0"
-                        leave="transition ease-in-out"
-                        leaveTo="opacity-0"
-                    >
-                        <p className="text-sm text-gray-600">
-                            Saved.
-                        </p>
-                    </Transition>
                 </div>
             </form>
+            {saved && <WorkspaceAlert title="Password updated" message="Your password was changed successfully." onClose={() => setSaved(false)} />}
         </section>
     );
 }

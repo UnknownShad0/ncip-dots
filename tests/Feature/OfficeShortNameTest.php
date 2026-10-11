@@ -13,7 +13,11 @@ class OfficeShortNameTest extends TestCase
         parent::setUp();
         $this->withoutMiddleware();
 
+        // Office writes record audit events; include their schema in this isolated fixture.
         foreach ([
+            '0001_01_01_000000_create_users_table.php',
+            '2026_09_23_000009_create_audit_trails_table.php',
+            '2026_10_11_000002_add_native_audit_snapshots.php',
             '2026_09_23_000001_create_offices_table.php',
             '2026_10_07_000001_add_legacy_range_id_to_offices_table.php',
             '2026_10_06_000002_create_office_lists_table.php',
@@ -44,7 +48,11 @@ class OfficeShortNameTest extends TestCase
     {
         $office = Office::create(['name' => 'Test Office', 'code' => 'TEST', 'short_name' => 'OLD']);
 
-        foreach (['EDITED', null] as $shortName) {
+        // Office writes record audit events; include their schema in this isolated fixture.
+        foreach ([
+            '0001_01_01_000000_create_users_table.php',
+            '2026_09_23_000009_create_audit_trails_table.php',
+            '2026_10_11_000002_add_native_audit_snapshots.php','EDITED', null] as $shortName) {
             $this->put('/offices/'.$office->id, [
                 'operation' => 'update',
                 'division_code' => 'TEST',

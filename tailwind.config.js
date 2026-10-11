@@ -12,6 +12,11 @@ export default {
 
     theme: {
         extend: {
+            colors: Object.fromEntries([
+                'primary', 'primary-hover', 'primary-foreground', 'secondary', 'tertiary',
+                'background', 'surface', 'foreground', 'muted', 'border',
+                'success', 'success-soft', 'warning', 'warning-soft', 'danger', 'danger-soft',
+            ].map((name) => [name, `rgb(var(--color-${name}) / <alpha-value>)`])),
             fontFamily: {
                 sans: ['Figtree', ...defaultTheme.fontFamily.sans],
             },

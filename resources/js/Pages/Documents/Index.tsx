@@ -1,5 +1,7 @@
+import WorkspaceDialog from '@/Components/WorkspaceDialog';
+import InfoTip from '@/Components/InfoTip';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import CrudAlertModal from '@/Components/CrudAlertModal';
+import CrudAlertModal from '@/Components/WorkspaceAlert';
 import { Head, router } from '@inertiajs/react';
 import QRCode from 'react-qr-code';
 import { Archive, ArrowDownUp, ChevronLeft, ChevronRight, Eye, FilePlus2, FileText, Inbox, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
@@ -102,18 +104,18 @@ const getStatusClasses = (status?: string) => {
         case 'processed':
         case 'available':
         case 'done':
-            return 'bg-emerald-100 text-emerald-700';
+            return 'bg-success-soft text-success';
         case 'pending':
         case 'ongoing':
-            return 'bg-amber-100 text-amber-700';
+            return 'bg-warning-soft text-warning';
         case 'rejected':
         case 'cancelled':
-            return 'bg-rose-100 text-rose-700';
+            return 'bg-danger-soft text-danger';
         case 'archived':
         case 'terminal':
             return 'bg-violet-100 text-violet-700';
         default:
-            return 'bg-slate-100 text-slate-700';
+            return 'bg-slate-100 text-foreground';
     }
 };
 
@@ -122,8 +124,8 @@ const getTransactionClasses = (action?: string | null, status?: string | null) =
 
     if (label.includes('terminal')) return 'bg-violet-100 text-violet-800';
     if (label.includes('receiv')) return 'bg-emerald-100 text-emerald-800';
-    if (label.includes('finaliz')) return 'bg-blue-100 text-blue-800';
-    return 'bg-sky-50 text-sky-800';
+    if (label.includes('finaliz')) return 'bg-blue-100 text-primary';
+    return 'bg-secondary text-sky-800';
 };
 
 export default function DocumentsIndex({
@@ -148,6 +150,9 @@ export default function DocumentsIndex({
     maxUploadSizeKb: number;
 }) {
     const uploadLimitKb = Number(maxUploadSizeKb ?? 0);
+    const [processing, setProcessing] = useState(false);
+    const [formError, setFormError] = useState('');
+    const formBaseline = useRef('');
     const [editingRow, setEditingRow] = useState<DocumentItem | null>(null);
     const [crudAlert, setCrudAlert] = useState<CrudAlert | null>(null);
     const [viewingRow, setViewingRow] = useState<DocumentItem | null>(null);
@@ -162,7 +167,7 @@ export default function DocumentsIndex({
     const [sortKey, setSortKey] = useState<SortKey | null>(null);
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
     const [page, setPage] = useState(1);
-    const [perPage, setPerPage] = useState(10);
+    const [perPage, setPerPage] = useState(15);
     const [form, setForm] = useState({
         title: '',
         document_source: 'upload',
@@ -181,6 +186,19 @@ export default function DocumentsIndex({
         file: null as File | null,
     });
 
+    useEffect(() => { formBaseline.current = JSON.stringify(form); }, [isCreateOpen, editingRow]);
+
+    const closeRelease = () => {
+        if (processing) return;
+        const dirty = Object.values(releaseForm).some(Boolean);
+        if (!dirty) { setReleasingRow(null); return; }
+        setCrudAlert({ title: 'Discard forwarding details?', message: 'Your unsaved changes will be lost.', confirmLabel: 'Discard changes', isDestructive: true, onConfirm: () => { setCrudAlert(null); setReleasingRow(null); } });
+    };
+    const requestCloseForm = () => {
+        if (processing) return;
+        if (JSON.stringify(form) === formBaseline.current && !form.file) { closeModal(); return; }
+        setCrudAlert({ title: 'Discard unsaved changes?', message: 'Close this form without saving your changes?', confirmLabel: 'Discard changes', isDestructive: true, onConfirm: () => { setCrudAlert(null); closeModal(); } });
+    };
     const closeModal = () => {
         setEditingRow(null);
         setIsCreateOpen(false);
@@ -204,6 +222,8 @@ export default function DocumentsIndex({
     };
 
     const openEdit = (row: DocumentItem) => {
+        setFormError('');
+        setUploadError('');
         if (row.source === 'Old DB') {
             return;
         }
@@ -229,6 +249,8 @@ export default function DocumentsIndex({
     };
 
     const openCreate = () => {
+        setFormError('');
+        setUploadError('');
         setEditingRow(null);
         setIsCreateOpen(true);
         setForm({
@@ -252,6 +274,7 @@ export default function DocumentsIndex({
 
     const handleCreate = (e: React.FormEvent, finalize: boolean) => {
         e.preventDefault();
+        if (processing) return;
         const fileError = validateDocumentFile(form.file, uploadLimitKb);
         if (fileError) { setUploadError(fileError); return; }
 
@@ -259,7 +282,11 @@ export default function DocumentsIndex({
         Object.entries({ ...form, is_finalized: finalize ? '1' : '0' }).forEach(([key, value]) => {
             if (value !== null && value !== undefined) data.append(key, value instanceof File ? value : typeof value === 'boolean' ? (value ? '1' : '0') : String(value));
         });
+        setProcessing(true);
+        setFormError('');
         router.post('/documents', data, {
+            onFinish: () => setProcessing(false),
+            onError: (errors) => setFormError(Object.values(errors).join(' ')),
             onSuccess: () => {
                 closeModal();
                 setCrudAlert({ title: 'Document saved', message: finalize ? 'Document finalized successfully.' : 'Document draft created successfully.' });
@@ -269,6 +296,7 @@ export default function DocumentsIndex({
 
     const handleRelease = (event: FormEvent) => {
         event.preventDefault();
+        if (processing) return;
         if (!releasingRow?.id) return;
 
         const selectedAction = actionTypes.find((action) => String(action.id) === releaseForm.actionTypeId);
@@ -293,12 +321,22 @@ export default function DocumentsIndex({
         data.append('remarks', releaseForm.remarks);
         if (releaseForm.file) data.append('file', releaseForm.file);
 
+        const selectedOffice = offices.find((office) => String(office.id) === releaseForm.officeId);
+        const isRelease = selectedAction?.name.trim().toLowerCase() === 'for release';
+        const documentReference = releasingRow.tracking_number || releasingRow.title || 'The document';
+
+        setProcessing(true);
+        setFormError('');
         router.post(`/documents/${releasingRow.id}/release`, data, {
+            onFinish: () => setProcessing(false),
             onSuccess: () => {
                 setReleasingRow(null);
                 setReleaseForm({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', file: null });
                 setReleaseError('');
-                setCrudAlert({ title: 'Document released', message: 'Document released successfully.' });
+                setCrudAlert({
+                    title: isRelease ? 'Document released' : 'Document forwarded',
+                    message: `${documentReference} was ${isRelease ? 'released to' : 'forwarded to'} ${selectedOffice?.name || 'the receiving office'}. You can follow its progress in the document history.`,
+                });
             },
             onError: (errors) => setReleaseError(errors.file ?? errors.other_action ?? errors.action_type_id ?? errors.to_office_id ?? errors.remarks ?? 'Could not release this document.'),
         });
@@ -307,6 +345,7 @@ export default function DocumentsIndex({
     const printDisposition = (document: DocumentItem) => setPrintDocument(document);
     const handleUpdate = (e: React.FormEvent, finalize: boolean) => {
         e.preventDefault();
+        if (processing) return;
 
         if (!editingRow || editingRow.id == null) {
             return;
@@ -318,7 +357,11 @@ export default function DocumentsIndex({
         Object.entries({ ...form, is_finalized: finalize ? '1' : '0', _method: 'put' }).forEach(([key, value]) => {
             if (value !== null && value !== undefined) data.append(key, value instanceof File ? value : typeof value === 'boolean' ? (value ? '1' : '0') : String(value));
         });
+        setProcessing(true);
+        setFormError('');
         router.post(`/documents/${editingRow.id}`, data, {
+            onFinish: () => setProcessing(false),
+            onError: (errors) => setFormError(Object.values(errors).join(' ')),
             onSuccess: () => {
                 closeModal();
                 setCrudAlert({ title: 'Document updated', message: finalize ? 'Document updated and finalized successfully.' : 'Document updated successfully.' });
@@ -441,18 +484,18 @@ export default function DocumentsIndex({
 
     return (
         <AuthenticatedLayout
-            header={<div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Document management</p><h1 className="text-2xl font-bold tracking-tight text-[#171717] sm:text-3xl">{title}</h1></div>}
+            header={<h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1>}
         >
             <Head title={title} />
-            {crudAlert && <CrudAlertModal {...crudAlert} onClose={() => setCrudAlert(null)} />}
+
 
             <style>{`
                 .urgent-document-row > td,
                 .urgent-document-row:hover > td {
-                    background-color: rgb(255 241 242 / 90%) !important;
+                    background-color: rgb(var(--color-danger-soft)) !important;
                 }
                 .urgent-document-row > td:first-child {
-                    border-left: 3px solid #e11d48;
+                    border-left: 3px solid rgb(var(--color-danger));
                 }
                 @media print {
                     body * { visibility: hidden !important; }
@@ -473,22 +516,22 @@ export default function DocumentsIndex({
             `}</style>
 
             <div className="mx-auto max-w-[1440px] print-table-only">
-                <div className="mb-5 flex flex-col gap-5 rounded-2xl border border-[#e2e2df] bg-white p-5 shadow-sm no-print sm:p-6">
-                    <div>
-                        <h2 className="text-xl font-semibold tracking-tight text-[#171717]">Document register</h2>
-                        <p className="mt-1 text-sm text-[#73736e]">Search, review, and manage your documents in one place.</p>
+                <div className="mb-5 flex flex-col gap-4 no-print">
+                    <div className="flex items-center gap-2 text-muted">
+                        <p>Receive, forward, and track your office documents.</p>
+                        <InfoTip label="Document workflow help">Open a document title to review its details and history. Receive acknowledges delivery; Forward sends it to the selected office. Available actions depend on your permissions and the document status.</InfoTip>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
-                        <label className="col-span-2 flex h-11 min-w-0 items-center gap-2 rounded-xl border border-[#deded9] bg-[#fafaf8] px-3 text-[#898984] focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 sm:col-span-1">
+                        <label className="col-span-2 flex h-11 min-w-0 items-center gap-2 rounded-xl border border-border bg-background px-3 text-muted focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 sm:col-span-1">
                             <Search size={18} />
                             <input
                                 type="text"
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Search documents"
+                                placeholder="Search title, tracking number, or office"
                                 aria-label="Search documents"
-                                className="w-full border-0 bg-transparent px-0 py-2.5 text-sm text-[#171717] placeholder:text-[#898984] focus:ring-0"
+                                className="w-full border-0 bg-transparent px-0 py-2.5 text-sm text-foreground placeholder:text-muted focus:ring-0"
                             />
                         </label>
 
@@ -496,9 +539,9 @@ export default function DocumentsIndex({
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value)}
                             aria-label="Filter documents by status"
-                            className="col-span-2 h-11 min-w-0 rounded-xl border border-[#deded9] bg-[#fafaf8] pl-3 pr-10 text-sm text-[#333] outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:col-span-1"
+                            className="col-span-2 h-11 min-w-0 rounded-xl border border-border bg-background pl-3 pr-10 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 sm:col-span-1"
                         >
-                            <option value="all">All Status</option>
+                            <option value="all">All statuses</option>
                             <option value="ongoing">Ongoing</option>
                             <option value="approved">Approved</option>
                             <option value="released">Released</option>
@@ -509,7 +552,7 @@ export default function DocumentsIndex({
                         <button
                             type="button"
                             onClick={handlePrint}
-                            className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-[#deded9] bg-white px-3 text-sm font-semibold text-[#444] transition hover:bg-[#f6f6f3] sm:px-4"
+                            className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border bg-surface px-3 text-sm font-semibold text-foreground transition hover:bg-secondary sm:px-4"
                         >
                             <Printer size={17} />
                             Print
@@ -518,50 +561,50 @@ export default function DocumentsIndex({
                         <button
                             type="button"
                             onClick={openCreate}
-                            className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 sm:px-4"
+                            className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-primary px-3 text-sm font-semibold text-white transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 sm:px-4"
                         >
                             <FilePlus2 size={17} />
-                            New Document
+                            New document
                         </button>
                     </div>
                 </div>
 
-                <div className="overflow-hidden rounded-2xl border border-[#e2e2df] bg-white shadow-sm">
-                    <div className="flex flex-col gap-1 border-b border-[#e8e8e4] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                        <h3 className="font-semibold text-[#171717]">Documents</h3>
-                        <p className="text-sm text-[#73736e]">{sortedDocuments.length === 0 ? 'No results' : `Showing ${((page - 1) * perPage) + 1}–${Math.min(page * perPage, sortedDocuments.length)} of ${sortedDocuments.length} documents`}</p>
+                <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+                    <div className="flex flex-col gap-1 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                        <h3 className="font-semibold text-foreground">Documents</h3>
+                        <p className="text-sm text-muted">{sortedDocuments.length === 0 ? 'No results' : `Showing ${((page - 1) * perPage) + 1}–${Math.min(page * perPage, sortedDocuments.length)} of ${sortedDocuments.length} documents`}</p>
                     </div>
-                <div className="overflow-x-auto">
-                    <table className="min-w-full text-left text-sm">
-                        <thead className="bg-[#f7f8fa] text-[#555752]">
+                <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Documents table; scroll horizontally for more columns">
+                    <table className="dots-document-table min-w-full text-left text-sm">
+                        <thead className="bg-background text-muted">
                             <tr>
                                 <th className="whitespace-nowrap px-4 py-3.5 font-semibold">
-                                    <button type="button" onClick={() => handleSort('tracking_number')} className="flex items-center gap-1.5 hover:text-blue-700">
+                                    <button type="button" onClick={() => handleSort('tracking_number')} className="flex items-center gap-1.5 hover:text-primary">
                                         Tracking No. <ArrowDownUp size={14} />
                                     </button>
                                 </th>
                                 <th className="px-4 py-3.5 font-semibold">
-                                    <button type="button" onClick={() => handleSort('title')} className="flex items-center gap-1.5 hover:text-blue-700">
+                                    <button type="button" onClick={() => handleSort('title')} className="flex items-center gap-1.5 hover:text-primary">
                                         Title <ArrowDownUp size={14} />
                                     </button>
                                 </th>
                                 <th className="whitespace-nowrap px-4 py-3.5 font-semibold">
-                                    <button type="button" onClick={() => handleSort('document_type')} className="flex items-center gap-1.5 hover:text-blue-700">
+                                    <button type="button" onClick={() => handleSort('document_type')} className="flex items-center gap-1.5 hover:text-primary">
                                         Document Type <ArrowDownUp size={14} />
                                     </button>
                                 </th>
                                 <th className="whitespace-nowrap px-4 py-3.5 font-semibold">
-                                    <button type="button" onClick={() => handleSort('origin_type')} className="flex items-center gap-1.5 hover:text-blue-700">
+                                    <button type="button" onClick={() => handleSort('origin_type')} className="flex items-center gap-1.5 hover:text-primary">
                                         Origin Type <ArrowDownUp size={14} />
                                     </button>
                                 </th>
                                 <th className="px-4 py-3.5 font-semibold">
-                                    <button type="button" onClick={() => handleSort('status')} className="flex items-center gap-1.5 hover:text-blue-700">
+                                    <button type="button" onClick={() => handleSort('status')} className="flex items-center gap-1.5 hover:text-primary">
                                         Status <ArrowDownUp size={14} />
                                     </button>
                                 </th>
                                 <th className="whitespace-nowrap px-4 py-3.5 font-semibold">
-                                    <button type="button" onClick={() => handleSort('last_transaction')} className="flex items-center gap-1.5 hover:text-blue-700">
+                                    <button type="button" onClick={() => handleSort('last_transaction')} className="flex items-center gap-1.5 hover:text-primary">
                                         Last Transaction <ArrowDownUp size={14} />
                                     </button>
                                 </th>
@@ -572,8 +615,8 @@ export default function DocumentsIndex({
                         <tbody>
                             {paginatedDocuments.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-4 py-12 text-center text-[#73736e]">
-                                        No documents found.
+                                    <td colSpan={7} className="px-4 py-12 text-center text-muted">
+                                        {search || statusFilter !== 'all' ? 'No matching documents. Try another search or status.' : 'No documents yet. Select New document to register one.'}
                                     </td>
                                 </tr>
                             ) : (
@@ -584,21 +627,21 @@ export default function DocumentsIndex({
                                     return (
                                         <tr
                                             key={document.id ?? `${document.tracking_number ?? 'doc'}-${index}`}
-                                            className={`${isUrgent ? 'urgent-document-row' : ''} border-t border-[#eeeeeb] transition-colors hover:bg-[#fafaf8]`}
+                                            className={`${isUrgent ? 'urgent-document-row' : ''} border-t border-border transition-colors hover:bg-background`}
                                         >
-                                            <td className="whitespace-nowrap px-4 py-4 text-xs font-semibold text-blue-800">
+                                            <td className="whitespace-nowrap px-4 py-4 text-xs font-semibold text-primary">
                                                 <span className="font-mono">{document.tracking_number || 'N/A'}</span>
                                                 {document.needs_review && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">Needs review</span>}
                                                 {isUrgent && <span className="ml-2 inline-flex rounded-full bg-rose-100 px-2 py-0.5 font-sans text-[10px] font-bold uppercase text-rose-800">Urgent</span>}
-                                                {isLegacy && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 font-sans text-[10px] font-medium text-slate-600">Legacy</span>}
+                                                {isLegacy && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 font-sans text-[10px] font-medium text-muted">Legacy</span>}
                                             </td>
-                                            <td className="min-w-[190px] px-4 py-4 font-medium text-[#242424]">
-                                                {document.title || 'Untitled'}
+                                            <td className="min-w-[190px] px-4 py-4 font-medium text-foreground">
+                                                <button type="button" onClick={() => setViewingRow(document)} className="text-left font-semibold hover:text-primary hover:underline">{document.title || 'Untitled'}</button>
                                             </td>
-                                            <td className="whitespace-nowrap px-4 py-4 text-[#666660]">
+                                            <td className="whitespace-nowrap px-4 py-4 text-muted">
                                                 {getDocumentTypeName(document) || '—'}
                                             </td>
-                                            <td className="px-4 py-4 text-[#666660]">
+                                            <td className="px-4 py-4 text-muted">
                                                 {document.origin_type || '—'}
                                             </td>
                                             <td className="whitespace-nowrap px-4 py-4">
@@ -613,20 +656,20 @@ export default function DocumentsIndex({
                                             <td className="min-w-[240px] px-4 py-3">
                                                 {document.transactions?.[0] ? <div className="flex flex-col gap-1.5">
                                                     <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${getTransactionClasses(document.transactions[0].action, document.transactions[0].status)}`}>{document.transactions[0].action || document.transactions[0].status || 'Transaction'}</span>
-                                                    <span className="text-xs text-slate-600">{[document.transactions[0].from_office_short_name || document.transactions[0].from_office, document.transactions[0].to_office_short_name || document.transactions[0].to_office].filter(Boolean).join(' → ') || document.transactions[0].holder_short_name || document.transactions[0].holder || 'Office not recorded'}</span>
+                                                    <span className="text-xs text-muted">{[document.transactions[0].from_office_short_name || document.transactions[0].from_office, document.transactions[0].to_office_short_name || document.transactions[0].to_office].filter(Boolean).join(' → ') || document.transactions[0].holder_short_name || document.transactions[0].holder || 'Office not recorded'}</span>
                                                     <span className="text-[11px] text-slate-400">{document.transactions[0].created_at || document.transactions[0].created_by || '—'}</span>
                                                 </div> : <span className="text-sm text-slate-400">No transactions</span>}
                                             </td>
                                             <td className="whitespace-nowrap px-4 py-4 no-print">
-                                                <div className="flex min-w-[260px] flex-wrap gap-1.5">
-                                                    <button type="button" aria-label="View document" title="View document" onClick={() => setViewingRow(document)} className="rounded-md bg-slate-100 p-2 text-slate-700 hover:bg-slate-200"><Eye size={15} /></button>
+                                                <fieldset disabled={processing} className="flex min-w-[180px] flex-wrap items-center gap-1.5">
+                                                    <button type="button" aria-label="View document" title="View document" onClick={() => setViewingRow(document)} className="rounded-md bg-slate-100 p-2 text-foreground hover:bg-slate-200"><Eye size={15} /></button>
                                                     {document.is_finalized && <button type="button" aria-label="Print disposition form" title="Print disposition form" onClick={() => printDisposition(document)} className="rounded-md bg-indigo-50 p-2 text-indigo-700 hover:bg-indigo-100"><Printer size={15} /></button>}
-                                                    {document.can_update && <button type="button" aria-label="Update draft" title="Update draft" onClick={() => openEdit(document)} className="rounded-md bg-blue-50 p-2 text-blue-700 hover:bg-blue-100"><Pencil size={15} /></button>}
-                                                    {document.can_release && <button type="button" aria-label="Release document" title="Release document" onClick={() => { setReleasingRow(document); setReleaseForm({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', file: null }); setReleaseError(''); }} className="rounded-md bg-sky-50 p-2 text-sky-700 hover:bg-sky-100"><Send size={15} /></button>}
-                                                    {document.can_terminal && <button type="button" aria-label="Tag as terminal" title="Tag as terminal" onClick={() => requestDocumentAction('Tag document as terminal?', `Mark ${document.tracking_number || 'this document'} as terminal?`, 'Tag as terminal', () => { setCrudAlert(null); router.post(`/documents/${document.id}/terminal`, {}, { onSuccess: () => setCrudAlert({ title: 'Document updated', message: 'Document tagged as terminal.' }) }); })} className="rounded-md bg-violet-50 p-2 text-violet-700 hover:bg-violet-100"><Archive size={15} /></button>}
-                                                    {document.can_receive && <button type="button" aria-label="Receive document" title="Receive document" onClick={() => requestDocumentAction('Receive document?', `Confirm receipt of ${document.tracking_number || 'this document'}?`, 'Receive', () => { setCrudAlert(null); router.post(`/documents/${document.id}/receive`, {}, { onSuccess: () => setCrudAlert({ title: 'Document received', message: 'Document received successfully.' }) }); })} className="rounded-md bg-emerald-50 p-2 text-emerald-700 hover:bg-emerald-100"><Inbox size={15} /></button>}
-                                                    {document.can_delete && <button type="button" aria-label="Delete draft" title="Delete draft" onClick={() => requestDocumentAction('Delete draft?', `Remove ${document.tracking_number || 'this draft'} from the active list?`, 'Delete draft', () => { setCrudAlert(null); router.delete(`/documents/${document.id}`, { onSuccess: () => setCrudAlert({ title: 'Draft deleted', message: 'Document draft deleted successfully.' }) }); }, true)} className="rounded-md bg-rose-50 p-2 text-rose-700 hover:bg-rose-100"><Trash2 size={15} /></button>}
-                                                </div>
+                                                    {document.can_update && <button type="button" aria-label="Update draft" title="Update draft" onClick={() => openEdit(document)} className="rounded-md bg-secondary p-2 text-primary hover:bg-blue-100"><Pencil size={15} /></button>}
+                                                    {document.can_release && <button type="button" aria-label="Forward document" title="Forward document" onClick={() => { setReleasingRow(document); setReleaseForm({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', file: null }); setReleaseError(''); }} className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-3 py-2  hover:bg-slate-200"><Send size={15} /></button>}
+                                                    {document.can_terminal && <button type="button" aria-label="Tag as terminal" title="Tag as terminal" onClick={() => requestDocumentAction('Tag document as terminal?', `Mark ${document.tracking_number || 'this document'} as terminal?`, 'Tag as terminal', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/terminal`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document updated', message: 'Document tagged as terminal.' }) }); })} className="rounded-md bg-violet-50 p-2 text-violet-700 hover:bg-violet-100"><Archive size={15} /></button>}
+                                                    {document.can_receive && <button type="button" aria-label="Receive document" title="Receive document" onClick={() => requestDocumentAction('Receive document?', `Confirm receipt of ${document.tracking_number || 'this document'}?`, 'Receive', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/receive`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document received', message: 'Document received successfully.' }) }); })} className="inline-flex items-center gap-1.5 rounded-md bg-success-soft px-3 py-2 text-success hover:bg-success/20"><Inbox size={15} /></button>}
+                                                    {document.can_delete && <button type="button" aria-label="Delete draft" title="Delete draft" onClick={() => requestDocumentAction('Delete draft?', `Remove ${document.tracking_number || 'this draft'} from the active list?`, 'Delete draft', () => { setCrudAlert(null); setProcessing(true); router.delete(`/documents/${document.id}`, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Draft deleted', message: 'Document draft deleted successfully.' }) }); }, true)} className="rounded-md bg-danger-soft p-2 text-danger hover:bg-rose-100"><Trash2 size={15} /></button>}
+                                                </fieldset>
                                             </td>
                                         </tr>
                                     );
@@ -636,16 +679,18 @@ export default function DocumentsIndex({
                     </table>
                 </div>
 
-                <div className="flex flex-col gap-3 border-t border-[#e8e8e4] bg-[#fafaf8] px-5 py-4 sm:flex-row sm:items-center sm:justify-between no-print">
-                    <div className="flex items-center gap-2 text-sm text-[#666660]">
+                <div className="flex flex-col gap-3 border-t border-border bg-background px-5 py-4 sm:flex-row sm:items-center sm:justify-between no-print">
+                    <div className="flex items-center gap-2 text-sm text-muted">
                         <span>Rows per page:</span>
                         <select
+                            aria-label="Rows per page"
                             value={perPage}
                             onChange={(e) => setPerPage(Number(e.target.value))}
-                            className="min-w-[4.5rem] rounded-lg border border-[#deded9] bg-white py-1.5 pl-2 pr-10 text-sm"
+                            className="min-w-[4.5rem] rounded-lg border border-border bg-surface py-1.5 pl-2 pr-10 text-sm"
                         >
                             <option value={5}>5</option>
                             <option value={10}>10</option>
+                            <option value={15}>15</option>
                             <option value={20}>20</option>
                             <option value={50}>50</option>
                         </select>
@@ -656,12 +701,12 @@ export default function DocumentsIndex({
                             type="button"
                             disabled={page === 1}
                             onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
-                            className="inline-flex items-center gap-1 rounded-lg border border-[#deded9] bg-white px-3 py-1.5 text-sm text-[#444] transition hover:bg-[#f3f4f5] disabled:cursor-not-allowed disabled:opacity-50"
+                            className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             <ChevronLeft size={16} /> Previous
                         </button>
 
-                        <span className="px-1 text-sm text-[#666660]">
+                        <span className="px-1 text-sm text-muted">
                             Page {page} of {totalPages}
                         </span>
 
@@ -669,7 +714,7 @@ export default function DocumentsIndex({
                             type="button"
                             disabled={page >= totalPages}
                             onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
-                            className="inline-flex items-center gap-1 rounded-lg border border-[#deded9] bg-white px-3 py-1.5 text-sm text-[#444] transition hover:bg-[#f3f4f5] disabled:cursor-not-allowed disabled:opacity-50"
+                            className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             Next <ChevronRight size={16} />
                         </button>
@@ -678,57 +723,66 @@ export default function DocumentsIndex({
             </div>
             </div>
 
-            {viewingRow && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/45 p-4" onClick={() => setViewingRow(null)}>
-                    <section role="dialog" aria-modal="true" aria-labelledby="document-details-title" className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-4xl overflow-y-auto rounded-2xl border border-[#e2e2df] bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
-                        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[#e8e8e4] bg-white px-5 py-4 sm:px-6">
+            <WorkspaceDialog open={Boolean(viewingRow)} onClose={() => setViewingRow(null)} labelledBy="document-details-title" width="max-w-4xl">
+                {viewingRow && (
+                    <section>
+                        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
                             <div className="flex min-w-0 items-start gap-3">
-                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><FileText size={20} aria-hidden="true" /></span>
+                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary"><FileText size={20} aria-hidden="true" /></span>
                                 <div className="min-w-0">
-                                    <h2 id="document-details-title" className="text-lg font-semibold text-[#171717]">Document details</h2>
-                                    <p className="mt-0.5 break-words text-sm text-[#73736e]">{viewingRow.tracking_number || 'No tracking number'} · {viewingRow.title || 'Untitled'}</p>
+                                    <h2 id="document-details-title" className="text-lg font-semibold text-foreground">Document details</h2>
+                                    <p className="mt-0.5 break-words text-sm text-muted">Review document information and transaction history.</p>
                                 </div>
                             </div>
-                            <button type="button" onClick={() => setViewingRow(null)} aria-label="Close document details" className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700">
+                            <button type="button" onClick={() => setViewingRow(null)} aria-label="Close document details" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
                                 <X size={19} aria-hidden="true" />
                             </button>
                         </div>
 
                         <div className="space-y-6 p-5 sm:p-6">
-                            <section aria-label="Document information" className="grid gap-4 rounded-xl border border-[#e8e8e4] bg-[#fafaf8] p-4 sm:grid-cols-2 lg:grid-cols-3">
-                                <div><p className="text-xs font-semibold uppercase text-[#898984]">Tracking number</p><p className="mt-1 break-words font-mono text-sm font-medium text-slate-800">{viewingRow.tracking_number || '—'}</p></div>
-                                <div><p className="text-xs font-semibold uppercase text-[#898984]">Title</p><p className="mt-1 break-words text-sm font-medium text-slate-800">{viewingRow.title || 'Untitled'}</p></div>
-                                <div><p className="text-xs font-semibold uppercase text-[#898984]">Document type</p><p className="mt-1 text-sm font-medium text-slate-800">{getDocumentTypeName(viewingRow) || '—'}</p></div>
-                                <div><p className="text-xs font-semibold uppercase text-[#898984]">Origin</p><p className="mt-1 text-sm text-slate-700">{viewingRow.origin_type || '—'}</p></div>
-                                <div><p className="text-xs font-semibold uppercase text-[#898984]">Office</p><p className="mt-1 text-sm text-slate-700">{viewingRow.office_short_name || viewingRow.office?.short_name || viewingRow.office_name || viewingRow.office?.name || '—'}</p></div>
-                                <div><p className="text-xs font-semibold uppercase text-[#898984]">Status</p><span className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(viewingRow.status)}`}>{(viewingRow.status || 'draft').toUpperCase()}</span></div>
-                                <div className="sm:col-span-2 lg:col-span-3"><p className="text-xs font-semibold uppercase text-[#898984]">Remarks</p><p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-700">{viewingRow.remarks || '—'}</p></div>
+                            <section aria-label="Document information" className="grid gap-4 rounded-xl border border-border bg-background p-4 sm:grid-cols-2 lg:grid-cols-3">
+                                <div><p className="text-xs font-semibold uppercase text-muted">Tracking number</p><p className="mt-1 break-words font-mono text-sm font-medium text-foreground">{viewingRow.tracking_number || '—'}</p></div>
+                                <div><p className="text-xs font-semibold uppercase text-muted">Title</p><p className="mt-1 break-words text-sm font-medium text-foreground">{viewingRow.title || 'Untitled'}</p></div>
+                                <div><p className="text-xs font-semibold uppercase text-muted">Document type</p><p className="mt-1 text-sm font-medium text-foreground">{getDocumentTypeName(viewingRow) || '—'}</p></div>
+                                <div><p className="text-xs font-semibold uppercase text-muted">Origin</p><p className="mt-1 text-sm text-foreground">{viewingRow.origin_type || '—'}</p></div>
+                                <div><p className="text-xs font-semibold uppercase text-muted">Office</p><p className="mt-1 text-sm text-foreground">{viewingRow.office_short_name || viewingRow.office?.short_name || viewingRow.office_name || viewingRow.office?.name || '—'}</p></div>
+                                <div><p className="text-xs font-semibold uppercase text-muted">Status</p><span className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(viewingRow.status)}`}>{(viewingRow.status || 'draft').toUpperCase()}</span></div>
+                                <div className="sm:col-span-2 lg:col-span-3"><p className="text-xs font-semibold uppercase text-muted">Remarks</p><p className="mt-1 whitespace-pre-wrap break-words text-sm text-foreground">{viewingRow.remarks || '—'}</p></div>
                             </section>
 
                             <section aria-labelledby="transaction-history-title">
                                 <div className="mb-3 flex items-center justify-between gap-3">
-                                    <div><h3 id="transaction-history-title" className="font-semibold text-[#171717]">Transaction history</h3><p className="mt-0.5 text-sm text-[#73736e]">Document activity in workflow order.</p></div>
-                                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{viewingRow.transactions?.length ?? 0} transactions</span>
+                                    <div><h3 id="transaction-history-title" className="font-semibold text-foreground">Transaction history</h3><p className="mt-0.5 text-sm text-muted">Document activity in workflow order.</p></div>
+                                    <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold text-muted">{viewingRow.transactions?.length ?? 0} transactions</span>
                                 </div>
-                                {viewingRow.transactions?.length ? <ol className="space-y-3 border-l-2 border-slate-200 pl-4">{viewingRow.transactions.map((transaction, index) => <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="relative rounded-xl border border-[#e2e2df] bg-[#fafaf8] p-3 before:absolute before:-left-[22px] before:top-4 before:h-2.5 before:w-2.5 before:rounded-full before:bg-sky-500"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-slate-800">{transaction.action || transaction.status || 'Transaction'}</span><span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium uppercase text-slate-600">{transaction.status || '—'}</span></div><p className="mt-1 text-sm text-slate-600">{[transaction.from_office_short_name || transaction.from_office, transaction.to_office_short_name || transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder_short_name || transaction.holder ? `Held by ${transaction.holder_short_name || transaction.holder}` : 'Office details unavailable')}</p><p className="mt-1 text-xs text-slate-500">{[transaction.created_by_short_name || transaction.created_by, transaction.created_at].filter(Boolean).join(' · ') || 'Date and user unavailable'}</p></li>)}</ol> : <p className="rounded-xl border border-dashed border-[#deded9] px-4 py-8 text-center text-sm text-[#73736e]">No transactions recorded.</p>}
+                                {viewingRow.transactions?.length ? <ol className="space-y-3 border-l-2 border-border pl-4">{viewingRow.transactions.map((transaction, index) => <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="relative rounded-xl border border-border bg-background p-3 before:absolute before:-left-[22px] before:top-4 before:h-2.5 before:w-2.5 before:rounded-full before:bg-primary"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-foreground">{transaction.action || transaction.status || 'Transaction'}</span><span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium uppercase text-muted">{transaction.status || '—'}</span></div><p className="mt-1 text-sm text-muted">{[transaction.from_office_short_name || transaction.from_office, transaction.to_office_short_name || transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder_short_name || transaction.holder ? `Held by ${transaction.holder_short_name || transaction.holder}` : 'Office details unavailable')}</p><p className="mt-1 text-xs text-muted">{[transaction.created_by_short_name || transaction.created_by, transaction.created_at].filter(Boolean).join(' · ') || 'Date and user unavailable'}</p></li>)}</ol> : <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">No transactions recorded.</p>}
                         </section>
                         </div>
+                        <div className="sticky bottom-0 flex justify-end border-t border-border bg-surface px-5 py-4 sm:px-6">
+                            <button type="button" onClick={() => setViewingRow(null)} className="dots-button-secondary">Close</button>
+                        </div>
                     </section>
-                </div>
-            )}
+                )}
+            </WorkspaceDialog>
 
-            {releasingRow && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/45 p-4" onClick={() => setReleasingRow(null)}>
-                    <form role="dialog" aria-modal="true" onSubmit={handleRelease} aria-labelledby="release-document-title" className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#e2e2df] bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <WorkspaceDialog open={Boolean(releasingRow)} onClose={closeRelease} labelledBy="release-document-title" width="max-w-3xl" busy={processing}>
+                {releasingRow && (
+                    <form onSubmit={handleRelease} aria-busy={processing}>
+                    <fieldset disabled={processing} className="min-w-0">
                         <input type="hidden" name="document_id" value={releasingRow.id ?? ''} />
                         <input type="hidden" name="tracking_number" value={releasingRow.tracking_number ?? ''} />
-                        <div className="sticky top-0 z-10 border-b border-[#e8e8e4] bg-white px-5 py-4 sm:px-6">
-                            <h2 id="release-document-title" className="text-lg font-semibold text-[#171717]">Release document</h2>
-                            <p className="mt-0.5 break-words text-sm text-[#73736e]">{releasingRow.tracking_number || 'No tracking number'} · {releasingRow.title || 'Untitled'}</p>
+                        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
+                            <div>
+                                <h2 id="release-document-title" className="text-lg font-semibold text-foreground">Forward document</h2>
+                                <p className="mt-0.5 text-sm text-muted">Choose where this document should go next.</p>
+                            </div>
+                            <button type="button" onClick={closeRelease} aria-label="Close forwarding dialog" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
+                                <X size={19} aria-hidden="true" />
+                            </button>
                         </div>
 
                         <div className="space-y-6 p-5 sm:p-6">
-                            <section aria-label="Selected document details" className="grid gap-x-5 gap-y-4 rounded-xl border border-[#e8e8e4] bg-[#fafaf8] p-4 sm:grid-cols-2">
+                            <details className="rounded-lg border border-border p-3"><summary className="cursor-pointer text-sm font-medium text-muted">Document details and attachments</summary><section aria-label="Selected document details" className="grid gap-x-5 gap-y-4 rounded-xl border border-border bg-background p-4 sm:grid-cols-2">
                                 <ReadOnlyDetail label="Tracking number" value={releasingRow.tracking_number} />
                                 <ReadOnlyDetail label="Title" value={releasingRow.title} />
                                 <ReadOnlyDetail label="Type" value={getDocumentTypeName(releasingRow)} />
@@ -736,198 +790,205 @@ export default function DocumentsIndex({
                                 <ReadOnlyDetail label="Created by" value={releasingRow.created_by_short_name || releasingRow.created_by_name} />
                                 <ReadOnlyDetail label="Date created" value={releasingRow.created_at} />
                                 <div className="sm:col-span-2">
-                                    <p className="text-xs font-semibold uppercase text-[#898984]">Remarks</p>
-                                    <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-700">{releasingRow.remarks || '—'}</p>
+                                    <p className="text-xs font-semibold uppercase text-muted">Remarks</p>
+                                    <p className="mt-1 whitespace-pre-wrap break-words text-sm text-foreground">{releasingRow.remarks || '—'}</p>
                                 </div>
                                 <div className="sm:col-span-2">
-                                    <p className="text-xs font-semibold uppercase text-[#898984]">File</p>
-                                    {releasingRow.files?.length ? <ul className="mt-1 space-y-1">{releasingRow.files.map((file) => <li key={file.id} className="flex flex-wrap items-baseline gap-x-2 text-sm"><span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium uppercase text-slate-600">{file.type}</span>{file.url ? <a href={file.url} target="_blank" rel="noreferrer" className="break-all font-medium text-blue-700 underline">{file.name}</a> : <span className="break-all text-slate-600">{file.name} — File not yet available</span>}{file.uploaded_at && <span className="text-xs text-slate-500">{file.uploaded_at}</span>}</li>)}</ul> : releasingRow.file_url ? <a href={releasingRow.file_url} target="_blank" rel="noreferrer" className="mt-1 inline-block break-all text-sm font-medium text-blue-700 underline">{releasingRow.file_name || 'View attached file'}</a> : <p className="mt-1 text-sm text-slate-700">{releasingRow.file_name || 'No file attached'}</p>}
+                                    <p className="text-xs font-semibold uppercase text-muted">File</p>
+                                    {releasingRow.files?.length ? <ul className="mt-1 space-y-1">{releasingRow.files.map((file) => <li key={file.id} className="flex flex-wrap items-baseline gap-x-2 text-sm"><span className="rounded bg-secondary px-1.5 py-0.5 text-xs font-medium uppercase text-muted">{file.type}</span>{file.url ? <a href={file.url} target="_blank" rel="noreferrer" className="break-all font-medium text-primary underline">{file.name}</a> : <span className="break-all text-muted">{file.name} — File not yet available</span>}{file.uploaded_at && <span className="text-xs text-muted">{file.uploaded_at}</span>}</li>)}</ul> : releasingRow.file_url ? <a href={releasingRow.file_url} target="_blank" rel="noreferrer" className="mt-1 inline-block break-all text-sm font-medium text-primary underline">{releasingRow.file_name || 'View attached file'}</a> : <p className="mt-1 text-sm text-foreground">{releasingRow.file_name || 'No file attached'}</p>}
                                 </div>
-                            </section>
+                            </section></details>
 
                             <section className="grid gap-4 sm:grid-cols-2" aria-label="Release details">
                                 <div>
-                                    <label htmlFor="release-action-type" className="mb-1 block text-sm font-medium text-slate-700">Required Action <span className="text-rose-600">*</span></label>
-                                    <select id="release-action-type" required value={releaseForm.actionTypeId} onChange={(event) => { setReleaseForm({ ...releaseForm, actionTypeId: event.target.value, otherAction: '' }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm">
+                                    <label htmlFor="release-action-type" className="mb-1 block text-sm font-medium text-foreground">Action required <span className="text-danger">*</span></label>
+                                    <select id="release-action-type" required value={releaseForm.actionTypeId} onChange={(event) => { setReleaseForm({ ...releaseForm, actionTypeId: event.target.value, otherAction: '' }); setReleaseError(''); }} className="w-full rounded-lg border border-border bg-surface py-2 pl-3 pr-10 text-sm">
                                         <option value="">Select action</option>
                                         {actionTypes.map((action) => <option key={`${action.source ?? 'new'}-${action.id}`} value={action.id}>{action.name}</option>)}
                                     </select>
                                 </div>
                                 {actionTypes.find((action) => String(action.id) === releaseForm.actionTypeId)?.name.trim().toLowerCase() === 'others' && (
                                     <div>
-                                        <label htmlFor="release-other-action" className="mb-1 block text-sm font-medium text-slate-700">Please specify <span className="text-rose-600">*</span></label>
-                                        <input id="release-other-action" required maxLength={255} value={releaseForm.otherAction} onChange={(event) => { setReleaseForm({ ...releaseForm, otherAction: event.target.value }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                                        <label htmlFor="release-other-action" className="mb-1 block text-sm font-medium text-foreground">Please specify <span className="text-danger">*</span></label>
+                                        <input id="release-other-action" required maxLength={255} value={releaseForm.otherAction} onChange={(event) => { setReleaseForm({ ...releaseForm, otherAction: event.target.value }); setReleaseError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
                                     </div>
                                 )}
                                 <div>
-                                    <label htmlFor="release-office" className="mb-1 block text-sm font-medium text-slate-700">Required Receiving Office <span className="text-rose-600">*</span></label>
-                                    <select id="release-office" required value={releaseForm.officeId} onChange={(event) => { setReleaseForm({ ...releaseForm, officeId: event.target.value }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm">
+                                    <label htmlFor="release-office" className="mb-1 block text-sm font-medium text-foreground">Receiving office <span className="text-danger">*</span></label>
+                                    <select id="release-office" required value={releaseForm.officeId} onChange={(event) => { setReleaseForm({ ...releaseForm, officeId: event.target.value }); setReleaseError(''); }} className="w-full rounded-lg border border-border bg-surface py-2 pl-3 pr-10 text-sm">
                                         <option value="">{offices.length ? 'Select receiving office' : `No receiving offices available${officeRangeLabel ? ` in ${officeRangeLabel}` : ' in your range'}`}</option>
                                         {offices.map((office) => <option key={office.id} value={office.id} disabled={office.disabled}>{office.name}</option>)}
                                     </select>
                                 </div>
                                 <div className="sm:col-span-2">
-                                    <label htmlFor="release-remarks" className="mb-1 block text-sm font-medium text-slate-700">Remarks</label>
-                                    <textarea id="release-remarks" maxLength={250} rows={3} value={releaseForm.remarks} onChange={(event) => setReleaseForm({ ...releaseForm, remarks: event.target.value })} className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                                    <p className="mt-1 text-right text-xs text-slate-500">{releaseForm.remarks.length}/250</p>
+                                    <label htmlFor="release-remarks" className="mb-1 block text-sm font-medium text-foreground">Remarks</label>
+                                    <textarea id="release-remarks" maxLength={250} rows={3} value={releaseForm.remarks} onChange={(event) => setReleaseForm({ ...releaseForm, remarks: event.target.value })} className="w-full resize-y rounded-lg border border-border px-3 py-2 text-sm" />
+                                    <p className="mt-1 text-right text-xs text-muted">{releaseForm.remarks.length}/250</p>
                                 </div>
                                 <div className="sm:col-span-2">
-                                    <label htmlFor="release-file" className="mb-1 block text-sm font-medium text-slate-700">Replacement or new version (optional)</label>
-                                    <input id="release-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => { setReleaseForm({ ...releaseForm, file: event.target.files?.[0] ?? null }); setReleaseError(''); }} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                                    <p className="mt-1 text-xs text-slate-500">PDF, JPG, PNG, DOC, or DOCX. Maximum file size: {uploadLimitKb / 1024} MB.</p>
+                                    <label htmlFor="release-file" className="mb-1 block text-sm font-medium text-foreground">Replacement or new version (optional)</label>
+                                    <input id="release-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => { setReleaseForm({ ...releaseForm, file: event.target.files?.[0] ?? null }); setReleaseError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
+                                    <p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Maximum file size: {uploadLimitKb / 1024} MB.</p>
                                 </div>
                             </section>
 
-                            {releaseError && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{releaseError}</p>}
+                            {releaseError && <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{releaseError}</p>}
                         </div>
 
-                        <div className="flex justify-end gap-2 border-t border-[#e8e8e4] bg-[#fafaf8] px-5 py-4 sm:px-6">
-                            <button type="button" onClick={() => setReleasingRow(null)} className="rounded-lg border border-[#deded9] bg-white px-4 py-2 text-sm font-medium text-[#444] hover:bg-[#f6f6f3]">Close</button>
-                            <button type="submit" className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700">Submit</button>
+                        <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-surface px-5 py-4 sm:px-6">
+                            <button type="button" onClick={closeRelease} className="dots-button-secondary">Cancel</button>
+                            <button type="submit" className="dots-button-primary">{processing ? 'Forwarding…' : 'Forward document'}</button>
                         </div>
-                    </form>
-                </div>
-            )}
+                    </fieldset></form>
+                )}
+            </WorkspaceDialog>
 
-            {(isCreateOpen || editingRow) && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4">
-                    <div role="dialog" aria-modal="true" aria-labelledby="document-modal-title" className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[#e2e2df] bg-white p-5 shadow-2xl sm:p-6">
-                        <div className="mb-4 flex items-center justify-between">
-                            <h3 id="document-modal-title" className="text-lg font-semibold text-slate-800">
-                                {editingRow ? 'Update Document' : 'Add Document'}
-                            </h3>
+            <WorkspaceDialog open={Boolean(isCreateOpen || editingRow)} onClose={requestCloseForm} labelledBy="document-modal-title" busy={processing}>
+                {(isCreateOpen || editingRow) && (
+                    <div>
+                        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
+                            <div>
+                                <h3 id="document-modal-title" className="text-lg font-semibold text-foreground">
+                                    {editingRow ? 'Update Document' : 'Add Document'}
+                                </h3>
+                                <p className="mt-0.5 text-sm text-muted">{editingRow ? 'Update the document information below.' : 'Enter the details to add a document to the system.'}</p>
+                            </div>
 
-                            <button type="button" onClick={closeModal} className="text-sm text-slate-500 hover:text-slate-700">
-                                Close
+                            <button type="button" onClick={requestCloseForm} aria-label="Close document form" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
+                                <X size={19} aria-hidden="true" />
                             </button>
                         </div>
 
-                        <form onSubmit={(event) => { const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null; (editingRow ? handleUpdate : handleCreate)(event, submitter?.value === '1'); }} className="space-y-4">
+                        <form onSubmit={(event) => { const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null; (editingRow ? handleUpdate : handleCreate)(event, submitter?.value === '1'); }} className="space-y-4 px-5 py-5 sm:px-6" aria-busy={processing}>
+                            <fieldset disabled={processing} className="min-w-0 space-y-4">
+                            {formError && <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{formError}</p>}
                             {editingRow ? (
                                 <div>
-                                    <label className="mb-1 block text-sm font-medium text-slate-700">Tracking Number</label>
-                                    <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">{editingRow.tracking_number || 'Not assigned'}</p>
+                                    <label className="mb-1 block text-sm font-medium text-foreground">Tracking Number</label>
+                                    <p className="rounded-lg bg-background px-3 py-2 text-sm text-foreground">{editingRow.tracking_number || 'Not assigned'}</p>
                                 </div>
                             ) : (
-                                <p className="text-sm text-slate-500">A tracking number will be assigned automatically.</p>
+                                <p className="text-sm text-muted">A tracking number will be assigned automatically.</p>
                             )}
 
                             <div>
                                 {!editingRow && <div className="mb-4">
-                                    <label htmlFor="document-source-select" className="mb-1 block text-sm font-medium text-slate-700">Document source</label>
+                                    <label htmlFor="document-source-select" className="mb-1 block text-sm font-medium text-foreground">Document source</label>
                                     <div className="flex flex-wrap gap-2" role="group" aria-label="Document source">
-                                        <button type="button" onClick={() => setForm({ ...form, document_source: 'upload', approved_draft_id: '', file: null })} className={`rounded-lg border px-3 py-2 text-sm font-medium ${form.document_source === 'upload' ? 'border-sky-600 bg-sky-50 text-sky-700' : 'border-slate-300 bg-white text-slate-700'}`}>Upload a document</button>
-                                        <button type="button" onClick={() => setForm({ ...form, document_source: 'approved', approved_draft_id: '', file: null })} className={`rounded-lg border px-3 py-2 text-sm font-medium ${form.document_source === 'approved' ? 'border-sky-600 bg-sky-50 text-sky-700' : 'border-slate-300 bg-white text-slate-700'}`}>Use approved document</button>
+                                        <button type="button" onClick={() => setForm({ ...form, document_source: 'upload', approved_draft_id: '', file: null })} className={`rounded-lg border px-3 py-2 text-sm font-medium ${form.document_source === 'upload' ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>Upload a document</button>
+                                        <button type="button" onClick={() => setForm({ ...form, document_source: 'approved', approved_draft_id: '', file: null })} className={`rounded-lg border px-3 py-2 text-sm font-medium ${form.document_source === 'approved' ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>Use approved document</button>
                                     </div>
                                 </div>}
                                 {!editingRow && form.document_source === 'approved' && <div className="mb-4">
-                                    <label htmlFor="approved-document-select" className="mb-1 block text-sm font-medium text-slate-700">Approved document</label>
+                                    <label htmlFor="approved-document-select" className="mb-1 block text-sm font-medium text-foreground">Approved document</label>
                                     <select id="approved-document-select" required value={form.approved_draft_id} onChange={(event) => {
                                         const selected = approvedDocuments.find((document) => String(document.id) === event.target.value);
                                         setForm({ ...form, approved_draft_id: event.target.value, title: selected?.title ?? form.title, document_type_id: selected ? String(selected.document_type_id) : form.document_type_id });
-                                    }} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10">
+                                    }} className="w-full rounded-lg border border-border bg-surface py-2 pl-3 pr-10">
                                         <option value="">Select an approved document</option>
                                         {approvedDocuments.map((document) => <option key={document.id} value={document.id} disabled={document.disabled}>{document.title} · {document.document_type ?? 'Document'}{document.status === 'registered' ? ' (Previously registered; reusable)' : ''}</option>)}
                                     </select>
-                                    <p className="mt-1 text-xs text-slate-500">Each submission creates a new tracking record from this approved document. Release the new record to the intended office.</p>
+                                    <p className="mt-1 text-xs text-muted">Each submission creates a new tracking record from this approved document. Release the new record to the intended office.</p>
                                 </div>}
-                                <label className="mb-1 block text-sm font-medium text-slate-700">Title</label>
+                                <label className="mb-1 block text-sm font-medium text-foreground">Title</label>
                                 <input
                                     value={form.title}
                                     onChange={(e) => setForm({ ...form, title: e.target.value })}
                                     required
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                                    className="w-full rounded-lg border border-border px-3 py-2"
                                 />
                             </div>
 
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <div>
-                                    <label className="mb-1 block text-sm font-medium text-slate-700">Action Type</label>
-                                    <select value={form.action_type_id} onChange={(event) => setForm({ ...form, action_type_id: event.target.value, other_action: '' })} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10">
+                                    <label className="mb-1 block text-sm font-medium text-foreground">Action Type</label>
+                                    <select value={form.action_type_id} onChange={(event) => setForm({ ...form, action_type_id: event.target.value, other_action: '' })} className="w-full rounded-lg border border-border bg-surface py-2 pl-3 pr-10">
                                         <option value="">Select action type</option>
                                         {actionTypes.map((action) => <option key={`${action.source ?? 'new'}-${action.id}`} value={action.id}>{action.name}</option>)}
                                     </select>
                                 </div>
                                 {isOtherAction(form.action_type_id) && (
                                     <div>
-                                        <label className="mb-1 block text-sm font-medium text-slate-700">Please specify <span className="text-rose-600">*</span></label>
-                                        <input value={form.other_action} onChange={(event) => setForm({ ...form, other_action: event.target.value })} required maxLength={255} className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+                                        <label className="mb-1 block text-sm font-medium text-foreground">Please specify <span className="text-danger">*</span></label>
+                                        <input value={form.other_action} onChange={(event) => setForm({ ...form, other_action: event.target.value })} required maxLength={255} className="w-full rounded-lg border border-border px-3 py-2" />
                                     </div>
                                 )}
                                 <div>
-                                    <label htmlFor="document-type-select" className="mb-1 block text-sm font-medium text-slate-700">Document Type</label>
-                                    <select id="document-type-select" value={form.document_type_id} onChange={(event) => setForm({ ...form, document_type_id: event.target.value, other_document_type: '' })} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10">
+                                    <label htmlFor="document-type-select" className="mb-1 block text-sm font-medium text-foreground">Document Type</label>
+                                    <select id="document-type-select" value={form.document_type_id} onChange={(event) => setForm({ ...form, document_type_id: event.target.value, other_document_type: '' })} className="w-full rounded-lg border border-border bg-surface py-2 pl-3 pr-10">
                                         <option value="">Select document type</option>
                                         {documentTypes.map((option) => <option key={`${option.source ?? 'new'}-${option.id}`} value={option.id}>{option.name}</option>)}
                                     </select>
                                 </div>
                                 {isOtherOption(form.document_type_id, documentTypes) && (
                                     <div>
-                                        <label htmlFor="document-type-other" className="mb-1 block text-sm font-medium text-slate-700">Please specify <span className="text-rose-600">*</span></label>
-                                        <input id="document-type-other" value={form.other_document_type} onChange={(event) => setForm({ ...form, other_document_type: event.target.value })} required maxLength={255} className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+                                        <label htmlFor="document-type-other" className="mb-1 block text-sm font-medium text-foreground">Please specify <span className="text-danger">*</span></label>
+                                        <input id="document-type-other" value={form.other_document_type} onChange={(event) => setForm({ ...form, other_document_type: event.target.value })} required maxLength={255} className="w-full rounded-lg border border-border px-3 py-2" />
                                     </div>
                                 )}
                                 <div>
-                                    <label className="mb-1 block text-sm font-medium text-slate-700">Origin Type</label>
-                                    <select value={form.origin_type} onChange={(e) => setForm({ ...form, origin_type: e.target.value })} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10">
+                                    <label className="mb-1 block text-sm font-medium text-foreground">Origin Type</label>
+                                    <select value={form.origin_type} onChange={(e) => setForm({ ...form, origin_type: e.target.value })} className="w-full rounded-lg border border-border bg-surface py-2 pl-3 pr-10">
                                         <option value="">Select origin type</option>
                                         <option value="Internal">Internal</option>
                                         <option value="External">External</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label htmlFor="purpose-type-select" className="mb-1 block text-sm font-medium text-slate-700">Purpose</label>
-                                    <select id="purpose-type-select" value={form.purpose_type_id} onChange={(event) => setForm({ ...form, purpose_type_id: event.target.value, other_purpose: '' })} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10">
+                                    <label htmlFor="purpose-type-select" className="mb-1 block text-sm font-medium text-foreground">Purpose</label>
+                                    <select id="purpose-type-select" value={form.purpose_type_id} onChange={(event) => setForm({ ...form, purpose_type_id: event.target.value, other_purpose: '' })} className="w-full rounded-lg border border-border bg-surface py-2 pl-3 pr-10">
                                         <option value="">Select purpose</option>
                                         {purposeTypes.map((option) => <option key={`${option.source ?? 'new'}-${option.id}`} value={option.id}>{option.name}</option>)}
                                     </select>
                                 </div>
                                 {isOtherOption(form.purpose_type_id, purposeTypes) && (
                                     <div>
-                                        <label htmlFor="purpose-type-other" className="mb-1 block text-sm font-medium text-slate-700">Please specify <span className="text-rose-600">*</span></label>
-                                        <input id="purpose-type-other" value={form.other_purpose} onChange={(event) => setForm({ ...form, other_purpose: event.target.value })} required maxLength={255} className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+                                        <label htmlFor="purpose-type-other" className="mb-1 block text-sm font-medium text-foreground">Please specify <span className="text-danger">*</span></label>
+                                        <input id="purpose-type-other" value={form.other_purpose} onChange={(event) => setForm({ ...form, other_purpose: event.target.value })} required maxLength={255} className="w-full rounded-lg border border-border px-3 py-2" />
                                     </div>
                                 )}
                             </div>
 
                             <div>
-                                <label className="mb-1 block text-sm font-medium text-slate-700">Remarks</label>
+                                <label className="mb-1 block text-sm font-medium text-foreground">Remarks</label>
                                 <textarea
                                     value={form.remarks}
                                     onChange={(e) => setForm({ ...form, remarks: e.target.value })}
                                     rows={4}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                                    className="w-full rounded-lg border border-border px-3 py-2"
                                 />
                             </div>
 
                             {form.document_source === 'upload' && <div>
-                                <label className="mb-1 block text-sm font-medium text-slate-700">File (optional)</label>
-                                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => { setForm({ ...form, file: e.target.files?.[0] ?? null }); setUploadError(''); }} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-                                <p className="mt-1 text-xs text-slate-500">PDF, JPG, PNG, DOC, or DOCX. Maximum file size: {uploadLimitKb / 1024} MB.</p>
-                                {uploadError && <p role="alert" className="mt-1 text-sm text-rose-700">{uploadError}</p>}
+                                <label className="mb-1 block text-sm font-medium text-foreground">File (optional)</label>
+                                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => { setForm({ ...form, file: e.target.files?.[0] ?? null }); setUploadError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
+                                <p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Maximum file size: {uploadLimitKb / 1024} MB.</p>
+                                {uploadError && <p role="alert" className="mt-1 text-sm text-danger">{uploadError}</p>}
                             </div>}
                             <div className="flex flex-wrap gap-5">
-                                <label className="inline-flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={form.urgent} onChange={(e) => setForm({ ...form, urgent: e.target.checked })} /> Mark as urgent</label>
-                                <label className="inline-flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={form.notify_by_email} onChange={(e) => setForm({ ...form, notify_by_email: e.target.checked })} /> Email me</label>
+                                <label className="inline-flex items-center gap-2 text-sm text-foreground"><input type="checkbox" checked={form.urgent} onChange={(e) => setForm({ ...form, urgent: e.target.checked })} /> Mark as urgent</label>
+                                <label className="inline-flex items-center gap-2 text-sm text-foreground"><input type="checkbox" checked={form.notify_by_email} onChange={(e) => setForm({ ...form, notify_by_email: e.target.checked })} /> Email me</label>
                             </div>
 
-                            <div className="flex justify-end gap-2">
+                            <div className="sticky bottom-0 -mx-5 flex flex-wrap justify-end gap-2 border-t border-border bg-surface px-5 py-4 sm:-mx-6 sm:px-6">
                                 <button
                                     type="button"
-                                    onClick={closeModal}
-                                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+                                    onClick={requestCloseForm}
+                                    className="dots-button-secondary"
                                 >
                                     Cancel
                                 </button>
 
-                                <button type="submit" name="is_finalized" value="0" className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">Save Draft</button>
-                                <button type="submit" name="is_finalized" value="1" className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700">Finalize</button>
+                                <button type="submit" name="is_finalized" value="0" className="dots-button-secondary">Save Draft</button>
+                                <button type="submit" name="is_finalized" value="1" className="dots-button-primary">Finalize</button>
                             </div>
+                            </fieldset>
                         </form>
                     </div>
-                </div>
-            )}
+                )}
+            </WorkspaceDialog>
 
+            {crudAlert && <CrudAlertModal {...crudAlert} onClose={() => setCrudAlert(null)} />}
             {printDocument && <DispositionPrintView document={printDocument} />}
         </AuthenticatedLayout>
     );

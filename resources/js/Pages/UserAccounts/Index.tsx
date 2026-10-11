@@ -1,4 +1,5 @@
 import axios from 'axios';
+import WorkspaceAlert from '@/Components/WorkspaceAlert';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import { FormEvent, useMemo, useRef, useState } from 'react';
@@ -70,6 +71,7 @@ export default function UserAccountsIndex({
     const [lookupBusy, setLookupBusy] = useState(false);
     const [lookupError, setLookupError] = useState('');
     const [officeTableId, setOfficeTableId] = useState('');
+    const [successAlert, setSuccessAlert] = useState<{ title: string; message: string } | null>(null);
     const lookupVersion = useRef(0);
 
     const resetLookup = () => {
@@ -152,7 +154,13 @@ export default function UserAccountsIndex({
             isLocked: editingRow ? form.isLocked : undefined,
         };
         const options = {
-            onSuccess: closeModal,
+            onSuccess: () => {
+                closeModal();
+                setSuccessAlert({
+                    title: editingRow ? 'User account updated' : 'User account created',
+                    message: editingRow ? 'User account updated successfully.' : 'User account created successfully.',
+                });
+            },
             onError: (validationErrors: Record<string, string>) => setErrors(validationErrors),
             onFinish: () => setProcessing(false),
         };
@@ -166,44 +174,42 @@ export default function UserAccountsIndex({
     };
 
     const sortButton = (label: string, key: SortKey) => (
-        <button type="button" onClick={() => toggleSort(key)} className="flex items-center gap-1 font-semibold hover:text-sky-700">
-            {label}{sortKey === key ? (sortDirection === 'asc' ? <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" />) : <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" />}
+        <button type="button" onClick={() => toggleSort(key)} className="flex items-center gap-1 font-semibold text-muted hover:text-primary">
+            {label}{sortKey === key ? (sortDirection === 'asc' ? <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" />) : <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5 text-muted" />}
         </button>
     );
 
     return (
-        <AuthenticatedLayout header={<div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Administration</p><h1 className="text-2xl font-bold tracking-tight text-[#171717] sm:text-3xl">User Accounts</h1></div>}>
+        <AuthenticatedLayout header={<h1 className="text-2xl font-semibold tracking-tight text-foreground">User Accounts</h1>}>
             <Head title="User Accounts" />
-            <div className="mx-auto max-w-[1440px] space-y-5 rounded-2xl border border-[#e2e2df] bg-white p-5 shadow-sm print:border-0 print:shadow-none sm:p-6">
-                {flash.success && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{flash.success}</p>}
-                {flash.warning && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{flash.warning}</p>}
+            <div className="mx-auto max-w-[1440px] space-y-5 print:border-0 print:shadow-none">
+                {flash.warning && <p role="alert" className="rounded-lg bg-warning-soft p-3 text-sm text-warning">{flash.warning}</p>}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                        <h2 className="text-xl font-semibold tracking-tight text-[#171717]">System users</h2>
-                        <p className="mt-1 text-sm text-[#73736e]">Manage access, office assignments, and account status.</p>
+                        <p className="text-sm text-muted">Manage access, office assignments, and account status.</p>
                     </div>
                     <div className="flex gap-2 print:hidden">
-                        <button type="button" onClick={() => window.print()} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">Print</button>
-                        <button type="button" onClick={() => { closeModal(); setAccountType('employee'); setLookupOpen(true); setIsCreateOpen(true); }} className="h-11 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700">New User</button>
+                        <button type="button" onClick={() => window.print()} className="dots-button-secondary">Print</button>
+                        <button type="button" onClick={() => { closeModal(); setAccountType('employee'); setLookupOpen(true); setIsCreateOpen(true); }} className="dots-button-primary">New user</button>
                     </div>
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-                    <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search users..." className="w-full max-w-sm rounded-md border-slate-300 text-sm" />
-                    <label className="text-sm text-slate-600">Rows per page{' '}
-                        <select value={perPage} onChange={(event) => { setPerPage(Number(event.target.value)); setPage(1); }} className="ml-2 rounded-md border-slate-300 text-sm">
+                    <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search users..." aria-label="Search users" className="h-10 w-full max-w-sm rounded-lg border-border bg-surface text-sm" />
+                    <label className="text-sm text-muted">Rows per page{' '}
+                        <select value={perPage} onChange={(event) => { setPerPage(Number(event.target.value)); setPage(1); }} className="ml-2 h-10 rounded-lg border-border bg-surface text-sm">
                             {[10, 25, 50].map((count) => <option key={count} value={count}>{count}</option>)}
                         </select>
                     </label>
                 </div>
 
-                <section className="overflow-hidden rounded-2xl border border-[#e2e2df] bg-white shadow-sm">
-                    <div className="flex items-center justify-between border-b border-[#e8e8e4] bg-[#fafaf8] px-5 py-3 text-sm text-slate-600">
+                <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+                    <div className="flex items-center justify-between border-b border-border bg-background px-5 py-3 text-sm text-muted">
                         <span>{visibleUsers.length} {visibleUsers.length === 1 ? 'user' : 'users'}</span>
                     </div>
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto" role="region" aria-label="User accounts table; scroll horizontally for more columns" tabIndex={0}>
                     <table className="min-w-full text-left text-sm">
-                        <thead className="bg-[#f7f8fa] text-[#555752]"><tr>
+                        <thead className="bg-background text-muted"><tr>
                             <th className="px-4 py-3 font-semibold">{sortButton('Name', 'name')}</th>
                             <th className="px-4 py-3 font-semibold">{sortButton('Username', 'username')}</th>
                             <th className="px-4 py-3 font-semibold">{sortButton('Email', 'email')}</th>
@@ -213,96 +219,97 @@ export default function UserAccountsIndex({
                             <th className="px-4 py-3 font-semibold print:hidden">Actions</th>
                         </tr></thead>
                         <tbody>
-                            {pageUsers.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">No users found.</td></tr> : pageUsers.map((user) => (
-                                <tr key={`${user.source}:${user.id}`} className="border-t border-[#eeeeeb] transition-colors hover:bg-[#fafaf8]">
-                                    <td className="px-4 py-3 font-medium text-slate-800">{user.name}</td>
-                                    <td className="px-4 py-3 text-slate-600">{user.username || '—'}</td>
-                                    <td className="px-4 py-3 text-slate-600">{user.email}</td>
-                                    <td className="px-4 py-3 text-slate-600">{user.role || '—'}</td>
-                                    <td className="px-4 py-3 text-slate-600">{user.office_name || 'No office'}</td>
+                            {pageUsers.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-muted">No users found.</td></tr> : pageUsers.map((user) => (
+                                <tr key={`${user.source}:${user.id}`} className="border-t border-border transition-colors hover:bg-background">
+                                    <td className="px-4 py-3 font-medium text-foreground">{user.name}</td>
+                                    <td className="px-4 py-3 text-muted">{user.username || '—'}</td>
+                                    <td className="px-4 py-3 text-muted">{user.email}</td>
+                                    <td className="px-4 py-3 text-muted">{user.role || '—'}</td>
+                                    <td className="px-4 py-3 text-muted">{user.office_name || 'No office'}</td>
                                     <td className="px-4 py-3">
-                                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${user.account_status === 'Active' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200' : user.account_status === 'Pending' ? 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200' : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'}`}>
+                                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${user.account_status === 'Active' ? 'bg-success-soft text-success' : user.account_status === 'Pending' ? 'bg-warning-soft text-warning' : 'bg-secondary text-muted'}`}>
                                             {user.account_status}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 print:hidden">
-                                        <button type="button" onClick={() => openEdit(user)} disabled={user.source === 'Legacy DB'} title={user.source === 'Legacy DB' ? 'Legacy accounts are read-only' : undefined} className={`rounded-md px-3 py-1.5 text-xs font-medium ${user.source === 'Legacy DB' ? 'cursor-not-allowed bg-slate-300 text-slate-500' : 'bg-sky-600 text-white hover:bg-sky-700'}`}>Edit</button>
+                                        <button type="button" onClick={() => openEdit(user)} disabled={user.source === 'Legacy DB'} title={user.source === 'Legacy DB' ? 'Legacy accounts are read-only' : undefined} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${user.source === 'Legacy DB' ? 'cursor-not-allowed bg-secondary text-muted' : 'bg-primary text-primary-foreground hover:bg-primary-hover'}`}>Edit</button>
                                     </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
                     </div>
-                    <div className="flex flex-col gap-3 border-t border-[#e8e8e4] bg-[#fafaf8] px-5 py-4 sm:flex-row sm:items-center sm:justify-between print:hidden">
-                        <span className="text-sm text-slate-600">{visibleUsers.length === 0 ? '0 users' : `${(page - 1) * perPage + 1}–${Math.min(page * perPage, visibleUsers.length)} of ${visibleUsers.length} users`}</span>
+                    <div className="flex flex-col gap-3 border-t border-border bg-background px-5 py-4 sm:flex-row sm:items-center sm:justify-between print:hidden">
+                        <span className="text-sm text-muted">{visibleUsers.length === 0 ? '0 users' : `${(page - 1) * perPage + 1}–${Math.min(page * perPage, visibleUsers.length)} of ${visibleUsers.length} users`}</span>
                         <div className="flex items-center gap-2">
-                            <button type="button" disabled={page <= 1} onClick={() => setPage((prev) => Math.max(prev - 1, 1))} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
-                            <span className="text-sm text-slate-600">Page {page} of {pageCount}</span>
-                            <button type="button" disabled={page >= pageCount} onClick={() => setPage((prev) => Math.min(prev + 1, pageCount))} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+                            <button type="button" disabled={page <= 1} onClick={() => setPage((prev) => Math.max(prev - 1, 1))} className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                            <span className="text-sm text-muted">Page {page} of {pageCount}</span>
+                            <button type="button" disabled={page >= pageCount} onClick={() => setPage((prev) => Math.min(prev + 1, pageCount))} className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50">Next</button>
                         </div>
                     </div>
                 </section>
             </div>
 
-            {(isCreateOpen || editingRow) && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4 print:hidden" role="dialog" aria-modal="true" aria-labelledby="user-account-modal-title">
-                <form onSubmit={submit} className="my-8 max-h-[calc(100vh-2rem)] w-full max-w-2xl space-y-4 overflow-y-auto rounded-2xl border border-[#e2e2df] bg-white p-6 shadow-2xl">
-                    <div className="flex items-center justify-between"><h3 id="user-account-modal-title" className="text-lg font-semibold text-slate-800">{editingRow ? 'Edit User Account' : 'New User Account'}</h3><button type="button" onClick={closeModal} className="text-slate-500">Close</button></div>
+            {(isCreateOpen || editingRow) && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-foreground/40 p-4 print:hidden" role="dialog" aria-modal="true" aria-labelledby="user-account-modal-title">
+                <form onSubmit={submit} className="my-8 max-h-[calc(100vh-2rem)] w-full max-w-2xl space-y-4 overflow-y-auto rounded-xl border border-border bg-surface p-5 shadow-2xl sm:p-6">
+                    <div className="flex items-center justify-between border-b border-border pb-3"><h3 id="user-account-modal-title" className="text-lg font-semibold text-foreground">{editingRow ? 'Edit User Account' : 'New User Account'}</h3><button type="button" onClick={closeModal} className="rounded-lg px-3 py-2 text-sm text-muted hover:bg-secondary hover:text-foreground">Close</button></div>
                     {!editingRow && accountType === 'employee' && <div className="space-y-4">
-                        {(!lookup || lookupOpen) && <div className="space-y-3 rounded-xl border p-4">
-                            <div className="flex items-end gap-2"><div className="flex-1"><Field label="Employee Code"><input value={employeeCode} onChange={(e) => setEmployeeCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (employeeCode.trim() && !lookupBusy) void searchEmployee(); } }} placeholder="Enter employee code" className="w-full rounded-md border-slate-300" /></Field></div>
-                                <button type="button" disabled={lookupBusy || !employeeCode.trim()} onClick={() => void searchEmployee()} className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{lookupBusy ? 'Searching...' : 'Search'}</button>
+                        {(!lookup || lookupOpen) && <div className="space-y-3 rounded-xl border border-border bg-background p-4">
+                            <div className="flex items-end gap-2"><div className="flex-1"><Field label="Employee Code"><input value={employeeCode} onChange={(e) => setEmployeeCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (employeeCode.trim() && !lookupBusy) void searchEmployee(); } }} placeholder="Enter employee code" className="w-full rounded-lg border-border bg-surface" /></Field></div>
+                                <button type="button" disabled={lookupBusy || !employeeCode.trim()} onClick={() => void searchEmployee()} className="dots-button-primary disabled:opacity-50">{lookupBusy ? 'Searching...' : 'Search'}</button>
                             </div>
-                            {lookupError && <p role="alert" className="text-sm text-red-600">{lookupError}</p>}
+                            {lookupError && <p role="alert" className="text-sm text-danger">{lookupError}</p>}
                         </div>}
                         {lookup && !lookupOpen && <>
-                            <button type="button" disabled={processing || lookupBusy} onClick={() => { setLookupOpen(true); setLookupError(''); }} className="self-start rounded-lg border px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50">Search another employee</button>
-                            <dl className="grid gap-3 rounded-xl bg-sky-50 p-4 text-sm sm:grid-cols-2">
+                            <button type="button" disabled={processing || lookupBusy} onClick={() => { setLookupOpen(true); setLookupError(''); }} className="self-start rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary disabled:opacity-50">Search another employee</button>
+                            <dl className="grid gap-3 rounded-xl bg-secondary p-4 text-sm sm:grid-cols-2">
                                 {[
                                     ['Employee Code', lookup.employee.employee_code],
                                     ['First Name', lookup.employee.first_name], ['Middle Name', lookup.employee.middle_name],
                                     ['Last Name', lookup.employee.last_name], ['Extension Name', lookup.employee.ext_name],
                                     ['Username', lookup.employee.username],
-                                ].map(([label, value]) => <div key={label}><dt className="text-slate-500">{label}</dt><dd className="mt-1 font-medium text-slate-800">{value || '—'}</dd></div>)}
+                                ].map(([label, value]) => <div key={label}><dt className="text-muted">{label}</dt><dd className="mt-1 font-medium text-foreground">{value || '—'}</dd></div>)}
                             </dl>
-                            <p className="text-sm text-slate-600">HRIS division: {lookup.employee.division || lookup.employee.division_code || 'Not provided'}. Select the employee’s assigned office below.</p>
+                            <p className="text-sm text-muted">HRIS division: {lookup.employee.division || lookup.employee.division_code || 'Not provided'}. Select the employee’s assigned office below.</p>
                             <div className="grid gap-3 sm:grid-cols-2">
-                                <Field label="Assigned office"><select required aria-label="Assigned office" value={officeTableId} onChange={(event) => setOfficeTableId(event.target.value)} className="w-full rounded-md border-slate-300">
+                                <Field label="Assigned office"><select required aria-label="Assigned office" value={officeTableId} onChange={(event) => setOfficeTableId(event.target.value)} className="w-full rounded-lg border-border bg-surface">
                                     <option value="">Select existing office</option>
                                     {officeTableOptions.map((office) => <option key={office.id} value={office.id}>{office.name}{office.code ? ` (${office.code})` : ''} — {office.range_name || 'No range assigned'}</option>)}
                                 </select></Field>
-                                <Field label="Range"><input aria-label="Range" readOnly value={selectedOffice ? selectedOffice.range_name || 'No range assigned' : ''} className="w-full rounded-md border-slate-300 bg-slate-50 text-slate-700" /></Field>
+                                <Field label="Range"><input aria-label="Range" readOnly value={selectedOffice ? selectedOffice.range_name || 'No range assigned' : ''} className="w-full rounded-lg border-border bg-background text-muted" /></Field>
                             </div>
-                            {selectedOffice && !selectedOffice.range_name && <p role="alert" className="text-sm text-amber-800">Assign a range to this office in the Offices module before creating the account.</p>}
-                            {errors.office_table_id && <p className="text-xs text-red-600">{errors.office_table_id}</p>}
+                            {selectedOffice && !selectedOffice.range_name && <p role="alert" className="text-sm text-warning">Assign a range to this office in the Offices module before creating the account.</p>}
+                            {errors.office_table_id && <p className="text-xs text-danger">{errors.office_table_id}</p>}
                             <div className="grid gap-4 sm:grid-cols-2">
-                                <Field label="Email" error={errors.email}><input required type="email" maxLength={255} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
-                                <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option><option value="Super Admin">Super Admin</option><option value="Executive">Executive</option><option value="Admin Staff">Admin Staff</option></select></Field>
+                                <Field label="Email" error={errors.email}><input required type="email" maxLength={255} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-lg border-border bg-surface" /></Field>
+                                <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-lg border-border bg-surface"><option value="">Select role</option><option value="Super Admin">Super Admin</option><option value="Executive">Executive</option><option value="Admin Staff">Admin Staff</option></select></Field>
                             </div>
                             {/* <p className="text-xs text-slate-500">Login details will be sent to this email.</p> */}
                         </>}
                     </div>}
                     {(editingRow || accountType === 'dots') && <div className="grid gap-4 sm:grid-cols-2">
-                        <Field label="First Name" error={errors.firstname}><input required value={form.firstname} onChange={(e) => setForm({ ...form, firstname: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
-                        <Field label="Last Name" error={errors.lastname}><input required value={form.lastname} onChange={(e) => setForm({ ...form, lastname: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
-                        <Field label="Username" error={errors.username}><input required maxLength={50} disabled={!!editingRow?.username} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="w-full rounded-md border-slate-300 disabled:bg-slate-100" /></Field>
-                        {editingRow && <Field label="Email" error={errors.email}><input required={!editingRow} type="email" maxLength={255} disabled={!!editingRow} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-md border-slate-300 disabled:bg-slate-100" /></Field>}
-                        {editingRow?.employee_code ? <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option><option value="Super Admin">Super Admin</option><option value="Executive">Executive</option><option value="Admin Staff">Admin Staff</option></select></Field> : <Field label="Role" error={errors.role_id}><select required value={form.role_id} onChange={(e) => setForm({ ...form, role_id: e.target.value })} className="w-full rounded-md border-slate-300"><option value="">Select role</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></Field>}
-                        <Field label="Office" error={errors.officeId}>{editingRow?.employee_code && !editingRow.office_id ? <p className="rounded-md border bg-slate-50 p-2">{editingRow.office_name}</p> : <select required value={form.officeId} onChange={(e) => { setErrors({}); setForm({ ...form, officeId: e.target.value, email: accountType === 'dots' ? offices.find((office) => String(office.id) === e.target.value)?.email ?? '' : form.email }); }} className="w-full rounded-md border-slate-300"><option value="">Select office</option>{officeOptions.map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}</select>}</Field>
-                        {!editingRow && accountType === 'dots' && form.officeId && <p className="text-sm text-slate-600 sm:col-span-2">{form.email ? <>Login details will be sent to <span className="font-medium">{form.email}</span>.</> : <span className="text-red-600">The selected office has no email address. Update the office email before creating an account.</span>}</p>}
-                        {editingRow && <Field label="Account Status" error={errors.status}><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full rounded-md border-slate-300"><option value="1">Active</option><option value="0">Inactive</option></select></Field>}
-                        {editingRow && <Field label="Login Status" error={errors.isLocked}><select value={form.isLocked} onChange={(e) => setForm({ ...form, isLocked: e.target.value })} className="w-full rounded-md border-slate-300"><option value="N">Unlocked</option><option value="Y">Locked</option></select></Field>}
-                        {editingRow && <><Field label="New password (optional)" error={errors.password}><input type="password" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full rounded-md border-slate-300" /></Field>
-                        <Field label="Confirm password" error={errors.password_confirmation}><input type="password" value={form.password_confirmation} onChange={(e) => setForm({ ...form, password_confirmation: e.target.value })} className="w-full rounded-md border-slate-300" /></Field></>}
+                        <Field label="First Name" error={errors.firstname}><input required value={form.firstname} onChange={(e) => setForm({ ...form, firstname: e.target.value })} className="w-full rounded-lg border-border bg-surface" /></Field>
+                        <Field label="Last Name" error={errors.lastname}><input required value={form.lastname} onChange={(e) => setForm({ ...form, lastname: e.target.value })} className="w-full rounded-lg border-border bg-surface" /></Field>
+                        <Field label="Username" error={errors.username}><input required maxLength={50} disabled={!!editingRow?.username} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="w-full rounded-lg border-border bg-surface disabled:bg-background" /></Field>
+                        {editingRow && <Field label="Email" error={errors.email}><input required={!editingRow} type="email" maxLength={255} disabled={!!editingRow} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-lg border-border bg-surface disabled:bg-background" /></Field>}
+                        {editingRow?.employee_code ? <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-lg border-border bg-surface"><option value="">Select role</option><option value="Super Admin">Super Admin</option><option value="Executive">Executive</option><option value="Admin Staff">Admin Staff</option></select></Field> : <Field label="Role" error={errors.role_id}><select required value={form.role_id} onChange={(e) => setForm({ ...form, role_id: e.target.value })} className="w-full rounded-lg border-border bg-surface"><option value="">Select role</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></Field>}
+                        <Field label="Office" error={errors.officeId}>{editingRow?.employee_code && !editingRow.office_id ? <p className="rounded-lg border border-border bg-background p-2">{editingRow.office_name}</p> : <select required value={form.officeId} onChange={(e) => { setErrors({}); setForm({ ...form, officeId: e.target.value, email: accountType === 'dots' ? offices.find((office) => String(office.id) === e.target.value)?.email ?? '' : form.email }); }} className="w-full rounded-lg border-border bg-surface"><option value="">Select office</option>{officeOptions.map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}</select>}</Field>
+                        {!editingRow && accountType === 'dots' && form.officeId && <p className="text-sm text-muted sm:col-span-2">{form.email ? <>Login details will be sent to <span className="font-medium text-foreground">{form.email}</span>.</> : <span className="text-danger">The selected office has no email address. Update the office email before creating an account.</span>}</p>}
+                        {editingRow && <Field label="Account Status" error={errors.status}><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full rounded-lg border-border bg-surface"><option value="1">Active</option><option value="0">Inactive</option></select></Field>}
+                        {editingRow && <Field label="Login Status" error={errors.isLocked}><select value={form.isLocked} onChange={(e) => setForm({ ...form, isLocked: e.target.value })} className="w-full rounded-lg border-border bg-surface"><option value="N">Unlocked</option><option value="Y">Locked</option></select></Field>}
+                        {editingRow && <><Field label="New password (optional)" error={errors.password}><input type="password" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full rounded-lg border-border bg-surface" /></Field>
+                        <Field label="Confirm password" error={errors.password_confirmation}><input type="password" value={form.password_confirmation} onChange={(e) => setForm({ ...form, password_confirmation: e.target.value })} className="w-full rounded-lg border-border bg-surface" /></Field></>}
                     </div>}
-                    {Object.entries(errors).filter(([key]) => !['firstname', 'lastname', 'role_id', 'officeId', 'office_table_id', 'password', 'password_confirmation', 'status', 'isLocked', 'user'].includes(key)).map(([key, message]) => <p key={key} className="text-sm text-red-600">{message}</p>)}
-                    {errors.user && <p className="text-sm text-red-600">{errors.user}</p>}
-                    <div className="flex justify-end gap-2 border-t pt-4"><button type="button" onClick={closeModal} className="rounded-md border px-4 py-2 text-sm">Cancel</button><button disabled={processing || (!editingRow && (!accountType || (accountType === 'dots' && !form.email) || (accountType === 'employee' && (!lookup || lookupOpen || lookupBusy || !selectedOffice?.range_name || !officeTableId || !form.employee_role || !form.email))))} className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{processing ? 'Saving...' : 'Save account'}</button></div>
+                    {Object.entries(errors).filter(([key]) => !['firstname', 'lastname', 'role_id', 'officeId', 'office_table_id', 'password', 'password_confirmation', 'status', 'isLocked', 'user'].includes(key)).map(([key, message]) => <p key={key} className="text-sm text-danger">{message}</p>)}
+                    {errors.user && <p className="text-sm text-danger">{errors.user}</p>}
+                    <div className="flex justify-end gap-2 border-t border-border pt-4"><button type="button" onClick={closeModal} className="dots-button-secondary">Cancel</button><button disabled={processing || (!editingRow && (!accountType || (accountType === 'dots' && !form.email) || (accountType === 'employee' && (!lookup || lookupOpen || lookupBusy || !selectedOffice?.range_name || !officeTableId || !form.employee_role || !form.email))))} className="dots-button-primary disabled:opacity-50">{processing ? 'Saving...' : 'Save account'}</button></div>
                 </form>
             </div>}
+            {successAlert && <WorkspaceAlert {...successAlert} onClose={() => setSuccessAlert(null)} />}
         </AuthenticatedLayout>
     );
 }
 
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-    return <label className="space-y-1 text-sm text-slate-700"><span className="block">{label}</span>{children}{error && <span className="block text-xs text-red-600">{error}</span>}</label>;
+    return <label className="space-y-1 text-sm font-medium text-foreground"><span className="block">{label}</span>{children}{error && <span className="block text-xs font-normal text-danger">{error}</span>}</label>;
 }

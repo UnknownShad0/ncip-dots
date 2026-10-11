@@ -84,6 +84,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('/user-accounts/{id}', [UserAccountController::class, 'update'])->name('user-accounts.update');
     });
 
+    Route::get('/connected-systems', fn () => \Inertia\Inertia::render('ConnectedSystems/Index'))->name('connected-systems.index');
     Route::get('/drip', [IntegrationController::class, 'drip'])->name('drip.index');
     Route::get('/ipluma', [IplumaController::class, 'index'])->name('ipluma.index');
     Route::get('/pdmis', [IntegrationController::class, 'pdmis'])->name('pdmis.index');

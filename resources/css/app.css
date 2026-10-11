@@ -19,3 +19,41 @@
         background-attachment: scroll;
     }
 }
+
+/* DOTS theme: edit these RGB values to recolor the workspace. */
+:root {
+    --color-primary: 24 59 86;
+    --color-primary-hover: 16 43 64;
+    --color-primary-foreground: 255 255 255;
+    --color-secondary: 234 240 245;
+    --color-tertiary: 184 135 46;
+    --color-background: 246 247 248;
+    --color-surface: 255 255 255;
+    --color-foreground: 32 42 53;
+    --color-muted: 102 113 126;
+    --color-border: 226 230 234;
+    --color-success: 38 115 77;
+    --color-success-soft: 232 245 237;
+    --color-warning: 148 98 0;
+    --color-warning-soft: 255 246 221;
+    --color-danger: 179 61 61;
+    --color-danger-soft: 253 237 237;
+}
+
+@layer components {
+    .dots-workspace, .dots-dialog { font-family: 'Source Sans 3', system-ui, sans-serif; }
+    .dots-workspace :is(button, a, input, select, textarea):focus-visible,
+    .dots-dialog :is(button, a, input, select, textarea):focus-visible {
+        outline: 2px solid rgb(var(--color-primary));
+        outline-offset: 3px;
+    }
+    .dots-workspace button:disabled, .dots-dialog button:disabled {
+        cursor: not-allowed;
+        opacity: .5;
+    }
+    .dots-button { @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors; }
+    .dots-button-primary { @apply dots-button bg-primary text-primary-foreground hover:bg-primary-hover; }
+    .dots-button-secondary { @apply dots-button border border-border bg-surface text-foreground hover:bg-secondary; }
+    .dots-document-table th { @apply py-3 text-xs font-semibold text-muted; }
+    .dots-document-table td { @apply py-3; }
+}
