@@ -621,7 +621,9 @@ class DocumentController extends Controller
             'other_action' => ['nullable', 'string', 'max:255'],
             'to_office_id' => ['required', 'integer', 'exists:offices,id'],
             'remarks' => ['nullable', 'string', 'max:250'],
-            'file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:'.self::MAX_DOCUMENT_UPLOAD_KB],
+            'document_source' => ['nullable', 'in:current,upload,approved'],
+            'approved_draft_id' => ['required_if:document_source,approved', 'nullable', 'integer', 'prohibited_unless:document_source,approved'],
+            'file' => ['required_if:document_source,upload', 'prohibited_if:document_source,current,approved', 'nullable', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:'.self::MAX_DOCUMENT_UPLOAD_KB],
         ]);
         $validated = $this->normalizeActionTypeDetails($validated);
         $targetOffice = Office::findOrFail($validated['to_office_id']);
@@ -640,27 +642,84 @@ class DocumentController extends Controller
         $officeId = app(DocumentAccess::class)->currentOfficeId(auth()->user());
         $sourceOfficeName = Office::query()->whereKey($officeId)->value('name');
 
-        $trail = DB::transaction(function () use ($document, $validated, $officeId, $sourceOfficeName, $targetOffice) {
-            $trail = $document->trails()->create([
-                'from_office_id' => $officeId,
-                'to_office_id' => $validated['to_office_id'],
-                'created_by' => auth()->id(),
-                'status' => 'available',
-                'action' => 'Released - '.$validated['action_type_name'].(mb_strtolower($validated['action_type_name']) === 'others' ? ': '.$validated['other_action'] : ''),
-                'remarks' => $validated['remarks'] ?? null,
-            ]);
-            $document->update(['status' => 'available']);
-            app(AuditTrailWriter::class)->record('document.released', $document, [
-                'tracking_number' => $document->tracking_number,
-                'from_office_id' => $officeId,
-                'from_office_name' => $sourceOfficeName,
-                'to_office_id' => $targetOffice->id,
-                'to_office_name' => $targetOffice->name,
-                'action_type' => $validated['action_type_name'],
-            ]);
+        $approvedPath = null;
+        try {
+            $trail = DB::transaction(function () use ($document, $validated, $officeId, $sourceOfficeName, $targetOffice, &$approvedPath) {
+                $approvedDraft = null;
+                if (($validated['document_source'] ?? null) === 'approved') {
+                    $approvedDraft = DocumentCreationDraft::query()
+                        ->whereKey($validated['approved_draft_id'])
+                        ->where('created_by', auth()->id())
+                        ->whereIn('status', ['approved', 'awaiting_verification', 'verified', 'registered'])
+                        ->lockForUpdate()
+                        ->first();
+                    if (! $approvedDraft) {
+                        throw ValidationException::withMessages([
+                            'approved_draft_id' => 'This approved document is no longer available. Choose another document.',
+                        ]);
+                    }
+                }
+                $trail = $document->trails()->create([
+                    'from_office_id' => $officeId,
+                    'to_office_id' => $validated['to_office_id'],
+                    'created_by' => auth()->id(),
+                    'status' => 'available',
+                    'action' => 'Released - '.$validated['action_type_name'].(mb_strtolower($validated['action_type_name']) === 'others' ? ': '.$validated['other_action'] : ''),
+                    'remarks' => $validated['remarks'] ?? null,
+                ]);
+                $document->update(['status' => 'available']);
+                app(AuditTrailWriter::class)->record('document.released', $document, [
+                    'tracking_number' => $document->tracking_number,
+                    'from_office_id' => $officeId,
+                    'from_office_name' => $sourceOfficeName,
+                    'to_office_id' => $targetOffice->id,
+                    'to_office_name' => $targetOffice->name,
+                    'action_type' => $validated['action_type_name'],
+                ]);
 
-            return $trail;
-        });
+                if ($approvedDraft) {
+                    $pdf = Pdf::loadHTML($this->approvedDraftHtml($approvedDraft))->setPaper('letter')->output();
+                    $approvedPath = 'documents/versions/'.Str::uuid().'.pdf';
+                    if (! Storage::disk('public')->put($approvedPath, $pdf)) {
+                        throw new \RuntimeException('Could not save the approved document version.');
+                    }
+                    $document->files()->create([
+                        'document_trail_id' => $trail->id,
+                        'type' => 'version',
+                        'file_name' => basename($approvedPath),
+                        'original_name' => $approvedDraft->title.'.pdf',
+                        'file_path' => $approvedPath,
+                        'mime_type' => 'application/pdf',
+                        'size_bytes' => strlen($pdf),
+                        'uploaded_by' => auth()->id(),
+                    ]);
+                    $metadata = [
+                        'document_id' => $document->id,
+                        'tracking_number' => $document->tracking_number,
+                        'document_trail_id' => $trail->id,
+                        'approved_draft_id' => $approvedDraft->id,
+                        'approved_draft_title' => $approvedDraft->title,
+                        'approved_draft_version' => $approvedDraft->version_number,
+                        'file_name' => $approvedDraft->title.'.pdf',
+                        'type' => 'version',
+                    ];
+                    $approvedDraft->events()->create([
+                        'user_id' => auth()->id(),
+                        'event' => 'Used in document forwarding',
+                        'metadata' => $metadata,
+                    ]);
+                    app(AuditTrailWriter::class)->record('document.version_added', $document, $metadata);
+                }
+
+                return $trail;
+            });
+
+        } catch (\Throwable $exception) {
+            if ($approvedPath) {
+                Storage::disk('public')->delete($approvedPath);
+            }
+            throw $exception;
+        }
 
         if ($file = $request->file('file')) {
             $this->storeDocumentFile($document, $file, 'version', $trail);
@@ -866,7 +925,7 @@ class DocumentController extends Controller
                 ->whereIn('status', ['approved', 'awaiting_verification', 'verified', 'registered'])
                 ->where('created_by', auth()->id())
                 ->latest('decision_at')
-                ->get(['id', 'title', 'document_type_id'])
+                ->get(['id', 'title', 'document_type_id', 'status'])
                 ->map(fn (DocumentCreationDraft $draft) => [
                     'id' => $draft->id,
                     'title' => $draft->title,

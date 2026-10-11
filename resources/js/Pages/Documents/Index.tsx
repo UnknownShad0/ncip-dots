@@ -158,7 +158,7 @@ export default function DocumentsIndex({
     const [viewingRow, setViewingRow] = useState<DocumentItem | null>(null);
     const [printDocument, setPrintDocument] = useState<DocumentItem | null>(null);
     const [releasingRow, setReleasingRow] = useState<DocumentItem | null>(null);
-    const [releaseForm, setReleaseForm] = useState({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', file: null as File | null });
+    const [releaseForm, setReleaseForm] = useState({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', source: 'current', approvedDraftId: '', file: null as File | null });
     const [releaseError, setReleaseError] = useState('');
     const [uploadError, setUploadError] = useState('');
     const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -190,7 +190,7 @@ export default function DocumentsIndex({
 
     const closeRelease = () => {
         if (processing) return;
-        const dirty = Object.values(releaseForm).some(Boolean);
+        const dirty = releaseForm.source !== 'current' || Object.entries(releaseForm).some(([key, value]) => key !== 'source' && Boolean(value));
         if (!dirty) { setReleasingRow(null); return; }
         setCrudAlert({ title: 'Discard forwarding details?', message: 'Your unsaved changes will be lost.', confirmLabel: 'Discard changes', isDestructive: true, onConfirm: () => { setCrudAlert(null); setReleasingRow(null); } });
     };
@@ -314,12 +314,23 @@ export default function DocumentsIndex({
             return;
         }
 
+        if (releaseForm.source === 'approved' && !releaseForm.approvedDraftId) {
+            setReleaseError('Choose an approved document.');
+            return;
+        }
+        if (releaseForm.source === 'upload' && !releaseForm.file) {
+            setReleaseError('Choose a file to upload.');
+            return;
+        }
+
         const data = new FormData();
         data.append('action_type_id', releaseForm.actionTypeId);
         data.append('other_action', needsOtherAction ? releaseForm.otherAction.trim() : '');
         data.append('to_office_id', releaseForm.officeId);
         data.append('remarks', releaseForm.remarks);
-        if (releaseForm.file) data.append('file', releaseForm.file);
+        data.append('document_source', releaseForm.source);
+        if (releaseForm.source === 'upload' && releaseForm.file) data.append('file', releaseForm.file);
+        if (releaseForm.source === 'approved') data.append('approved_draft_id', releaseForm.approvedDraftId);
 
         const selectedOffice = offices.find((office) => String(office.id) === releaseForm.officeId);
         const isRelease = selectedAction?.name.trim().toLowerCase() === 'for release';
@@ -331,14 +342,14 @@ export default function DocumentsIndex({
             onFinish: () => setProcessing(false),
             onSuccess: () => {
                 setReleasingRow(null);
-                setReleaseForm({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', file: null });
+                setReleaseForm({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', source: 'current', approvedDraftId: '', file: null });
                 setReleaseError('');
                 setCrudAlert({
                     title: isRelease ? 'Document released' : 'Document forwarded',
                     message: `${documentReference} was ${isRelease ? 'released to' : 'forwarded to'} ${selectedOffice?.name || 'the receiving office'}. You can follow its progress in the document history.`,
                 });
             },
-            onError: (errors) => setReleaseError(errors.file ?? errors.other_action ?? errors.action_type_id ?? errors.to_office_id ?? errors.remarks ?? 'Could not release this document.'),
+            onError: (errors) => setReleaseError(errors.approved_draft_id ?? errors.document_source ?? errors.file ?? errors.other_action ?? errors.action_type_id ?? errors.to_office_id ?? errors.remarks ?? 'Could not release this document.'),
         });
     };
 
@@ -665,7 +676,7 @@ export default function DocumentsIndex({
                                                     <button type="button" aria-label="View document" title="View document" onClick={() => setViewingRow(document)} className="rounded-md bg-slate-100 p-2 text-foreground hover:bg-slate-200"><Eye size={15} /></button>
                                                     {document.is_finalized && <button type="button" aria-label="Print disposition form" title="Print disposition form" onClick={() => printDisposition(document)} className="rounded-md bg-indigo-50 p-2 text-indigo-700 hover:bg-indigo-100"><Printer size={15} /></button>}
                                                     {document.can_update && <button type="button" aria-label="Update draft" title="Update draft" onClick={() => openEdit(document)} className="rounded-md bg-secondary p-2 text-primary hover:bg-blue-100"><Pencil size={15} /></button>}
-                                                    {document.can_release && <button type="button" aria-label="Forward document" title="Forward document" onClick={() => { setReleasingRow(document); setReleaseForm({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', file: null }); setReleaseError(''); }} className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-3 py-2  hover:bg-slate-200"><Send size={15} /></button>}
+                                                    {document.can_release && <button type="button" aria-label="Forward document" title="Forward document" onClick={() => { setReleasingRow(document); setReleaseForm({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', source: 'current', approvedDraftId: '', file: null }); setReleaseError(''); }} className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-3 py-2  hover:bg-slate-200"><Send size={15} /></button>}
                                                     {document.can_terminal && <button type="button" aria-label="Tag as terminal" title="Tag as terminal" onClick={() => requestDocumentAction('Tag document as terminal?', `Mark ${document.tracking_number || 'this document'} as terminal?`, 'Tag as terminal', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/terminal`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document updated', message: 'Document tagged as terminal.' }) }); })} className="rounded-md bg-violet-50 p-2 text-violet-700 hover:bg-violet-100"><Archive size={15} /></button>}
                                                     {document.can_receive && <button type="button" aria-label="Receive document" title="Receive document" onClick={() => requestDocumentAction('Receive document?', `Confirm receipt of ${document.tracking_number || 'this document'}?`, 'Receive', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/receive`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document received', message: 'Document received successfully.' }) }); })} className="inline-flex items-center gap-1.5 rounded-md bg-success-soft px-3 py-2 text-success hover:bg-success/20"><Inbox size={15} /></button>}
                                                     {document.can_delete && <button type="button" aria-label="Delete draft" title="Delete draft" onClick={() => requestDocumentAction('Delete draft?', `Remove ${document.tracking_number || 'this draft'} from the active list?`, 'Delete draft', () => { setCrudAlert(null); setProcessing(true); router.delete(`/documents/${document.id}`, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Draft deleted', message: 'Document draft deleted successfully.' }) }); }, true)} className="rounded-md bg-danger-soft p-2 text-danger hover:bg-rose-100"><Trash2 size={15} /></button>}
@@ -826,9 +837,26 @@ export default function DocumentsIndex({
                                     <p className="mt-1 text-right text-xs text-muted">{releaseForm.remarks.length}/250</p>
                                 </div>
                                 <div className="sm:col-span-2">
-                                    <label htmlFor="release-file" className="mb-1 block text-sm font-medium text-foreground">Replacement or new version (optional)</label>
-                                    <input id="release-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => { setReleaseForm({ ...releaseForm, file: event.target.files?.[0] ?? null }); setReleaseError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
-                                    <p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Maximum file size: {uploadLimitKb / 1024} MB.</p>
+                                    <p className="mb-2 text-sm font-medium text-foreground">Document version</p>
+                                    <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Document version source">
+                                        {[['current', 'Keep current document'], ['upload', 'Upload new version'], ['approved', 'Use approved document']].map(([source, label]) => (
+                                            <button key={source} type="button" aria-pressed={releaseForm.source === source} onClick={() => { setReleaseForm({ ...releaseForm, source, approvedDraftId: '', file: null }); setReleaseError(''); }} className={`rounded-lg border px-3 py-2 text-sm font-medium ${releaseForm.source === source ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>{label}</button>
+                                        ))}
+                                    </div>
+                                    {releaseForm.source === 'current' && <p className="text-xs text-muted">Forward with the current document version.</p>}
+                                    {releaseForm.source === 'upload' && <>
+                                        <label htmlFor="release-file" className="mb-1 block text-sm font-medium text-foreground">New version</label>
+                                        <input id="release-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => { setReleaseForm({ ...releaseForm, file: event.target.files?.[0] ?? null }); setReleaseError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
+                                        <p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Maximum file size: {uploadLimitKb / 1024} MB.</p>
+                                    </>}
+                                    {releaseForm.source === 'approved' && <>
+                                        <label htmlFor="release-approved-document" className="mb-1 block text-sm font-medium text-foreground">Approved document <span className="text-danger">*</span></label>
+                                        <select id="release-approved-document" required value={releaseForm.approvedDraftId} onChange={(event) => { setReleaseForm({ ...releaseForm, approvedDraftId: event.target.value }); setReleaseError(''); }} className="w-full rounded-lg border border-border bg-surface py-2 pl-3 pr-10 text-sm">
+                                            <option value="">Select an approved document</option>
+                                            {approvedDocuments.map((document) => <option key={document.id} value={document.id} disabled={document.disabled}>{document.title} · {document.document_type ?? 'Document'}{document.status === 'registered' ? ' (Previously registered; reusable)' : ''}</option>)}
+                                        </select>
+                                        <p className="mt-1 text-xs text-muted">{approvedDocuments.length ? 'The selected approved document will be saved as a new version for this transaction. The tracking number, title, and previous versions stay the same.' : 'No approved documents are available for your account.'}</p>
+                                    </>}
                                 </div>
                             </section>
 

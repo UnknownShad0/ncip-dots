@@ -270,7 +270,7 @@ export default function UserAccountsIndex({
                                     ['Username', lookup.employee.username],
                                 ].map(([label, value]) => <div key={label}><dt className="text-muted">{label}</dt><dd className="mt-1 font-medium text-foreground">{value || '—'}</dd></div>)}
                             </dl>
-                            <p className="text-sm text-muted">HRIS division: {lookup.employee.division || lookup.employee.division_code || 'Not provided'}. Select the employee’s assigned office below.</p>
+                            <p className="text-sm text-muted">HRIS division: {lookup.employee.division || lookup.employee.division_code || 'Not provided'}. <br/> Select the employee’s assigned office below.</p>
                             <div className="grid gap-3 sm:grid-cols-2">
                                 <Field label="Assigned office"><select required aria-label="Assigned office" value={officeTableId} onChange={(event) => setOfficeTableId(event.target.value)} className="w-full rounded-lg border-border bg-surface">
                                     <option value="">Select existing office</option>
