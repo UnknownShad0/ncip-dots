@@ -1,6 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import CrudAlertModal from '@/Components/CrudAlertModal';
 import DashboardCharts from '@/Components/DashboardCharts';
+import ProcessingPerformanceChart, { ProcessingPerformanceRow } from '@/Components/ProcessingPerformanceChart';
 import { Head, router } from '@inertiajs/react';
 import { Archive, ArrowDownToLine, FileClock, Files, Search, Send } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -54,12 +55,14 @@ const relativeTime = (date: string | undefined, index: number) => {
 
 export default function Dashboard({
     documentTypeCounts = [],
+    processingPerformance = [],
     chartStats, canFilterCharts = false, chartOffices = [], selectedChartOfficeId = null,
     stats = {},
     recentDocuments = [],
     incomingDocuments = [],
     canReceiveDocuments = false,
 }: {
+    processingPerformance?: ProcessingPerformanceRow[];
     documentTypeCounts?: { name: string; count: number }[];
     stats?: DashboardStats;
     chartStats?: DashboardStats;
@@ -193,7 +196,7 @@ export default function Dashboard({
                             setChartError('');
                             router.get(route('dashboard'), event.target.value ? { chart_office_id: event.target.value } : {}, {
                                 preserveState: true, preserveScroll: true, replace: true,
-                                only: ['documentTypeCounts', 'chartStats', 'selectedChartOfficeId'],
+                                only: ['documentTypeCounts', 'chartStats', 'selectedChartOfficeId', 'processingPerformance'],
                                 onStart: () => setChartLoading(true), onFinish: () => setChartLoading(false),
                                 onError: () => setChartError('Could not apply this office filter. Please try again.'),
                             });
@@ -206,6 +209,8 @@ export default function Dashboard({
                     {chartError && <p role="alert" className="w-full text-sm text-red-600">{chartError}</p>}
                 </div>}
                 <DashboardCharts stats={chartStats ?? stats} documentTypes={documentTypeCounts} officeFiltered={selectedChartOfficeId !== null} />
+
+                <ProcessingPerformanceChart data={processingPerformance} />
 
                 <section aria-labelledby="creation-tasks-title" className="mb-8 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 sm:p-6">
                     <div className="mb-4 flex flex-wrap items-end justify-between gap-2">

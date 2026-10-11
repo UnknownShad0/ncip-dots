@@ -127,7 +127,7 @@ class DocumentCreationController extends Controller
             'decision_at' => null,
             'decision_remarks' => null,
         ]);
-        $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Submitted for approval', 'metadata' => ['version' => $number]]);
+        $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Submitted for approval', 'metadata' => ['version' => $number, 'approver_office_id' => $approverOffice->id]]);
 
         return back()->with('success', 'PDF version submitted for approval.');
     }

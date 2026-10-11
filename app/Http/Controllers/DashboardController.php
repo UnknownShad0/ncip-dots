@@ -92,6 +92,10 @@ class DashboardController extends Controller
 
         return Inertia::render('Dashboard', [
             'documentTypeCounts' => $charts['documentTypes'],
+            'processingPerformance' => app(\App\Services\ProcessingPerformance::class)->forOffice(
+                $canFilterCharts ? $selectedChartOfficeId : $officeId,
+                allOffices: $canFilterCharts && $selectedChartOfficeId === null,
+            ),
             'stats' => $stats,
             'chartStats' => $charts['stats'],
             'canFilterCharts' => $canFilterCharts,
