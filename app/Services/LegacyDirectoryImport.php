@@ -84,23 +84,26 @@ class LegacyDirectoryImport
 
             return $id;
         };
-        $rangeMap = $rangeNames = [];
+        $rangeMap = $rangeNames = $rangeIds = [];
         foreach ($legacy['rangeregion'] as $r) {
             $name = $normal($r->name);
             if (isset($rangeNames[$name])) {
                 throw new RuntimeException('Duplicate legacy range name.');
             }
             $rangeNames[$name] = $r->id;
+            $rangeIds[(string) $r->id] = $r->id;
             $rangeMap[$r->id] = $register('ranges', 'legacy_range_id', $r->id, [
                 'name' => $r->name, 'is_active' => in_array($normal($r->status), ['active', '1'], true),
             ], fn ($row) => $normal($row['name']) === $name);
         }
         $officeMap = [];
         foreach ($legacy['bureau'] as $b) {
-            $range = $rangeNames[$normal($b->range)] ?? null;
+            $rangeValue = $normal($b->range);
+            $range = $rangeNames[$rangeValue] ?? $rangeIds[$rangeValue] ?? null;
             if (! $range) {
                 if (! in_array($normal($b->range), ['', 'select range office'], true)) {
-                    throw new RuntimeException("Unknown range for bureau $b->bureauId.");
+                    $rangeName = trim((string) $b->range);
+                    throw new RuntimeException("Unknown range for bureau $b->bureauId (source value: \"$rangeName\"). Match it to a rangeregion name or correct the source value before importing.");
                 }
                 $warnings[] = "Bureau $b->bureauId has no assigned range.";
             }
