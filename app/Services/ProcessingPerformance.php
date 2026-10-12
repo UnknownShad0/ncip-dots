@@ -106,7 +106,8 @@ class ProcessingPerformance
             $row = ['office_id' => $office->id, 'name' => $office->name, 'label' => $office->short_name ?: $office->name];
             foreach (['tracking', 'approval'] as $metric) {
                 $values = $samples[$office->id][$metric];
-                $row[$metric] = count($values) ? round(collect($values)->median(), 2) : null;
+                // Retain enough precision for the chart to show short completed cycles.
+                $row[$metric] = count($values) ? round(collect($values)->median(), 6) : null;
                 $row[$metric.'_count'] = count($values);
             }
 

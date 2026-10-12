@@ -13,7 +13,15 @@ export type ProcessingPerformanceRow = {
 
 export default function ProcessingPerformanceChart({ data }: { data: ProcessingPerformanceRow[] }) {
     const hasData = data.some(row => row.tracking !== null || row.approval !== null);
-    const display = (value: number | null, count: number) => value === null ? 'No data' : `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} weekdays · ${count} completed`;
+    const maxValue = Math.max(0, ...data.flatMap(row => [row.tracking ?? 0, row.approval ?? 0]));
+    const axisUnit = maxValue < 1 / 24 ? 'minutes' : maxValue < 1 ? 'hours' : 'weekdays';
+    const toAxisUnit = (value: number) => axisUnit === 'minutes' ? value * 1440 : axisUnit === 'hours' ? value * 24 : value;
+    const display = (value: number | null, count: number) => {
+        if (value === null) return 'No data';
+        const unit = value < 1 / 24 ? 'minutes' : value < 1 ? 'hours' : 'weekdays';
+        const amount = unit === 'minutes' ? value * 1440 : unit === 'hours' ? value * 24 : value;
+        return `${amount.toLocaleString(undefined, { maximumFractionDigits: unit === 'minutes' ? 1 : 2 })} ${unit} · ${count} completed`;
+    };
     return <section aria-labelledby="processing-performance-title" className="min-w-0 rounded-xl border border-border bg-surface p-5 sm:p-6">
         <div className="flex items-center justify-between gap-3"><h3 id="processing-performance-title" className="text-lg font-semibold text-foreground">Processing turnaround</h3><InfoTip label="How turnaround is measured">Tracking: receipt to release. Approval: submission to decision, including rejection or revision. Monday–Friday elapsed time in Manila; weekends excluded, holidays included. Pending items are excluded. No data means no measurable completed records, not zero days.</InfoTip></div>
         <p className="mt-1 text-sm text-muted">All-time median · weekdays · shorter bars mean faster processing</p>
@@ -22,7 +30,7 @@ export default function ProcessingPerformanceChart({ data }: { data: ProcessingP
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={data} layout="vertical" margin={{ top: 8, right: 24, bottom: 16, left: 0 }} accessibilityLayer>
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgb(var(--color-border))" />
-                        <XAxis type="number" domain={[0, 'auto']} tick={{ fontSize: 12 }} label={{ value: 'Weekdays (median)', position: 'insideBottom', offset: -10, fontSize: 12 }} />
+                        <XAxis type="number" domain={[0, 'auto']} tick={{ fontSize: 12 }} tickFormatter={(value: number) => toAxisUnit(value).toLocaleString(undefined, { maximumFractionDigits: axisUnit === 'minutes' ? 1 : 2 })} label={{ value: `${axisUnit[0].toUpperCase()}${axisUnit.slice(1)} (median)`, position: 'insideBottom', offset: -10, fontSize: 12 }} />
                         <YAxis type="category" dataKey="label" width={115} interval={0} tick={{ fontSize: 11 }} tickFormatter={(name: string) => name.length > 19 ? `${name.slice(0, 18)}…` : name} />
                         <Tooltip content={({ active, payload }) => {
                             const row = payload?.[0]?.payload as ProcessingPerformanceRow | undefined;
@@ -33,8 +41,8 @@ export default function ProcessingPerformanceChart({ data }: { data: ProcessingP
                             </div> : null;
                         }} />
                         <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: 16, fontSize: 12 }} />
-                        <Bar isAnimationActive={false} dataKey="tracking" name="Document Tracking" fill="rgb(var(--color-primary))" radius={[0, 4, 4, 0]} maxBarSize={20} />
-                        <Bar isAnimationActive={false} dataKey="approval" name="Document Approval" fill="rgb(var(--color-tertiary))" radius={[0, 4, 4, 0]} maxBarSize={20} />
+                        <Bar isAnimationActive={false} dataKey="tracking" name="Document Tracking" fill="rgb(var(--color-primary))" radius={[0, 4, 4, 0]} maxBarSize={20} minPointSize={2} />
+                        <Bar isAnimationActive={false} dataKey="approval" name="Document Approval" fill="rgb(var(--color-tertiary))" radius={[0, 4, 4, 0]} maxBarSize={20} minPointSize={2} />
                     </BarChart>
                 </ResponsiveContainer>
             </div>
