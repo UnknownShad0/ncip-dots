@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AuditTrail;
 use App\Models\Office;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -30,19 +31,34 @@ class AuditTrailController extends Controller
             $officeId = $user->office_id ? (int) $user->office_id : null;
         }
 
-        $trail = AuditTrail::with(['user:id,name,firstname,lastname'])
-            ->when($isAdminStaff && $officeId === null, fn ($query) => $query->whereRaw('1 = 0'))
-            ->when($officeId !== null, fn ($query) => $query->where(function ($bureauQuery) use ($officeId) {
-                $bureauQuery->where('actor_office_id', $officeId)
-                    ->orWhere(fn ($legacyQuery) => $legacyQuery
-                        ->where('record_source', 'legacy_import')
-                        ->whereNull('actor_office_id')
-                        ->whereHas('user', fn ($actorQuery) => $actorQuery->where('office_id', $officeId)));
-            }))
-            ->select(['id', 'user_id', 'actor_name', 'actor_office_id', 'actor_office_name', 'action', 'details', 'result', 'created_at', 'legacy_module', 'record_source'])
-            ->orderByDesc('created_at')
-            ->orderByDesc('id')
-            ->paginate(50)
+        $trailQuery = AuditTrail::with(['user:id,name,firstname,lastname'])
+            ->when($isAdminStaff && $officeId === null, fn ($query) => $query->whereRaw('1 = 0'));
+        if ($officeId !== null) {
+            // Keep each branch independently indexable. An OR between the
+            // saved-office and legacy-assignment paths made the large history
+            // query scan/sort far more rows than the 50 rows being displayed.
+            $officeHistoryIds = AuditTrail::query()
+                ->select('id')
+                ->where('actor_office_id', $officeId);
+            $legacyHistoryIds = AuditTrail::query()
+                ->select('id')
+                ->where('record_source', 'legacy_import')
+                ->whereNull('actor_office_id')
+                ->whereIn('user_id', User::query()->select('id')->where('office_id', $officeId));
+            $officeHistoryIds->unionAll($legacyHistoryIds);
+            // Joining the union materializes the two office-history branches.
+            // A WHERE IN subquery made MySQL reevaluate the union while walking
+            // the full audit chronology index on large imported histories.
+            $trailQuery->joinSub($officeHistoryIds, 'office_history_ids', 'office_history_ids.id', '=', 'audit_trails.id');
+        }
+
+        $trailQuery
+            ->select(['audit_trails.id', 'audit_trails.user_id', 'audit_trails.actor_name', 'audit_trails.actor_office_id', 'audit_trails.actor_office_name', 'audit_trails.action', 'audit_trails.details', 'audit_trails.result', 'audit_trails.created_at', 'audit_trails.legacy_module', 'audit_trails.record_source'])
+            ->orderByDesc('audit_trails.created_at')
+            ->orderByDesc('audit_trails.id');
+        // Office history can span hundreds of thousands of imported entries.
+        // simplePaginate avoids a full filtered COUNT(*) just to show 50 rows.
+        $trail = ($isAdminStaff ? $trailQuery->simplePaginate(50) : $trailQuery->paginate(50))
             ->withQueryString()
             ->through(function (AuditTrail $entry) {
                 $entry->setAttribute(
@@ -68,8 +84,10 @@ class AuditTrailController extends Controller
                 ? ($officeId ? 'Showing activity recorded under your bureau at the time of each action.' : 'Your account has no assigned bureau. Contact an administrator to assign one before viewing audit activity.')
                 : null,
             'pagination' => [
-                'current_page' => $trail->currentPage(), 'last_page' => $trail->lastPage(),
-                'total' => $trail->total(), 'from' => $trail->firstItem(), 'to' => $trail->lastItem(),
+                'current_page' => $trail->currentPage(),
+                'last_page' => method_exists($trail, 'lastPage') ? $trail->lastPage() : null,
+                'total' => method_exists($trail, 'total') ? $trail->total() : null,
+                'from' => $trail->firstItem(), 'to' => $trail->lastItem(),
                 'prev_page_url' => $trail->previousPageUrl(), 'next_page_url' => $trail->nextPageUrl(),
             ],
         ]);

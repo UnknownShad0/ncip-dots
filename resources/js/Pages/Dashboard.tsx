@@ -49,18 +49,18 @@ const displayDate = (date?: string) => {
 };
 
 export default function Dashboard({
-    documentTypeCounts = [],
-    processingPerformance = [],
-    chartStats, canFilterCharts = false, chartOffices = [], selectedChartOfficeId = null,
+    analytics, canFilterCharts = false, chartOffices = [], selectedChartOfficeId = null,
     stats = {},
     recentDocuments = [],
     incomingDocuments = [],
     canReceiveDocuments = false,
 }: {
-    processingPerformance?: ProcessingPerformanceRow[];
-    documentTypeCounts?: { name: string; count: number }[];
+    analytics?: {
+        documentTypeCounts?: { name: string; count: number }[];
+        chartStats?: DashboardStats;
+        processingPerformance?: ProcessingPerformanceRow[];
+    };
     stats?: DashboardStats;
-    chartStats?: DashboardStats;
     canFilterCharts?: boolean;
     chartOffices?: { id: number; name: string; range_name?: string | null }[];
     selectedChartOfficeId?: number | null;
@@ -209,22 +209,22 @@ export default function Dashboard({
                     </div>
                 </div>
 
-                <section aria-labelledby="analytics-title" className="space-y-4 border-t border-border pt-6" aria-busy={chartLoading}>
+                <section aria-labelledby="analytics-title" className="space-y-4 border-t border-border pt-6" aria-busy={chartLoading || !analytics}>
                     <div className="flex flex-wrap items-end justify-between gap-4">
-                        <div><div className="flex items-center gap-2"><h2 id="analytics-title" className="text-xl font-semibold">Document insights</h2><InfoTip label="About analytics scope">The office filter applies only to the charts below. Your receiving list, summary totals, and approval tasks stay unchanged.</InfoTip></div><p role="status" className="mt-1 text-sm text-muted">{chartLoading ? 'Updating charts…' : chartScope}</p></div>
+                        <div><div className="flex items-center gap-2"><h2 id="analytics-title" className="text-xl font-semibold">Document insights</h2><InfoTip label="About analytics scope">The office filter applies only to the charts below. Your receiving list, summary totals, and approval tasks stay unchanged.</InfoTip></div><p role="status" className="mt-1 text-sm text-muted">{chartLoading ? 'Updating charts…' : !analytics ? 'Loading analytics…' : chartScope}</p></div>
                         {canFilterCharts && <div className="w-full sm:w-72"><label htmlFor="chart-office" className="mb-1 block text-sm font-medium">Chart office</label><select id="chart-office" disabled={chartLoading} value={selectedChartOfficeId ?? ''} onChange={(event) => {
                             setChartError('');
                             router.get(route('dashboard'), event.target.value ? { chart_office_id: event.target.value } : {}, {
                                 preserveState: true, preserveScroll: true, replace: true,
-                                only: ['documentTypeCounts', 'chartStats', 'selectedChartOfficeId', 'processingPerformance'],
+                                only: ['analytics', 'selectedChartOfficeId'],
                                 onStart: () => setChartLoading(true), onFinish: () => setChartLoading(false),
                                 onError: () => setChartError('Could not apply this office filter. Please try again.'),
                             });
                         }} className="h-11 w-full rounded-lg border-border bg-surface text-sm"><option value="">All offices</option>{chartOffices.map((office) => <option key={office.id} value={office.id}>{office.name}{office.range_name ? ` — ${office.range_name}` : ''}</option>)}</select></div>}
                     </div>
                     {chartError && <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{chartError}</p>}
-                    <DashboardCharts stats={chartStats ?? stats} documentTypes={documentTypeCounts} officeFiltered={selectedChartOfficeId !== null} />
-                    <ProcessingPerformanceChart data={processingPerformance} />
+                    <DashboardCharts stats={analytics?.chartStats ?? stats} documentTypes={analytics?.documentTypeCounts ?? []} officeFiltered={selectedChartOfficeId !== null} />
+                    <ProcessingPerformanceChart data={analytics?.processingPerformance ?? []} />
                 </section>
             </div>
             {crudAlert && <CrudAlertModal {...crudAlert} onClose={() => setCrudAlert(null)} />}

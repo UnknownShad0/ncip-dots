@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Document;
 use App\Models\DocumentCreationDraft;
+use App\Models\DocumentCreationVersion;
 use App\Models\DocumentType;
 use App\Models\Office;
 use App\Models\User;
@@ -53,9 +54,22 @@ class DocumentCreationController extends Controller
             ->when($request->query('queue') === 'submitted', fn ($q) => $q->where('created_by', $user->id)->where('status', 'pending_approval'))
             ->when($request->query('queue') === 'revision', fn ($q) => $q->where('created_by', $user->id)->where('status', 'revision_requested'))
             ->when($approvedOnly, fn ($q) => $q->where('created_by', $user->id)->whereIn('status', ['approved', 'awaiting_verification', 'verified', 'registered']))
-            ->latest()->get()
-            ->map(function (DocumentCreationDraft $draft) use ($user, $userOffice, $canReviewOfficeApprovals) {
-                $version = $draft->versions()->where('version_number', $draft->version_number)->first();
+            ->latest()->get();
+
+        // Batch current-version lookups by version number instead of issuing
+        // one query from inside the per-draft response mapper.
+        $currentVersions = [];
+        foreach ($drafts->groupBy('version_number') as $versionNumber => $versionDrafts) {
+            foreach (DocumentCreationVersion::query()
+                ->where('version_number', $versionNumber)
+                ->whereIn('draft_id', $versionDrafts->modelKeys())
+                ->get(['id', 'draft_id', 'version_number', 'content', 'created_at']) as $version) {
+                $currentVersions[$version->draft_id] = $version;
+            }
+        }
+
+        $drafts = $drafts->map(function (DocumentCreationDraft $draft) use ($user, $userOffice, $canReviewOfficeApprovals, $currentVersions) {
+                $version = $currentVersions[$draft->id] ?? null;
                 $draft->setAttribute('current_submission', $version ? [
                     'version_number' => $version->version_number,
                     'content' => $version->content,

@@ -1,9 +1,13 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router } from '@inertiajs/react';
 
-type Pagination = { current_page: number; last_page: number; total: number; from: number | null; to: number | null; prev_page_url: string | null; next_page_url: string | null };
+type Pagination = { current_page: number; last_page: number | null; total: number | null; from: number | null; to: number | null; prev_page_url: string | null; next_page_url: string | null };
 
 export default function AuditTrailIndex({ trail = [], pagination, canFilterBureaus = false, bureaus = [], filters = { office_id: null }, scopeNotice }: { trail?: any[]; pagination?: Pagination; scopeNotice?: string | null; canFilterBureaus?: boolean; bureaus?: Array<{ id: number; name: string }>; filters?: { office_id: number | null } }) {
+    const paginationLabel = pagination?.total !== null && pagination?.total !== undefined
+        ? `${pagination.from ?? 0}–${pagination.to ?? 0} of ${pagination.total.toLocaleString()} entries · Page ${pagination.current_page} of ${pagination.last_page ?? 1}`
+        : `Showing ${pagination?.from ?? 0}–${pagination?.to ?? 0} entries`;
+
     return (
         <AuthenticatedLayout
             header={<div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">System activity</p><h1 className="text-2xl font-bold tracking-tight text-[#171717] sm:text-3xl">Audit Trail</h1></div>}
@@ -49,8 +53,8 @@ export default function AuditTrailIndex({ trail = [], pagination, canFilterBurea
                         ))
                     )}
                 </div>
-                {pagination && pagination.total > 0 && <nav aria-label="Audit trail pagination" className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 text-sm">
-                    <p className="text-slate-600">{pagination.from ?? 0}–{pagination.to ?? 0} of {pagination.total.toLocaleString()} entries · Page {pagination.current_page} of {pagination.last_page}</p>
+                {pagination && (pagination.to ?? 0) > 0 && <nav aria-label="Audit trail pagination" className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 text-sm">
+                    <p className="text-slate-600">{paginationLabel}</p>
                     <div className="flex gap-2">
                         {pagination.prev_page_url ? <Link href={pagination.prev_page_url} className="rounded-lg border border-slate-300 px-3 py-2 hover:bg-slate-50">Previous</Link> : <span aria-disabled="true" className="rounded-lg border border-slate-200 px-3 py-2 text-slate-400">Previous</span>}
                         {pagination.next_page_url ? <Link href={pagination.next_page_url} className="rounded-lg border border-slate-300 px-3 py-2 hover:bg-slate-50">Next</Link> : <span aria-disabled="true" className="rounded-lg border border-slate-200 px-3 py-2 text-slate-400">Next</span>}

@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\ProcessingPerformance;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class ProcessingPerformanceTest extends TestCase
@@ -38,13 +39,17 @@ class ProcessingPerformanceTest extends TestCase
         $this->assertNull($rows[0]['approval']);
         $this->assertSame([], app(ProcessingPerformance::class)->forOffice(null));
         $this->actingAs($user)->get('/dashboard')->assertInertia(fn ($page) => $page
-            ->has('processingPerformance', 1)->where('processingPerformance.0.office_id', $office->id));
+            ->loadDeferredProps(fn (Assert $deferred) => $deferred
+                ->has('analytics.processingPerformance', 1)->where('analytics.processingPerformance.0.office_id', $office->id)));
         $this->get('/dashboard?chart_office_id='.$other->id)->assertForbidden();
         foreach ([1, 2] as $role) {
             $admin = User::factory()->create(['office_id' => $other->id, 'role_id' => $role]);
-            $this->actingAs($admin)->get('/dashboard')->assertInertia(fn ($page) => $page->has('processingPerformance', 2));
+            $this->actingAs($admin)->get('/dashboard')->assertInertia(fn ($page) => $page
+                ->loadDeferredProps(fn (Assert $deferred) => $deferred->has('analytics.processingPerformance', 2)));
             $this->get('/dashboard?chart_office_id='.$office->id)->assertInertia(fn ($page) => $page
-                ->has('processingPerformance', 1)->where('processingPerformance.0.tracking_count', 1));
+                ->loadDeferredProps(fn (Assert $deferred) => $deferred
+                    ->has('analytics.processingPerformance', 1)
+                    ->where('analytics.processingPerformance.0.tracking_count', 1)));
         }
     }
 

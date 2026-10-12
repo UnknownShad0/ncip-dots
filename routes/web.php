@@ -28,6 +28,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/documents', [DocumentController::class, 'index'])->name('documents.index');
     Route::get('/documents/latest', [DocumentController::class, 'latest'])->name('documents.latest');
+    Route::get('/documents/{id}/details', [DocumentController::class, 'details'])->whereNumber('id')->name('documents.details');
     Route::get('/document-creation', [DocumentCreationController::class, 'index'])->name('document-creation.index');
     Route::get('/approved-documents', function (\Illuminate\Http\Request $request) {
         $request->query->set('queue', 'approved');

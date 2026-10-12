@@ -25,10 +25,17 @@ class ProcessingPerformance
         // Preserve chronology and pair each receipt with the next release only.
         // Only documents with a measurable receipt can contribute a tracking sample.
         $receivedDocuments = DocumentTrail::query()->select('document_id')
-            ->where('action', 'Received')->whereRaw('LOWER(status) = ?', ['pending'])
+            ->where('action', 'Received')->where('status', 'pending')
             ->whereIn('to_office_id', $offices->modelKeys());
+        $officeIds = $offices->modelKeys();
         $trailQuery = DocumentTrail::query()->whereIn('document_id', $receivedDocuments)->whereHas('document', fn ($q) => $q->where('legacy_needs_review', false))
-            ->where(fn ($q) => $q->whereIn('to_office_id', $offices->modelKeys())->orWhereIn('from_office_id', $offices->modelKeys()))
+            // The state machine only reads receipt, release, and terminal events.
+            // Filter them in SQL instead of paging every trail for matching documents.
+            ->where(fn ($q) => $q
+                ->where(fn ($receipt) => $receipt->whereIn('to_office_id', $officeIds)
+                    ->where('status', 'pending')->where('action', 'Received'))
+                ->orWhere(fn ($close) => $close->whereIn('from_office_id', $officeIds)
+                    ->whereIn('status', ['available', 'terminal'])))
             // PDO buffers cursor results; bounded pages avoid loading the full history.
             ->select(['id', 'document_id', 'from_office_id', 'to_office_id', 'status', 'action', 'created_at'])
             ->orderBy('document_id')->orderBy('id');

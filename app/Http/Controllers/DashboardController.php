@@ -15,38 +15,8 @@ class DashboardController extends Controller
     {
         $user = auth()->user();
         $access = app(DocumentAccess::class);
-        $documents = $access->scope(Document::query(), $user);
         $officeId = $access->currentOfficeId($user);
-
         $canViewAllDocuments = $access->canViewAllDocuments($user);
-
-        $incomingDocumentsCount = ($officeId || $canViewAllDocuments)
-            ? Document::query()->where('is_archived', false)->where('legacy_needs_review', false)->whereHas('latestTrail', function ($trail) use ($officeId, $canViewAllDocuments) {
-                $trail->whereRaw('LOWER(status) = ?', ['available']);
-                if (!$canViewAllDocuments) $trail->where('to_office_id', $officeId);
-            })->count()
-            : 0;
-        $stats = [
-            'awaiting_my_approval' => DocumentCreationDraft::query()->where('approver_id', $user->id)->where('status', 'pending_approval')->count(),
-            'my_submissions_awaiting_approval' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'pending_approval')->count(),
-            'returned_for_revision' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'revision_requested')->count(),
-            'awaiting_verification' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'awaiting_verification')->count(),
-            'incoming_documents' => $incomingDocumentsCount,
-            'pending_documents' => ($officeId || $canViewAllDocuments) ? Document::query()
-                ->where('is_archived', false)->where('legacy_needs_review', false)
-                ->whereHas('latestTrail', function ($trail) use ($officeId, $canViewAllDocuments) {
-                    $trail->whereRaw('LOWER(status) = ?', ['pending']);
-                    if (!$canViewAllDocuments) $trail->where('to_office_id', $officeId);
-                })
-                ->count() : 0,
-            'released_documents' => ($officeId || $canViewAllDocuments) ? Document::query()
-                ->whereHas('trails', function ($trail) use ($officeId, $canViewAllDocuments) {
-                    $trail->whereRaw('LOWER(status) = ?', ['available']);
-                    if (!$canViewAllDocuments) $trail->where('from_office_id', $officeId);
-                })
-                ->count() : 0,
-            'archived_documents' => (clone $documents)->where('is_archived', true)->count(),
-        ];
 
         $recentDocuments = $access->scope(Document::query(), $user)
             ->with(['documentType', 'office', 'creator'])
@@ -60,7 +30,7 @@ class DashboardController extends Controller
                 ->with(['latestTrail.fromOffice', 'creator', 'office'])
                 ->where('is_archived', false)->where('legacy_needs_review', false)
                 ->whereHas('latestTrail', function ($trail) use ($officeId) {
-                    $trail->whereRaw('LOWER(status) = ?', ['available']);
+                    $trail->where('status', 'available');
                     $trail->where('to_office_id', $officeId);
                 })
                 ->latest('updated_at')
@@ -85,19 +55,48 @@ class DashboardController extends Controller
             $validated = request()->validate(['chart_office_id' => ['integer', 'exists:offices,id']]);
             $selectedChartOfficeId = (int) $validated['chart_office_id'];
         }
-        $charts = app(DashboardCharts::class)->forOffice(
-            $canFilterCharts ? $selectedChartOfficeId : $officeId,
-            allOffices: $canFilterCharts && $selectedChartOfficeId === null,
-        );
+        $dashboardCharts = app(DashboardCharts::class);
+        // Keep the summary cards in the first response. The full-history chart
+        // calculations run as deferred props so they do not hold up the page.
+        if ($canViewAllDocuments) {
+            $summaryStats = $dashboardCharts->statsForOffice(null, allOffices: true);
+        } elseif ($officeId !== null) {
+            $summaryStats = $dashboardCharts->statsForOffice($officeId);
+        } else {
+            $summaryStats = [
+                'incoming_documents' => 0,
+                'pending_documents' => 0,
+                'released_documents' => 0,
+                'archived_documents' => $access->scope(Document::query(), $user)->where('is_archived', true)->count(),
+            ];
+        }
+        $stats = array_merge([
+            'awaiting_my_approval' => DocumentCreationDraft::query()->where('approver_id', $user->id)->where('status', 'pending_approval')->count(),
+            'my_submissions_awaiting_approval' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'pending_approval')->count(),
+            'returned_for_revision' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'revision_requested')->count(),
+            'awaiting_verification' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'awaiting_verification')->count(),
+        ], $summaryStats);
+
+        $analyticsOfficeId = $canFilterCharts ? $selectedChartOfficeId : $officeId;
+        $analyticsAllOffices = $canFilterCharts && $selectedChartOfficeId === null;
+        $chartStatsMatchSummary = $canViewAllDocuments
+            ? ($canFilterCharts && $selectedChartOfficeId === null)
+            : (! $canFilterCharts && $officeId !== null);
 
         return Inertia::render('Dashboard', [
-            'documentTypeCounts' => $charts['documentTypes'],
-            'processingPerformance' => app(\App\Services\ProcessingPerformance::class)->forOffice(
-                $canFilterCharts ? $selectedChartOfficeId : $officeId,
-                allOffices: $canFilterCharts && $selectedChartOfficeId === null,
-            ),
+            'analytics' => Inertia::defer(function () use ($dashboardCharts, $analyticsOfficeId, $analyticsAllOffices, $chartStatsMatchSummary, $summaryStats) {
+                return [
+                    'documentTypeCounts' => $dashboardCharts->documentTypesForOffice($analyticsOfficeId, allOffices: $analyticsAllOffices),
+                    'chartStats' => $chartStatsMatchSummary
+                        ? $summaryStats
+                        : $dashboardCharts->statsForOffice($analyticsOfficeId, allOffices: $analyticsAllOffices),
+                    'processingPerformance' => app(\App\Services\ProcessingPerformance::class)->forOffice(
+                        $analyticsOfficeId,
+                        allOffices: $analyticsAllOffices,
+                    ),
+                ];
+            }),
             'stats' => $stats,
-            'chartStats' => $charts['stats'],
             'canFilterCharts' => $canFilterCharts,
             'selectedChartOfficeId' => $selectedChartOfficeId,
             'chartOffices' => $canFilterCharts ? Office::query()->with('range:id,name')->orderBy('name')->get(['id', 'name', 'range_id'])->map(fn (Office $office) => [

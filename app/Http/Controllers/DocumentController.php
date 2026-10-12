@@ -40,6 +40,49 @@ class DocumentController extends Controller
         return $this->renderDocumentList(true);
     }
 
+    public function details(int $id)
+    {
+        $user = auth()->user();
+        $document = app(DocumentAccess::class)->scope(Document::query(), $user)
+            ->with([
+                'files', 'creator', 'office', 'documentType', 'purposeType',
+                'latestTrail.creator', 'latestTrail.fromOffice', 'latestTrail.toOffice',
+                'trails.creator', 'trails.fromOffice', 'trails.toOffice', 'trails.holderOffice', 'trails.legacyReceivingOffice',
+            ])
+            ->findOrFail($id);
+        $latestFile = $document->files->sortByDesc('id')->first();
+
+        return response()->json([
+            'file_name' => $latestFile?->original_name ?? $latestFile?->file_name,
+            'file_url' => $latestFile?->downloadUrl(),
+            'files' => $document->files->sortBy('id')->map(fn ($file) => [
+                'id' => $file->id,
+                'name' => $file->original_name ?: $file->file_name,
+                'type' => $file->type ?: 'original',
+                'url' => $file->downloadUrl(),
+                'uploaded_at' => $file->created_at?->toDateTimeString(),
+            ])->values(),
+            'transactions' => $document->trails->sortByDesc('id')->values()->map(fn (DocumentTrail $trail) => [
+                'action' => $trail->action ?: ucfirst(strtolower((string) $trail->status)),
+                'status' => $trail->status,
+                'remarks' => $trail->remarks,
+                'from_office' => $trail->fromOffice?->name,
+                'from_office_short_name' => $trail->fromOffice?->short_name,
+                'to_office' => $trail->legacy_doc_trail_id ? $trail->legacyReceivingOffice?->name : $trail->toOffice?->name,
+                'to_office_short_name' => $trail->legacy_doc_trail_id ? $trail->legacyReceivingOffice?->short_name : $trail->toOffice?->short_name,
+                'holder' => $trail->legacy_doc_trail_id ? $trail->holderOffice?->name : $trail->toOffice?->name,
+                'holder_short_name' => $trail->legacy_doc_trail_id ? $trail->holderOffice?->short_name : $trail->toOffice?->short_name,
+                'created_by' => $trail->creator?->name,
+                'created_by_short_name' => trim(
+                    (filled($trail->creator?->firstname) ? mb_substr(trim($trail->creator->firstname), 0, 1).'. ' : '').
+                    ($trail->creator?->lastname ?? '')
+                ) ?: $trail->creator?->name,
+                'created_at' => $trail->created_at?->format('F j Y h:i:s A'),
+            ]),
+            'created_by_name' => $document->creator?->name ?? '',
+        ]);
+    }
+
     private function renderDocumentList(bool $latestOnly = false)
     {
         return $this->renderLocalDocumentList($latestOnly);
@@ -190,8 +233,12 @@ class DocumentController extends Controller
             $newDocumentQuery->where('created_at', '>=', now()->subDays(15));
         }
         $newDocuments = $newDocumentQuery
-            ->with(['office', 'documentType', 'purposeType', 'creator', 'files', 'latestTrail.creator', 'latestTrail.fromOffice', 'latestTrail.toOffice', 'trails.creator', 'trails.fromOffice', 'trails.toOffice', 'trails.holderOffice', 'trails.legacyReceivingOffice'])
-            ->select(['id', 'legacy_doc_id', 'legacy_needs_review', 'is_archived', 'tracking_number', 'title', 'status', 'office_id', 'created_by', 'is_finalized', 'remarks', 'document_type_id', 'action_type_id', 'other_action', 'purpose_type_id', 'other_document_type', 'other_purpose', 'origin_type', 'received_from', 'urgent', 'notify_by_email', 'created_at'])
+            ->with([
+                'office', 'documentType', 'purposeType',
+                'latestTrail.creator', 'latestTrail.fromOffice', 'latestTrail.toOffice',
+                'latestTrail.holderOffice', 'latestTrail.legacyReceivingOffice',
+            ])
+            ->select(['documents.id', 'documents.legacy_doc_id', 'documents.legacy_needs_review', 'documents.is_archived', 'documents.tracking_number', 'documents.title', 'documents.status', 'documents.office_id', 'documents.created_by', 'documents.is_finalized', 'documents.remarks', 'documents.document_type_id', 'documents.action_type_id', 'documents.other_action', 'documents.purpose_type_id', 'documents.other_document_type', 'documents.other_purpose', 'documents.origin_type', 'documents.received_from', 'documents.urgent', 'documents.notify_by_email', 'documents.created_at'])
             ->orderBy('created_at', 'desc')
             ->limit(200)
             ->get()
@@ -290,6 +337,19 @@ class DocumentController extends Controller
     private function renderLocalDocumentList(bool $latestOnly = false)
     {
         $user = auth()->user();
+        $filters = request()->validate([
+            'search' => ['nullable', 'string', 'max:200'],
+            'status' => ['nullable', 'in:all,ongoing,approved,released,archived,rejected'],
+            'sort' => ['nullable', 'in:tracking_number,title,document_type,origin_type,status,office_name,last_transaction'],
+            'direction' => ['nullable', 'in:asc,desc'],
+            'per_page' => ['nullable', 'integer', 'in:5,10,15,20,50'],
+            'page' => ['nullable', 'integer', 'min:1'],
+        ]);
+        $search = trim((string) ($filters['search'] ?? ''));
+        $statusFilter = $filters['status'] ?? 'all';
+        $sortKey = $filters['sort'] ?? null;
+        $sortDirection = $filters['direction'] ?? 'asc';
+        $perPage = (int) ($filters['per_page'] ?? 10);
         $access = app(DocumentAccess::class);
         $currentOfficeId = $access->currentOfficeId($user);
         $isAdministrator = $access->canViewAllDocuments($user);
@@ -297,15 +357,78 @@ class DocumentController extends Controller
         if ($latestOnly) {
             $newDocumentQuery->where('created_at', '>=', now()->subDays(15));
         }
+        $latestStatusValue = 'COALESCE((SELECT latest_status.status FROM document_trails AS latest_status WHERE latest_status.document_id = documents.id ORDER BY latest_status.id DESC LIMIT 1), documents.status)';
+        if ($search !== '') {
+            $like = '%'.$search.'%';
+            $newDocumentQuery->where(function ($query) use ($like, $search, $latestStatusValue) {
+                $query->where('documents.title', 'like', $like)
+                    ->orWhere('documents.tracking_number', 'like', $like)
+                    ->orWhere('documents.status', 'like', $like)
+                    ->orWhere('documents.origin_type', 'like', $like)
+                    ->orWhere('documents.other_document_type', 'like', $like)
+                    ->orWhereHas('office', fn ($office) => $office->where('name', 'like', $like)->orWhere('short_name', 'like', $like))
+                    ->orWhereHas('documentType', fn ($type) => $type->where('name', 'like', $like))
+                    ->orWhereExists(DB::table('document_trails as latest_match')
+                        ->selectRaw('1')
+                        ->whereColumn('latest_match.document_id', 'documents.id')
+                        ->whereRaw('latest_match.id = (SELECT MAX(latest_match_id.id) FROM document_trails AS latest_match_id WHERE latest_match_id.document_id = documents.id)')
+                        ->where(function ($trail) use ($like) {
+                            $trail->where('latest_match.action', 'like', $like)
+                                ->orWhere('latest_match.status', 'like', $like)
+                                ->orWhereIn('latest_match.created_by', User::query()->select('id')->where('name', 'like', $like))
+                                ->orWhereIn('latest_match.from_office_id', Office::query()->select('id')->where(fn ($office) => $office->where('name', 'like', $like)->orWhere('short_name', 'like', $like)))
+                                ->orWhereIn('latest_match.to_office_id', Office::query()->select('id')->where(fn ($office) => $office->where('name', 'like', $like)->orWhere('short_name', 'like', $like)))
+                                ->orWhereIn('latest_match.legacy_receiving_office_id', Office::query()->select('id')->where(fn ($office) => $office->where('name', 'like', $like)->orWhere('short_name', 'like', $like)));
+                        }));
+                if (mb_strtolower($search) === 'ongoing') {
+                    $query->orWhereIn(DB::raw($latestStatusValue), ['pending', 'ongoing']);
+                } elseif (mb_strtolower($search) === 'released') {
+                    $query->orWhereIn(DB::raw($latestStatusValue), ['available', 'processed', 'released']);
+                } elseif (mb_strtolower($search) === 'archived') {
+                    $query->orWhere('documents.is_archived', true)
+                        ->orWhereIn(DB::raw($latestStatusValue), ['terminal', 'archived']);
+                }
+            });
+        }
+        if ($statusFilter !== 'all') {
+            if ($statusFilter === 'archived') {
+                $newDocumentQuery->where(function ($query) {
+                    $query->where('documents.is_archived', true)
+                        ->orWhereIn(DB::raw('COALESCE((SELECT latest_status.status FROM document_trails AS latest_status WHERE latest_status.document_id = documents.id ORDER BY latest_status.id DESC LIMIT 1), documents.status)'), ['terminal', 'archived']);
+                });
+            } else {
+                $statusValues = match ($statusFilter) {
+                    'ongoing' => ['pending', 'ongoing'],
+                    'released' => ['available', 'processed', 'released'],
+                    default => [$statusFilter],
+                };
+                $newDocumentQuery->whereIn(DB::raw($latestStatusValue), $statusValues);
+            }
+        }
         $newDocuments = $newDocumentQuery
-            ->with(['office', 'documentType', 'purposeType', 'creator', 'files', 'latestTrail.creator', 'latestTrail.fromOffice', 'latestTrail.toOffice', 'trails.creator', 'trails.fromOffice', 'trails.toOffice', 'trails.holderOffice', 'trails.legacyReceivingOffice'])
-            ->select(['id', 'legacy_doc_id', 'legacy_needs_review', 'is_archived', 'tracking_number', 'title', 'status', 'office_id', 'created_by', 'is_finalized', 'remarks', 'document_type_id', 'action_type_id', 'other_action', 'purpose_type_id', 'other_document_type', 'other_purpose', 'origin_type', 'received_from', 'urgent', 'notify_by_email', 'created_at'])
-            ->orderBy('created_at', 'desc')
-            ->limit(200)
-            ->get()
-            ->map(function ($document) use ($currentOfficeId, $isAdministrator, $user) {
+            ->with([
+                'office', 'documentType', 'purposeType',
+                'latestTrail.creator', 'latestTrail.fromOffice', 'latestTrail.toOffice',
+                'latestTrail.holderOffice', 'latestTrail.legacyReceivingOffice',
+            ])
+            ->select(['documents.id', 'documents.legacy_doc_id', 'documents.legacy_needs_review', 'documents.is_archived', 'documents.tracking_number', 'documents.title', 'documents.status', 'documents.office_id', 'documents.created_by', 'documents.is_finalized', 'documents.remarks', 'documents.document_type_id', 'documents.action_type_id', 'documents.other_action', 'documents.purpose_type_id', 'documents.other_document_type', 'documents.other_purpose', 'documents.origin_type', 'documents.received_from', 'documents.urgent', 'documents.notify_by_email', 'documents.created_at'])
+            ->when($sortKey !== null, function ($query) use ($sortKey, $sortDirection) {
+                $sortColumns = [
+                    'tracking_number' => 'documents.tracking_number',
+                    'title' => 'documents.title',
+                    'document_type' => DocumentType::query()->select('name')->whereColumn('document_types.id', 'documents.document_type_id')->limit(1),
+                    'origin_type' => 'documents.origin_type',
+                    'status' => DocumentTrail::query()->select('status')->whereColumn('document_trails.document_id', 'documents.id')->orderByDesc('id')->limit(1),
+                    'office_name' => Office::query()->select('name')->whereColumn('offices.id', 'documents.office_id')->limit(1),
+                    'last_transaction' => DocumentTrail::query()->selectRaw("COALESCE(NULLIF(action, ''), status)")->whereColumn('document_trails.document_id', 'documents.id')->orderByDesc('id')->limit(1),
+                ];
+                $query->orderBy($sortColumns[$sortKey], $sortDirection);
+            }, fn ($query) => $query->orderBy('documents.created_at', 'desc'))
+            ->orderBy('documents.id', 'desc')
+            ->paginate($perPage)
+            ->withQueryString()
+            ->through(function ($document) use ($currentOfficeId, $isAdministrator, $user) {
                 $latest = $document->latestTrail;
-                $latestFile = $document->files->sortByDesc('id')->first();
                 $holderOfficeId = $latest?->to_office_id ?? $document->office_id;
                 $isPendingHolder = strtolower((string) ($latest?->status ?? $document->status)) === 'pending'
                     && $currentOfficeId !== null && (int) $holderOfficeId === (int) $currentOfficeId;
@@ -327,39 +450,24 @@ class DocumentController extends Controller
                     'other_document_type' => $document->other_document_type ?? '',
                     'purpose_type' => $document->purposeType?->name ?? '',
                     'other_purpose' => $document->other_purpose ?? '',
-                    'created_by_name' => $document->creator?->name ?? '',
-                    'created_by_short_name' => trim(
-                        (filled($document->creator?->firstname) ? mb_substr(trim($document->creator->firstname), 0, 1).'. ' : '').
-                        ($document->creator?->lastname ?? '')
-                    ) ?: $document->creator?->name,
-                    'file_name' => $latestFile?->original_name ?? $latestFile?->file_name,
-                    'file_url' => $latestFile?->downloadUrl(),
-                    'files' => $document->files->sortBy('id')->map(fn ($file) => [
-                        'id' => $file->id,
-                        'name' => $file->original_name ?: $file->file_name,
-                        'type' => $file->type ?: 'original',
-                        'url' => $file->downloadUrl(),
-                        'uploaded_at' => $file->created_at?->toDateTimeString(),
-                    ])->values(),
                     'origin_type' => $document->origin_type ?? '',
                     'last_transaction' => $this->formatTrailTransaction($latest),
-                    'transactions' => $document->trails->sortByDesc('id')->values()->map(fn (DocumentTrail $trail) => [
-                        'action' => $trail->action ?: ucfirst(strtolower((string) $trail->status)),
-                        'status' => $trail->status,
-                        'remarks' => $trail->remarks,
-                        'from_office' => $trail->fromOffice?->name,
-                        'from_office_short_name' => $trail->fromOffice?->short_name,
-                        'to_office' => $trail->legacy_doc_trail_id ? $trail->legacyReceivingOffice?->name : $trail->toOffice?->name,
-                        'to_office_short_name' => $trail->legacy_doc_trail_id ? $trail->legacyReceivingOffice?->short_name : $trail->toOffice?->short_name,
-                        'holder' => $trail->legacy_doc_trail_id ? $trail->holderOffice?->name : $trail->toOffice?->name,
-                        'holder_short_name' => $trail->legacy_doc_trail_id ? $trail->holderOffice?->short_name : $trail->toOffice?->short_name,
-                        'created_by' => $trail->creator?->name,
+                    'last_transaction_summary' => $latest ? [
+                        'action' => $latest->action ?: ucfirst(strtolower((string) $latest->status)),
+                        'status' => $latest->status,
+                        'from_office' => $latest->fromOffice?->name,
+                        'from_office_short_name' => $latest->fromOffice?->short_name,
+                        'to_office' => $latest->legacy_doc_trail_id ? $latest->legacyReceivingOffice?->name : $latest->toOffice?->name,
+                        'to_office_short_name' => $latest->legacy_doc_trail_id ? $latest->legacyReceivingOffice?->short_name : $latest->toOffice?->short_name,
+                        'holder' => $latest->legacy_doc_trail_id ? $latest->holderOffice?->name : $latest->toOffice?->name,
+                        'holder_short_name' => $latest->legacy_doc_trail_id ? $latest->holderOffice?->short_name : $latest->toOffice?->short_name,
+                        'created_by' => $latest->creator?->name,
                         'created_by_short_name' => trim(
-                            (filled($trail->creator?->firstname) ? mb_substr(trim($trail->creator->firstname), 0, 1).'. ' : '').
-                            ($trail->creator?->lastname ?? '')
-                        ) ?: $trail->creator?->name,
-                        'created_at' => $trail->created_at?->format('F j Y h:i:s A'),
-                    ]),
+                            (filled($latest->creator?->firstname) ? mb_substr(trim($latest->creator->firstname), 0, 1).'. ' : '').
+                            ($latest->creator?->lastname ?? '')
+                        ) ?: $latest->creator?->name,
+                        'created_at' => $latest->created_at?->format('F j Y h:i:s A'),
+                    ] : null,
                     'created_at' => $document->created_at?->format('F j Y h:i:s A'),
                     'created_at_timestamp' => $document->created_at?->timestamp,
                     'remarks' => $document->remarks ?? '',
@@ -381,7 +489,21 @@ class DocumentController extends Controller
             });
 
         return Inertia::render('Documents/Index', [
-            'documents' => $newDocuments->sortByDesc('created_at_timestamp')->values()->all(),
+            'documents' => $newDocuments->items(),
+            'pagination' => [
+                'current_page' => $newDocuments->currentPage(),
+                'last_page' => $newDocuments->lastPage(),
+                'total' => $newDocuments->total(),
+                'from' => $newDocuments->firstItem(),
+                'to' => $newDocuments->lastItem(),
+                'per_page' => $newDocuments->perPage(),
+            ],
+            'filters' => [
+                'search' => $search,
+                'status' => $statusFilter,
+                'sort' => $sortKey,
+                'direction' => $sortDirection,
+            ],
             'title' => $latestOnly ? 'Latest Documents' : 'All Documents',
             ...$this->documentFormOptions(),
         ]);
@@ -909,11 +1031,19 @@ class DocumentController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'range_id', 'legacy_range_id'])
             ->filter(fn (Office $office) => $this->officeIsInCurrentUserRange($office))
+            ->values();
+        $officesWithActiveUsers = User::query()
+            ->whereIn('office_id', $receivingOffices->modelKeys())
+            ->where('is_active', true)
+            ->distinct()
+            ->pluck('office_id')
+            ->flip();
+        $receivingOffices = $receivingOffices
             ->map(fn (Office $office) => [
                 'id' => (string) $office->id,
                 'name' => $office->name,
                 'source' => 'New DB',
-                'disabled' => ! $this->officeHasActiveUsers($office),
+                'disabled' => ! $officesWithActiveUsers->has($office->id),
             ])
             ->values()
             ->all();

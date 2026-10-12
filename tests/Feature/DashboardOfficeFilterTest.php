@@ -26,14 +26,21 @@ class DashboardOfficeFilterTest extends TestCase
             $this->actingAs(User::factory()->create(['role_id' => $roleId, 'office_id' => $office->id]));
             $this->get('/dashboard')->assertInertia(fn (Assert $page) => $page
                 ->where('canFilterCharts', true)->has('chartOffices', 3)
-                ->where('selectedChartOfficeId', null)->where('documentTypeCounts.0.count', 2));
+                ->where('selectedChartOfficeId', null)
+                ->loadDeferredProps(fn (Assert $deferred) => $deferred->where('analytics.documentTypeCounts.0.count', 2)));
             $this->get('/dashboard?chart_office_id='.$office->id)->assertInertia(fn (Assert $page) => $page
-                ->where('selectedChartOfficeId', $office->id)->where('documentTypeCounts.0.count', 1)
-                ->where('chartStats.incoming_documents', 0)->where('chartStats.released_documents', 1)
+                ->where('selectedChartOfficeId', $office->id)
                 ->where('stats.incoming_documents', 2)->where('stats.released_documents', 2)
-                ->has('incomingDocuments', 0));
+                ->has('incomingDocuments', 0)
+                ->loadDeferredProps(fn (Assert $deferred) => $deferred
+                    ->where('analytics.documentTypeCounts.0.count', 1)
+                    ->where('analytics.chartStats.incoming_documents', 0)
+                    ->where('analytics.chartStats.released_documents', 1)));
             $this->get('/dashboard?chart_office_id='.$empty->id)->assertInertia(fn (Assert $page) => $page
-                ->has('documentTypeCounts', 0)->where('chartStats.incoming_documents', 0));
+                ->where('selectedChartOfficeId', $empty->id)
+                ->loadDeferredProps(fn (Assert $deferred) => $deferred
+                    ->has('analytics.documentTypeCounts', 0)
+                    ->where('analytics.chartStats.incoming_documents', 0)));
             $this->getJson('/dashboard?chart_office_id=999999')->assertUnprocessable();
             $this->getJson('/dashboard?chart_office_id=invalid')->assertUnprocessable();
         }
@@ -71,17 +78,17 @@ class DashboardOfficeFilterTest extends TestCase
             ]));
         }
         $this->assertSame(6, app(\App\Services\DocumentAccess::class)->scope(Document::query(), $staff)->count());
-        $staffProps = $this->actingAs($staff)->get('/dashboard')->assertOk()->viewData('page')['props'];
         $expected = ['incoming_documents' => 1, 'pending_documents' => 1, 'released_documents' => 1, 'archived_documents' => 1];
-        foreach ($expected as $key => $count) {
-            $this->assertSame($count, $staffProps['chartStats'][$key]);
-        }
-        $this->assertSame([['name' => 'Memo', 'count' => 4]], $staffProps['documentTypeCounts']);
+        $this->actingAs($staff)->get('/dashboard')->assertInertia(fn (Assert $page) => $page
+            ->loadDeferredProps(fn (Assert $deferred) => $deferred
+                ->where('analytics.chartStats', $expected)
+                ->where('analytics.documentTypeCounts', [['name' => 'Memo', 'count' => 4]])));
         foreach ([1, 2] as $role) {
             $admin = User::factory()->create(['role_id' => $role, 'office_id' => $other->id]);
-            $props = $this->actingAs($admin)->get('/dashboard?chart_office_id='.$office->id)->assertOk()->viewData('page')['props'];
-            $this->assertSame($expected, $props['chartStats']);
-            $this->assertSame($staffProps['documentTypeCounts'], $props['documentTypeCounts']);
+            $this->actingAs($admin)->get('/dashboard?chart_office_id='.$office->id)->assertInertia(fn (Assert $page) => $page
+                ->loadDeferredProps(fn (Assert $deferred) => $deferred
+                    ->where('analytics.chartStats', $expected)
+                    ->where('analytics.documentTypeCounts', [['name' => 'Memo', 'count' => 4]])));
         }
     }
 
@@ -90,8 +97,9 @@ class DashboardOfficeFilterTest extends TestCase
         $staff = User::factory()->create(['role_id' => 3, 'office_id' => null]);
         Document::create(['title' => 'Personal draft', 'tracking_number' => 'NO-OFFICE', 'created_by' => $staff->id, 'status' => 'draft', 'is_finalized' => false]);
         $this->actingAs($staff)->get('/dashboard')->assertInertia(fn (Assert $page) => $page
-            ->has('documentTypeCounts', 0)
-            ->where('chartStats', ['incoming_documents' => 0, 'pending_documents' => 0, 'released_documents' => 0, 'archived_documents' => 0]));
+            ->loadDeferredProps(fn (Assert $deferred) => $deferred
+                ->has('analytics.documentTypeCounts', 0)
+                ->where('analytics.chartStats', ['incoming_documents' => 0, 'pending_documents' => 0, 'released_documents' => 0, 'archived_documents' => 0])));
     }
 
     public function test_regular_users_cannot_filter_or_fetch_other_offices_graph_data(): void
@@ -101,7 +109,8 @@ class DashboardOfficeFilterTest extends TestCase
         $user = User::factory()->create(['role_id' => 3, 'office_id' => $own->id]);
         Document::create(['title' => 'Private', 'tracking_number' => 'PRIVATE', 'office_id' => $other->id, 'created_by' => $user->id, 'status' => 'pending', 'is_finalized' => true]);
         $this->actingAs($user)->get('/dashboard')->assertInertia(fn (Assert $page) => $page
-            ->where('canFilterCharts', false)->has('chartOffices', 0)->has('documentTypeCounts', 0));
+            ->where('canFilterCharts', false)->has('chartOffices', 0)
+            ->loadDeferredProps(fn (Assert $deferred) => $deferred->has('analytics.documentTypeCounts', 0)));
         $this->get('/dashboard?chart_office_id='.$other->id)->assertForbidden();
     }
 }

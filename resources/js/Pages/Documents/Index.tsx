@@ -3,9 +3,10 @@ import InfoTip from '@/Components/InfoTip';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import CrudAlertModal from '@/Components/WorkspaceAlert';
 import { Head, router } from '@inertiajs/react';
+import axios from 'axios';
 import QRCode from 'react-qr-code';
 import { Archive, ArrowDownUp, ChevronLeft, ChevronRight, Eye, FilePlus2, FileText, Inbox, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { FormEvent } from 'react';
 
@@ -28,6 +29,21 @@ type DocumentItem = {
     files?: Array<{ id: number; name: string; type: 'original' | 'version' | string; url: string | null; uploaded_at?: string | null }>;
     origin_type?: string;
     last_transaction?: string;
+    last_transaction_summary?: {
+        action?: string | null;
+        status?: string | null;
+        from_office?: string | null;
+        from_office_short_name?: string | null;
+        to_office?: string | null;
+        to_office_short_name?: string | null;
+        holder?: string | null;
+        holder_short_name?: string | null;
+        created_by?: string | null;
+        created_by_short_name?: string | null;
+        created_at?: string | null;
+    } | null;
+    details_loading?: boolean;
+    details_error?: string;
     created_at?: string;
     transactions?: Array<{
         action?: string | null;
@@ -131,6 +147,8 @@ const getTransactionClasses = (action?: string | null, status?: string | null) =
 export default function DocumentsIndex({
     documents = [],
     title = 'All Documents',
+    pagination,
+    filters,
     documentTypes = [],
     actionTypes = [],
     purposeTypes = [],
@@ -141,6 +159,8 @@ export default function DocumentsIndex({
 }: {
     documents?: DocumentItem[];
     title?: string;
+    pagination?: { current_page: number; last_page: number; total: number; from: number | null; to: number | null; per_page: number };
+    filters?: { search?: string; status?: string; sort?: SortKey | null; direction?: 'asc' | 'desc' };
     documentTypes?: LibraryOption[];
     actionTypes?: LibraryOption[];
     purposeTypes?: LibraryOption[];
@@ -162,12 +182,13 @@ export default function DocumentsIndex({
     const [releaseError, setReleaseError] = useState('');
     const [uploadError, setUploadError] = useState('');
     const [isCreateOpen, setIsCreateOpen] = useState(false);
-    const [search, setSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState('all');
-    const [sortKey, setSortKey] = useState<SortKey | null>(null);
-    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-    const [page, setPage] = useState(1);
-    const [perPage, setPerPage] = useState(15);
+    const [search, setSearch] = useState(filters?.search ?? '');
+    const [statusFilter, setStatusFilter] = useState(filters?.status ?? 'all');
+    const [sortKey, setSortKey] = useState<SortKey | null>(filters?.sort ?? null);
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(filters?.direction ?? 'asc');
+    const [page, setPage] = useState(pagination?.current_page ?? 1);
+    const [perPage, setPerPage] = useState(pagination?.per_page ?? 10);
+    const firstQueryRender = useRef(true);
     const [form, setForm] = useState({
         title: '',
         document_source: 'upload',
@@ -353,7 +374,44 @@ export default function DocumentsIndex({
         });
     };
 
-    const printDisposition = (document: DocumentItem) => setPrintDocument(document);
+    const fetchDocumentDetails = async (document: DocumentItem) => {
+        if (document.id == null) throw new Error('Document details are unavailable.');
+        const { data } = await axios.get<Partial<DocumentItem>>(route('documents.details', document.id));
+        return { ...document, ...data, details_loading: false };
+    };
+
+    const openDocumentDetails = async (document: DocumentItem) => {
+        setViewingRow({ ...document, details_loading: true, details_error: undefined });
+        try {
+            const details = await fetchDocumentDetails(document);
+            setViewingRow((current) => current?.id === document.id ? details : current);
+        } catch {
+            setViewingRow((current) => current?.id === document.id
+                ? { ...current, details_loading: false, details_error: 'Could not load this document’s history. Please try again.' }
+                : current);
+        }
+    };
+
+    const printDisposition = async (document: DocumentItem) => {
+        try {
+            setPrintDocument(await fetchDocumentDetails(document));
+        } catch {
+            setCrudAlert({ title: 'Could not load document', message: 'The disposition history could not be loaded. Please try again.' });
+        }
+    };
+
+    const openRelease = async (document: DocumentItem) => {
+        setReleasingRow({ ...document, details_loading: true });
+        setReleaseForm({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', source: 'current', approvedDraftId: '', file: null });
+        setReleaseError('');
+        try {
+            const details = await fetchDocumentDetails(document);
+            setReleasingRow((current) => current?.id === document.id ? details : current);
+        } catch {
+            setReleasingRow(null);
+            setCrudAlert({ title: 'Could not load document', message: 'Document versions could not be loaded. Please try again.' });
+        }
+    };
     const handleUpdate = (e: React.FormEvent, finalize: boolean) => {
         e.preventDefault();
         if (processing) return;
@@ -391,69 +449,40 @@ export default function DocumentsIndex({
     const handleSort = (key: SortKey) => {
         if (sortKey === key) {
             setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+            setPage(1);
             return;
         }
 
         setSortKey(key);
         setSortDirection('asc');
+        setPage(1);
     };
 
-    const sortedDocuments = useMemo(() => {
-        const filtered = documents.filter((row) => {
-            const haystack = [
-                row.title ?? '',
-                row.tracking_number ?? '',
-                row.status ?? '',
-                getDocumentTypeName(row),
-                row.origin_type ?? '',
-                row.last_transaction ?? '',
-                row.office_name ?? '',
-                row.office?.name ?? '',
-            ]
-                .join(' ')
-                .toLowerCase();
-
-            const matchesSearch = haystack.includes(search.toLowerCase());
-            const normalizedStatus = (row.status ?? '').toLowerCase();
-            const matchesStatus = statusFilter === 'all' ||
-                normalizedStatus === statusFilter.toLowerCase() ||
-                (statusFilter === 'released' && ['processed', 'available'].includes(normalizedStatus)) ||
-                (statusFilter === 'ongoing' && normalizedStatus === 'pending') ||
-                (statusFilter === 'archived' && normalizedStatus === 'terminal');
-
-            return matchesSearch && matchesStatus;
-        });
-
-        // Preserve the server's creation-date descending order until a column is selected.
-        if (sortKey === null) return filtered;
-
-        return [...filtered].sort((a, b) => {
-            const valueA = String(sortKey === 'document_type' ? getDocumentTypeName(a) : a[sortKey] ?? '').toLowerCase();
-            const valueB = String(sortKey === 'document_type' ? getDocumentTypeName(b) : b[sortKey] ?? '').toLowerCase();
-
-            if (valueA < valueB) {
-                return sortDirection === 'asc' ? -1 : 1;
-            }
-
-            if (valueA > valueB) {
-                return sortDirection === 'asc' ? 1 : -1;
-            }
-
-            return 0;
-        });
-    }, [documents, search, statusFilter, sortKey, sortDirection]);
-
-    const totalPages = Math.max(1, Math.ceil(sortedDocuments.length / perPage));
-
     useEffect(() => {
-        setPage(1);
-    }, [search, statusFilter, perPage]);
-
-    useEffect(() => {
-        if (page > totalPages) {
-            setPage(totalPages);
+        if (firstQueryRender.current) {
+            firstQueryRender.current = false;
+            return;
         }
-    }, [page, totalPages]);
+
+        const timeout = window.setTimeout(() => {
+            const query = {
+                search: search || undefined,
+                status: statusFilter === 'all' ? undefined : statusFilter,
+                sort: sortKey ?? undefined,
+                direction: sortKey ? sortDirection : undefined,
+                per_page: perPage,
+                page,
+            };
+            router.get(title === 'Latest Documents' ? route('documents.latest') : route('documents.index'), query, {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+                only: ['documents', 'pagination', 'filters'],
+            });
+        }, 250);
+
+        return () => window.clearTimeout(timeout);
+    }, [search, statusFilter, sortKey, sortDirection, perPage, page, title]);
 
     useEffect(() => {
         if (!printDocument) return;
@@ -490,7 +519,9 @@ export default function DocumentsIndex({
         };
     }, [printDocument]);
 
-    const paginatedDocuments = sortedDocuments.slice((page - 1) * perPage, page * perPage);
+    const paginatedDocuments = documents;
+    const totalPages = Math.max(1, pagination?.last_page ?? 1);
+    const totalDocuments = pagination?.total ?? documents.length;
     const isOtherAction = (actionTypeId: string) => actionTypes.find((action) => String(action.id) === actionTypeId)?.name.trim().toLowerCase() === 'others';
 
     return (
@@ -539,7 +570,7 @@ export default function DocumentsIndex({
                             <input
                                 type="text"
                                 value={search}
-                                onChange={(e) => setSearch(e.target.value)}
+                                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                                 placeholder="Search title, tracking number, or office"
                                 aria-label="Search documents"
                                 className="w-full border-0 bg-transparent px-0 py-2.5 text-sm text-foreground placeholder:text-muted focus:ring-0"
@@ -548,7 +579,7 @@ export default function DocumentsIndex({
 
                         <select
                             value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
+                            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
                             aria-label="Filter documents by status"
                             className="col-span-2 h-11 min-w-0 rounded-xl border border-border bg-background pl-3 pr-10 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 sm:col-span-1"
                         >
@@ -583,7 +614,7 @@ export default function DocumentsIndex({
                 <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
                     <div className="flex flex-col gap-1 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                         <h3 className="font-semibold text-foreground">Documents</h3>
-                        <p className="text-sm text-muted">{sortedDocuments.length === 0 ? 'No results' : `Showing ${((page - 1) * perPage) + 1}–${Math.min(page * perPage, sortedDocuments.length)} of ${sortedDocuments.length} documents`}</p>
+                        <p className="text-sm text-muted">{totalDocuments === 0 ? 'No results' : `Showing ${pagination?.from ?? 0}–${pagination?.to ?? 0} of ${totalDocuments} documents`}</p>
                     </div>
                 <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Documents table; scroll horizontally for more columns">
                     <table className="dots-document-table min-w-full text-left text-sm">
@@ -647,7 +678,7 @@ export default function DocumentsIndex({
                                                 {isLegacy && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 font-sans text-[10px] font-medium text-muted">Legacy</span>}
                                             </td>
                                             <td className="min-w-[190px] px-4 py-4 font-medium text-foreground">
-                                                <button type="button" onClick={() => setViewingRow(document)} className="text-left font-semibold hover:text-primary hover:underline">{document.title || 'Untitled'}</button>
+                                                <button type="button" onClick={() => openDocumentDetails(document)} className="text-left font-semibold hover:text-primary hover:underline">{document.title || 'Untitled'}</button>
                                             </td>
                                             <td className="whitespace-nowrap px-4 py-4 text-muted">
                                                 {getDocumentTypeName(document) || '—'}
@@ -665,18 +696,18 @@ export default function DocumentsIndex({
                                                 </span>
                                             </td>
                                             <td className="min-w-[240px] px-4 py-3">
-                                                {document.transactions?.[0] ? <div className="flex flex-col gap-1.5">
-                                                    <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${getTransactionClasses(document.transactions[0].action, document.transactions[0].status)}`}>{document.transactions[0].action || document.transactions[0].status || 'Transaction'}</span>
-                                                    <span className="text-xs text-muted">{[document.transactions[0].from_office_short_name || document.transactions[0].from_office, document.transactions[0].to_office_short_name || document.transactions[0].to_office].filter(Boolean).join(' → ') || document.transactions[0].holder_short_name || document.transactions[0].holder || 'Office not recorded'}</span>
-                                                    <span className="text-[11px] text-slate-400">{document.transactions[0].created_at || document.transactions[0].created_by || '—'}</span>
+                                                {document.last_transaction_summary ? <div className="flex flex-col gap-1.5">
+                                                    <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${getTransactionClasses(document.last_transaction_summary.action, document.last_transaction_summary.status)}`}>{document.last_transaction_summary.action || document.last_transaction_summary.status || 'Transaction'}</span>
+                                                    <span className="text-xs text-muted">{[document.last_transaction_summary.from_office_short_name || document.last_transaction_summary.from_office, document.last_transaction_summary.to_office_short_name || document.last_transaction_summary.to_office].filter(Boolean).join(' → ') || document.last_transaction_summary.holder_short_name || document.last_transaction_summary.holder || 'Office not recorded'}</span>
+                                                    <span className="text-[11px] text-slate-400">{document.last_transaction_summary.created_at || document.last_transaction_summary.created_by || '—'}</span>
                                                 </div> : <span className="text-sm text-slate-400">No transactions</span>}
                                             </td>
                                             <td className="whitespace-nowrap px-4 py-4 no-print">
                                                 <fieldset disabled={processing} className="flex min-w-[180px] flex-wrap items-center gap-1.5">
-                                                    <button type="button" aria-label="View document" title="View document" onClick={() => setViewingRow(document)} className="rounded-md bg-slate-100 p-2 text-foreground hover:bg-slate-200"><Eye size={15} /></button>
+                                                    <button type="button" aria-label="View document" title="View document" onClick={() => openDocumentDetails(document)} className="rounded-md bg-slate-100 p-2 text-foreground hover:bg-slate-200"><Eye size={15} /></button>
                                                     {document.is_finalized && <button type="button" aria-label="Print disposition form" title="Print disposition form" onClick={() => printDisposition(document)} className="rounded-md bg-indigo-50 p-2 text-indigo-700 hover:bg-indigo-100"><Printer size={15} /></button>}
                                                     {document.can_update && <button type="button" aria-label="Update draft" title="Update draft" onClick={() => openEdit(document)} className="rounded-md bg-secondary p-2 text-primary hover:bg-blue-100"><Pencil size={15} /></button>}
-                                                    {document.can_release && <button type="button" aria-label="Forward document" title="Forward document" onClick={() => { setReleasingRow(document); setReleaseForm({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', source: 'current', approvedDraftId: '', file: null }); setReleaseError(''); }} className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-3 py-2  hover:bg-slate-200"><Send size={15} /></button>}
+                                                    {document.can_release && <button type="button" aria-label="Forward document" title="Forward document" onClick={() => openRelease(document)} className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-3 py-2  hover:bg-slate-200"><Send size={15} /></button>}
                                                     {document.can_terminal && <button type="button" aria-label="Tag as terminal" title="Tag as terminal" onClick={() => requestDocumentAction('Tag document as terminal?', `Mark ${document.tracking_number || 'this document'} as terminal?`, 'Tag as terminal', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/terminal`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document updated', message: 'Document tagged as terminal.' }) }); })} className="rounded-md bg-violet-50 p-2 text-violet-700 hover:bg-violet-100"><Archive size={15} /></button>}
                                                     {document.can_receive && <button type="button" aria-label="Receive document" title="Receive document" onClick={() => requestDocumentAction('Receive document?', `Confirm receipt of ${document.tracking_number || 'this document'}?`, 'Receive', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/receive`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document received', message: 'Document received successfully.' }) }); })} className="inline-flex items-center gap-1.5 rounded-md bg-success-soft px-3 py-2 text-success hover:bg-success/20"><Inbox size={15} /></button>}
                                                     {document.can_delete && <button type="button" aria-label="Delete draft" title="Delete draft" onClick={() => requestDocumentAction('Delete draft?', `Remove ${document.tracking_number || 'this draft'} from the active list?`, 'Delete draft', () => { setCrudAlert(null); setProcessing(true); router.delete(`/documents/${document.id}`, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Draft deleted', message: 'Document draft deleted successfully.' }) }); }, true)} className="rounded-md bg-danger-soft p-2 text-danger hover:bg-rose-100"><Trash2 size={15} /></button>}
@@ -696,7 +727,7 @@ export default function DocumentsIndex({
                         <select
                             aria-label="Rows per page"
                             value={perPage}
-                            onChange={(e) => setPerPage(Number(e.target.value))}
+                            onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}
                             className="min-w-[4.5rem] rounded-lg border border-border bg-surface py-1.5 pl-2 pr-10 text-sm"
                         >
                             <option value={5}>5</option>
@@ -750,7 +781,9 @@ export default function DocumentsIndex({
                             </button>
                         </div>
 
-                        <div className="space-y-6 p-5 sm:p-6">
+                        <div className="space-y-6 p-5 sm:p-6" aria-busy={viewingRow.details_loading}>
+                            {viewingRow.details_loading && <p role="status" className="rounded-lg bg-background p-3 text-sm text-muted">Loading transaction history and attachments…</p>}
+                            {viewingRow.details_error && <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{viewingRow.details_error}</p>}
                             <section aria-label="Document information" className="grid gap-4 rounded-xl border border-border bg-background p-4 sm:grid-cols-2 lg:grid-cols-3">
                                 <div><p className="text-xs font-semibold uppercase text-muted">Tracking number</p><p className="mt-1 break-words font-mono text-sm font-medium text-foreground">{viewingRow.tracking_number || '—'}</p></div>
                                 <div><p className="text-xs font-semibold uppercase text-muted">Title</p><p className="mt-1 break-words text-sm font-medium text-foreground">{viewingRow.title || 'Untitled'}</p></div>
@@ -766,7 +799,7 @@ export default function DocumentsIndex({
                                     <div><h3 id="transaction-history-title" className="font-semibold text-foreground">Transaction history</h3><p className="mt-0.5 text-sm text-muted">Document activity in workflow order.</p></div>
                                     <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold text-muted">{viewingRow.transactions?.length ?? 0} transactions</span>
                                 </div>
-                                {viewingRow.transactions?.length ? <ol className="space-y-3 border-l-2 border-border pl-4">{viewingRow.transactions.map((transaction, index) => <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="relative rounded-xl border border-border bg-background p-3 before:absolute before:-left-[22px] before:top-4 before:h-2.5 before:w-2.5 before:rounded-full before:bg-primary"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-foreground">{transaction.action || transaction.status || 'Transaction'}</span><span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium uppercase text-muted">{transaction.status || '—'}</span></div><p className="mt-1 text-sm text-muted">{[transaction.from_office_short_name || transaction.from_office, transaction.to_office_short_name || transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder_short_name || transaction.holder ? `Held by ${transaction.holder_short_name || transaction.holder}` : 'Office details unavailable')}</p><p className="mt-1 text-xs text-muted">{[transaction.created_by_short_name || transaction.created_by, transaction.created_at].filter(Boolean).join(' · ') || 'Date and user unavailable'}</p></li>)}</ol> : <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">No transactions recorded.</p>}
+                                {viewingRow.transactions?.length ? <ol className="space-y-3 border-l-2 border-border pl-4">{viewingRow.transactions.map((transaction, index) => <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="relative rounded-xl border border-border bg-background p-3 before:absolute before:-left-[22px] before:top-4 before:h-2.5 before:w-2.5 before:rounded-full before:bg-primary"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-foreground">{transaction.action || transaction.status || 'Transaction'}</span><span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium uppercase text-muted">{transaction.status || '—'}</span></div><p className="mt-1 text-sm text-muted">{[transaction.from_office_short_name || transaction.from_office, transaction.to_office_short_name || transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder_short_name || transaction.holder ? `Held by ${transaction.holder_short_name || transaction.holder}` : 'Office details unavailable')}</p><p className="mt-1 text-xs text-muted">{[transaction.created_by_short_name || transaction.created_by, transaction.created_at].filter(Boolean).join(' · ') || 'Date and user unavailable'}</p></li>)}</ol> : viewingRow.details_loading ? null : <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">No transactions recorded.</p>}
                         </section>
                         </div>
                         <div className="sticky bottom-0 flex justify-end border-t border-border bg-surface px-5 py-4 sm:px-6">
@@ -776,10 +809,10 @@ export default function DocumentsIndex({
                 )}
             </WorkspaceDialog>
 
-            <WorkspaceDialog open={Boolean(releasingRow)} onClose={closeRelease} labelledBy="release-document-title" width="max-w-3xl" busy={processing}>
+            <WorkspaceDialog open={Boolean(releasingRow)} onClose={closeRelease} labelledBy="release-document-title" width="max-w-3xl" busy={processing || Boolean(releasingRow?.details_loading)}>
                 {releasingRow && (
                     <form onSubmit={handleRelease} aria-busy={processing}>
-                    <fieldset disabled={processing} className="min-w-0">
+                    <fieldset disabled={processing || Boolean(releasingRow.details_loading)} className="min-w-0">
                         <input type="hidden" name="document_id" value={releasingRow.id ?? ''} />
                         <input type="hidden" name="tracking_number" value={releasingRow.tracking_number ?? ''} />
                         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
@@ -793,6 +826,7 @@ export default function DocumentsIndex({
                         </div>
 
                         <div className="space-y-6 p-5 sm:p-6">
+                            {releasingRow.details_loading && <p role="status" className="rounded-lg bg-background p-3 text-sm text-muted">Loading attachments…</p>}
                             <details className="rounded-lg border border-border p-3"><summary className="cursor-pointer text-sm font-medium text-muted">Document details and attachments</summary><section aria-label="Selected document details" className="grid gap-x-5 gap-y-4 rounded-xl border border-border bg-background p-4 sm:grid-cols-2">
                                 <ReadOnlyDetail label="Tracking number" value={releasingRow.tracking_number} />
                                 <ReadOnlyDetail label="Title" value={releasingRow.title} />

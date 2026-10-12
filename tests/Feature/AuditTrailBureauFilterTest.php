@@ -43,7 +43,7 @@ class AuditTrailBureauFilterTest extends TestCase
         }
     }
 
-    public function test_admin_staff_only_sees_own_bureau_including_pagination_totals(): void
+    public function test_admin_staff_only_sees_own_bureau_with_count_free_pagination(): void
     {
         $own = Office::create(['name' => 'Own bureau']);
         $other = Office::create(['name' => 'Other bureau']);
@@ -58,11 +58,13 @@ class AuditTrailBureauFilterTest extends TestCase
             $staff = User::factory()->create(['role_id' => $roleId, 'role' => 'Admin_Staff', 'office_id' => $own->id]);
             $this->actingAs($staff)->get('/audit-trail')->assertInertia(fn (Assert $page) => $page
                 ->where('canFilterBureaus', false)->where('filters.office_id', $own->id)
-                ->has('bureaus', 0)->has('trail', 50)->where('pagination.total', 51)
+                ->has('bureaus', 0)->has('trail', 50)->where('pagination.total', null)
+                ->where('pagination.last_page', null)
+                ->where('pagination.next_page_url', fn ($url) => str_contains($url, 'page=2'))
                 ->where('trail', fn ($rows) => collect($rows)->every(fn ($row) => $row['action'] === 'Own bureau action')));
             $this->get('/audit-trail?page=2')->assertInertia(fn (Assert $page) => $page->has('trail', 1)->where('trail.0.action', 'Own bureau action'));
             $this->get('/audit-trail?office_id='.$other->id)->assertForbidden();
-            $this->get('/audit-trail?office_id=')->assertInertia(fn (Assert $page) => $page->where('pagination.total', 51));
+            $this->get('/audit-trail?office_id=')->assertInertia(fn (Assert $page) => $page->where('pagination.total', null));
         }
     }
 
@@ -72,7 +74,7 @@ class AuditTrailBureauFilterTest extends TestCase
         AuditTrail::create(['user_id' => $staff->id, 'action' => 'Unassigned actor']);
         AuditTrail::create(['action' => 'System activity']);
         $this->actingAs($staff)->get('/audit-trail')->assertInertia(fn (Assert $page) => $page
-            ->has('trail', 0)->where('pagination.total', 0)->where('canFilterBureaus', false)
+            ->has('trail', 0)->where('pagination.total', null)->where('canFilterBureaus', false)
             ->where('scopeNotice', fn ($notice) => str_contains($notice, 'no assigned bureau')));
     }
 

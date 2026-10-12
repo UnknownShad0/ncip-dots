@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Models\Office;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 
 class DocumentAccess
 {
@@ -49,21 +50,20 @@ class DocumentAccess
         }
 
         $officeIds = $this->officeIds($user);
+        $visibleDocumentIds = DB::table('documents')->select('id')->whereNotNull('legacy_doc_id')->where('created_by', $user->id)
+            ->union(DB::table('documents')->select('id')->where('created_by', $user->id)->where('is_finalized', false)->where('status', 'draft'));
+        if ($officeIds !== []) {
+            $visibleDocumentIds = DB::table('documents')->select('id')->whereIn('office_id', $officeIds)
+                ->union(DB::table('document_trails')->select('document_id')->whereIn('from_office_id', $officeIds))
+                ->union(DB::table('document_trails')->select('document_id')->whereIn('to_office_id', $officeIds))
+                ->union(DB::table('document_trails')->select('document_id')->whereIn('holder_office_id', $officeIds))
+                ->union(DB::table('document_trails')->select('document_id')->whereIn('legacy_receiving_office_id', $officeIds))
+                ->union($visibleDocumentIds);
+        }
 
-        return $query->where(function (Builder $visible) use ($officeIds, $user) {
-            if ($officeIds !== []) {
-                $this->scopeForOffices($visible, $officeIds);
-            }
-
-            $visible->orWhere(function (Builder $importedOwner) use ($user) {
-                $importedOwner->whereNotNull('legacy_doc_id')->where('created_by', $user->id);
-            });
-
-            $visible->orWhere(function (Builder $ownDraft) use ($user) {
-                $ownDraft->where('created_by', $user->id)
-                    ->where('is_finalized', false)
-                    ->where('status', 'draft');
-            });
-        });
+        // A joined ID union preserves the office and owner scope while letting
+        // MySQL materialize indexable branches instead of evaluating a
+        // correlated office-history OR for each candidate document.
+        return $query->joinSub($visibleDocumentIds, 'document_access_scope', 'document_access_scope.id', '=', 'documents.id');
     }
 }
