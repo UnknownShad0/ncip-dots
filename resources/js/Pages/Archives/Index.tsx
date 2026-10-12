@@ -1,5 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router } from '@inertiajs/react';
+import { LoaderCircle } from 'lucide-react';
+import { useState } from 'react';
 
 type ArchivePage = {
     data: { id: number; title: string; tracking_number: string; office?: { name: string; short_name: string | null } | null }[];
@@ -18,9 +20,10 @@ export default function ArchivesIndex({ documents, canFilterOffices = false, off
     offices?: { id: number; name: string }[];
     filters?: { office_id: number | null; sort: string };
 }) {
+    const [updating, setUpdating] = useState(false);
     const updateFilters = (officeId: string, sort: string) => router.get(route('archives.index'), {
         ...(officeId ? { office_id: officeId } : {}), sort,
-    }, { preserveScroll: true, preserveState: true, replace: true });
+    }, { preserveScroll: true, preserveState: true, replace: true, onStart: () => setUpdating(true), onFinish: () => setUpdating(false) });
     const rows = documents?.data ?? [];
 
     return (
@@ -32,7 +35,7 @@ export default function ArchivesIndex({ documents, canFilterOffices = false, off
             <div className="mx-auto max-w-[1440px] space-y-6">
                 <p className="text-sm text-muted">Browse archived documents.</p>
 
-                <section className="rounded-xl border border-border bg-surface p-5">
+                <section aria-busy={updating} className="rounded-xl border border-border bg-surface p-5">
                     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                         <h2 className="text-lg font-semibold text-foreground">
                             Archived documents
@@ -72,7 +75,9 @@ export default function ArchivesIndex({ documents, canFilterOffices = false, off
                         )}
                     </div>
 
-                    <div className="divide-y divide-border">
+                    {updating && <p role="status" className="mb-3 inline-flex items-center gap-2 text-xs text-muted"><LoaderCircle size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Updating archives…</p>}
+
+                    <div className="divide-y divide-border" aria-busy={updating}>
                         {rows.length === 0 ? (
                             <p className="rounded-lg bg-background p-5 text-sm text-muted">No archived documents found.</p>
                         ) : (
@@ -100,12 +105,12 @@ export default function ArchivesIndex({ documents, canFilterOffices = false, off
                             </p>
                             <div className="flex gap-2">
                                 {documents.prev_page_url ? (
-                                    <Link href={documents.prev_page_url} className="rounded-lg border border-border px-3 py-2 hover:bg-background">Previous</Link>
+                                    <Link href={documents.prev_page_url} onStart={() => setUpdating(true)} onFinish={() => setUpdating(false)} className="rounded-lg border border-border px-3 py-2 hover:bg-background">Previous</Link>
                                 ) : (
                                     <span aria-disabled="true" className="rounded-lg border border-border px-3 py-2 text-muted">Previous</span>
                                 )}
                                 {documents.next_page_url ? (
-                                    <Link href={documents.next_page_url} className="rounded-lg border border-border px-3 py-2 hover:bg-background">Next</Link>
+                                    <Link href={documents.next_page_url} onStart={() => setUpdating(true)} onFinish={() => setUpdating(false)} className="rounded-lg border border-border px-3 py-2 hover:bg-background">Next</Link>
                                 ) : (
                                     <span aria-disabled="true" className="rounded-lg border border-border px-3 py-2 text-muted">Next</span>
                                 )}

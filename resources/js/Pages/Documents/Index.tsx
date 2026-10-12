@@ -5,7 +5,7 @@ import CrudAlertModal from '@/Components/WorkspaceAlert';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
 import QRCode from 'react-qr-code';
-import { Archive, ArrowDownUp, ChevronLeft, ChevronRight, Eye, FilePlus2, FileText, Inbox, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
+import { Archive, ArrowDownUp, ChevronLeft, ChevronRight, Eye, FilePlus2, FileText, Inbox, LoaderCircle, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { FormEvent } from 'react';
@@ -188,6 +188,8 @@ export default function DocumentsIndex({
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(filters?.direction ?? 'asc');
     const [page, setPage] = useState(pagination?.current_page ?? 1);
     const [perPage, setPerPage] = useState(pagination?.per_page ?? 10);
+    const [showListUpdating, setShowListUpdating] = useState(false);
+    const listLoadingTimer = useRef<number | null>(null);
     const firstQueryRender = useRef(true);
     const [form, setForm] = useState({
         title: '',
@@ -206,6 +208,16 @@ export default function DocumentsIndex({
         notify_by_email: false,
         file: null as File | null,
     });
+
+    const beginListUpdate = () => {
+        if (listLoadingTimer.current !== null) window.clearTimeout(listLoadingTimer.current);
+        listLoadingTimer.current = window.setTimeout(() => setShowListUpdating(true), 180);
+    };
+    const finishListUpdate = () => {
+        if (listLoadingTimer.current !== null) window.clearTimeout(listLoadingTimer.current);
+        listLoadingTimer.current = null;
+        setShowListUpdating(false);
+    };
 
     useEffect(() => { formBaseline.current = JSON.stringify(form); }, [isCreateOpen, editingRow]);
 
@@ -478,11 +490,17 @@ export default function DocumentsIndex({
                 preserveScroll: true,
                 replace: true,
                 only: ['documents', 'pagination', 'filters'],
+                onStart: beginListUpdate,
+                onFinish: finishListUpdate,
             });
         }, 250);
 
         return () => window.clearTimeout(timeout);
     }, [search, statusFilter, sortKey, sortDirection, perPage, page, title]);
+
+    useEffect(() => () => {
+        if (listLoadingTimer.current !== null) window.clearTimeout(listLoadingTimer.current);
+    }, []);
 
     useEffect(() => {
         if (!printDocument) return;
@@ -614,10 +632,13 @@ export default function DocumentsIndex({
                 <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
                     <div className="flex flex-col gap-1 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                         <h3 className="font-semibold text-foreground">Documents</h3>
-                        <p className="text-sm text-muted">{totalDocuments === 0 ? 'No results' : `Showing ${pagination?.from ?? 0}–${pagination?.to ?? 0} of ${totalDocuments} documents`}</p>
+                        <div className="flex items-center gap-3">
+                            {showListUpdating && <p role="status" className="inline-flex items-center gap-1.5 text-xs text-muted"><LoaderCircle size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Updating results…</p>}
+                            <p className="text-sm text-muted">{totalDocuments === 0 ? 'No results' : `Showing ${pagination?.from ?? 0}–${pagination?.to ?? 0} of ${totalDocuments} documents`}</p>
+                        </div>
                     </div>
                 <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Documents table; scroll horizontally for more columns">
-                    <table className="dots-document-table min-w-full text-left text-sm">
+                    <table aria-busy={showListUpdating} className="dots-document-table min-w-full text-left text-sm">
                         <thead className="bg-background text-muted">
                             <tr>
                                 <th className="whitespace-nowrap px-4 py-3.5 font-semibold">
@@ -782,7 +803,7 @@ export default function DocumentsIndex({
                         </div>
 
                         <div className="space-y-6 p-5 sm:p-6" aria-busy={viewingRow.details_loading}>
-                            {viewingRow.details_loading && <p role="status" className="rounded-lg bg-background p-3 text-sm text-muted">Loading transaction history and attachments…</p>}
+                            {viewingRow.details_loading && <p role="status" className="inline-flex items-center gap-2 rounded-lg bg-background p-3 text-sm text-muted"><LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading transaction history and attachments…</p>}
                             {viewingRow.details_error && <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{viewingRow.details_error}</p>}
                             <section aria-label="Document information" className="grid gap-4 rounded-xl border border-border bg-background p-4 sm:grid-cols-2 lg:grid-cols-3">
                                 <div><p className="text-xs font-semibold uppercase text-muted">Tracking number</p><p className="mt-1 break-words font-mono text-sm font-medium text-foreground">{viewingRow.tracking_number || '—'}</p></div>
@@ -826,7 +847,7 @@ export default function DocumentsIndex({
                         </div>
 
                         <div className="space-y-6 p-5 sm:p-6">
-                            {releasingRow.details_loading && <p role="status" className="rounded-lg bg-background p-3 text-sm text-muted">Loading attachments…</p>}
+                            {releasingRow.details_loading && <p role="status" className="inline-flex items-center gap-2 rounded-lg bg-background p-3 text-sm text-muted"><LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading attachments…</p>}
                             <details className="rounded-lg border border-border p-3"><summary className="cursor-pointer text-sm font-medium text-muted">Document details and attachments</summary><section aria-label="Selected document details" className="grid gap-x-5 gap-y-4 rounded-xl border border-border bg-background p-4 sm:grid-cols-2">
                                 <ReadOnlyDetail label="Tracking number" value={releasingRow.tracking_number} />
                                 <ReadOnlyDetail label="Title" value={releasingRow.title} />

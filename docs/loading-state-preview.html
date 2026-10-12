@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Loading state preview</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #172033;
+      background: #f4f6fa;
+      font-synthesis: none;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 32px 20px 56px; }
+    main { max-width: 1120px; margin: 0 auto; }
+    h1 { margin: 0; font-size: 25px; letter-spacing: -.03em; }
+    .intro { margin: 8px 0 26px; color: #667085; font-size: 14px; }
+    .section-title { margin: 30px 0 12px; font-size: 16px; }
+    .dashboard, .docs { padding: 22px; border: 1px solid #e5e9f0; border-radius: 14px; background: #fff; box-shadow: 0 3px 12px #1c2a4410; }
+    .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .card, .panel { border: 1px solid #e7ebf2; border-radius: 10px; background: #fff; }
+    .card { min-height: 88px; padding: 15px; }
+    .label { color: #667085; font-size: 12px; }
+    .value { margin-top: 8px; font-size: 24px; font-weight: 650; }
+    .analytics { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+    .panel { min-height: 208px; padding: 16px; }
+    .panel-heading { display: flex; align-items: center; justify-content: space-between; font-size: 14px; font-weight: 650; }
+    .muted { color: #778196; font-size: 12px; font-weight: 400; }
+    .chart { display: flex; align-items: end; gap: 12px; height: 126px; padding: 16px 10px 0; }
+    .bar { flex: 1; border-radius: 5px 5px 2px 2px; background: #dfe6f1; }
+    .bar:nth-child(1) { height: 38%; } .bar:nth-child(2) { height: 69%; }
+    .bar:nth-child(3) { height: 50%; } .bar:nth-child(4) { height: 87%; }
+    .bar:nth-child(5) { height: 61%; } .bar:nth-child(6) { height: 76%; }
+    .metric-list { display: grid; gap: 15px; margin-top: 20px; }
+    .metric-row { display: grid; grid-template-columns: 120px 1fr 44px; align-items: center; gap: 12px; }
+    .metric-line { height: 9px; border-radius: 99px; background: #e8edf4; }
+    .metric-line.short { width: 70%; }
+    .skeleton { position: relative; overflow: hidden; background: #e9edf3; }
+    .skeleton::after { position: absolute; inset: 0; content: ""; transform: translateX(-100%); background: linear-gradient(90deg, transparent, #ffffff99, transparent); animation: shimmer 1.5s infinite; }
+    .sk-line { height: 10px; border-radius: 99px; }
+    .sk-value { width: 58px; height: 25px; margin-top: 12px; border-radius: 6px; }
+    .sk-bar { border-radius: 5px 5px 2px 2px; }
+    @keyframes shimmer { to { transform: translateX(100%); } }
+    .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+    .search { width: min(360px, 100%); padding: 10px 12px; border: 1px solid #dce2eb; border-radius: 8px; color: #667085; font-size: 13px; }
+    .progress { display: inline-flex; align-items: center; gap: 8px; color: #526078; font-size: 12px; }
+    .spinner { width: 14px; height: 14px; border: 2px solid #d8e0ec; border-top-color: #4263eb; border-radius: 50%; animation: spin .75s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+    th { padding: 11px 10px; border-bottom: 1px solid #e8ecf2; color: #778196; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+    td { height: 56px; padding: 10px; border-bottom: 1px solid #f0f2f6; }
+    .doc-title { font-weight: 600; }
+    .sub { margin-top: 4px; color: #818b9e; font-size: 11px; }
+    .pill { display: inline-block; padding: 5px 9px; border-radius: 99px; background: #eef6f1; color: #35704c; font-size: 11px; }
+    .button { padding: 9px 13px; border: 1px solid #dce2eb; border-radius: 8px; background: white; color: #344054; font-size: 12px; cursor: pointer; }
+    .button:hover { background: #f7f8fa; }
+    .note { margin-top: 11px; color: #818b9e; font-size: 11px; }
+    .controls { display: flex; gap: 8px; }
+    @media (max-width: 720px) {
+      body { padding: 22px 12px 40px; }
+      .cards { grid-template-columns: repeat(2, 1fr); }
+      .analytics { grid-template-columns: 1fr; }
+      .dashboard, .docs { padding: 14px; }
+      .table-wrap { overflow-x: auto; }
+      table { min-width: 660px; }
+      .toolbar { align-items: flex-start; flex-direction: column; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Loading states</h1>
+    <p class="intro">Static UI preview · CSS only · Does not change the application pages</p>
+
+    <h2 class="section-title">Dashboard · summary stays visible while analytics load</h2>
+    <section class="dashboard" aria-label="Dashboard loading preview">
+      <div class="cards">
+        <article class="card"><div class="label">Incoming</div><div class="value">128</div></article>
+        <article class="card"><div class="label">Pending</div><div class="value">14</div></article>
+        <article class="card"><div class="label">Released</div><div class="value">86</div></article>
+        <article class="card"><div class="label">Archived</div><div class="value">32</div></article>
+      </div>
+      <div class="analytics">
+        <article class="panel">
+          <div class="panel-heading">Documents by type <span class="muted">Loading chart…</span></div>
+          <div class="chart" aria-hidden="true">
+            <div class="bar skeleton"></div><div class="bar skeleton"></div><div class="bar skeleton"></div>
+            <div class="bar skeleton"></div><div class="bar skeleton"></div><div class="bar skeleton"></div>
+          </div>
+        </article>
+        <article class="panel">
+          <div class="panel-heading">Processing time <span class="muted">Loading metrics…</span></div>
+          <div class="metric-list" aria-hidden="true">
+            <div class="metric-row"><div class="sk-line skeleton" style="width:82px"></div><div class="metric-line skeleton"></div><div class="sk-line skeleton" style="width:34px"></div></div>
+            <div class="metric-row"><div class="sk-line skeleton" style="width:106px"></div><div class="metric-line skeleton"></div><div class="sk-line skeleton" style="width:34px"></div></div>
+            <div class="metric-row"><div class="sk-line skeleton" style="width:74px"></div><div class="metric-line short skeleton"></div><div class="sk-line skeleton" style="width:34px"></div></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <h2 class="section-title">Documents · keep current results visible during a search</h2>
+    <section class="docs" aria-label="Document table updating preview" aria-busy="true">
+      <div class="toolbar">
+        <div class="search">Search documents… &nbsp; budget</div>
+        <div class="progress" role="status"><span class="spinner" aria-hidden="true"></span> Updating results…</div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Document</th><th>Type</th><th>Office</th><th>Status</th><th>Updated</th></tr></thead>
+          <tbody>
+            <tr><td><div class="doc-title">Annual budget proposal</div><div class="sub">DOC-2026-0148</div></td><td>Memorandum</td><td>Finance</td><td><span class="pill">Released</span></td><td>Oct 10, 2026</td></tr>
+            <tr><td><div class="doc-title">Budget review notes</div><div class="sub">DOC-2026-0139</div></td><td>Report</td><td>Planning</td><td><span class="pill">Released</span></td><td>Oct 8, 2026</td></tr>
+            <tr><td><div class="doc-title">Q4 funding request</div><div class="sub">DOC-2026-0122</div></td><td>Request</td><td>Finance</td><td><span class="pill">Released</span></td><td>Oct 6, 2026</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">Existing rows remain on screen until the new search results arrive.</p>
+    </section>
+
+    <h2 class="section-title">First visit · row skeletons before table data arrives</h2>
+    <section class="docs" aria-label="Document table first load preview" aria-busy="true">
+      <div class="toolbar"><div class="search">Search documents…</div><span class="muted">Loading documents</span></div>
+      <div class="table-wrap">
+        <table aria-hidden="true">
+          <thead><tr><th>Document</th><th>Type</th><th>Office</th><th>Status</th><th>Updated</th></tr></thead>
+          <tbody>
+            <tr><td><div class="sk-line skeleton" style="width:190px"></div><div class="sk-line skeleton" style="width:92px;margin-top:9px;height:7px"></div></td><td><div class="sk-line skeleton" style="width:90px"></div></td><td><div class="sk-line skeleton" style="width:76px"></div></td><td><div class="sk-line skeleton" style="width:62px"></div></td><td><div class="sk-line skeleton" style="width:84px"></div></td></tr>
+            <tr><td><div class="sk-line skeleton" style="width:160px"></div><div class="sk-line skeleton" style="width:92px;margin-top:9px;height:7px"></div></td><td><div class="sk-line skeleton" style="width:72px"></div></td><td><div class="sk-line skeleton" style="width:94px"></div></td><td><div class="sk-line skeleton" style="width:62px"></div></td><td><div class="sk-line skeleton" style="width:84px"></div></td></tr>
+            <tr><td><div class="sk-line skeleton" style="width:205px"></div><div class="sk-line skeleton" style="width:92px;margin-top:9px;height:7px"></div></td><td><div class="sk-line skeleton" style="width:82px"></div></td><td><div class="sk-line skeleton" style="width:76px"></div></td><td><div class="sk-line skeleton" style="width:62px"></div></td><td><div class="sk-line skeleton" style="width:84px"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <p class="note">Preview only. The dashboard and document pages are not modified by this file.</p>
+  </main>
+</body>
+</html>
