@@ -2,9 +2,10 @@ import { connectedSystems } from '@/Components/ConnectedSystemNavigation';
 import { libraryLinks } from '@/Components/LibraryNavigation';
 import { Head, Link, usePage } from '@inertiajs/react';
 import { Dialog, DialogPanel, DialogTitle, Menu as DropdownMenu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
-import { Archive, Building2, ChevronDown, Clock3, Database, FileClock, FileText, Folder, History, LayoutGrid, LogOut, Menu, UserRound, X, BookOpen, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Archive, Building2, ChevronDown, Clock3, Database, FileClock, FileText, Folder, History, LayoutGrid, LogOut, Menu, UserRound, X, BookOpen, PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
 import { PropsWithChildren, ReactNode, useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
+import PrivacyNoticeModal from '@/Components/PrivacyNoticeModal';
 
 const groups = [
     { label: '', items: [{ name: 'Dashboard', href: 'dashboard', icon: LayoutGrid }] },
@@ -31,8 +32,17 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
     const displayName = user.short_name || user.name || 'User';
     const [mobileOpen, setMobileOpen] = useState(false);
     const [collapsed, setCollapsed] = useState(false);
+    const [privacyNoticeOpen, setPrivacyNoticeOpen] = useState(false);
     const reduceMotion = useReducedMotion();
     useEffect(() => { try { setCollapsed(localStorage.getItem('dots.sidebar.collapsed') === 'true'); } catch {} }, []);
+    useEffect(() => {
+        const loginKey = `dots.privacy.shown.${String(user.id ?? user.email ?? 'user')}.${String(auth.loginSessionId ?? 'initial-session')}`;
+        try {
+            if (sessionStorage.getItem(loginKey)) return;
+            sessionStorage.setItem(loginKey, 'true');
+        } catch {}
+        setPrivacyNoticeOpen(true);
+    }, [user.id, user.email, auth.loginSessionId]);
     const toggleSidebar = () => setCollapsed((value) => {
         try { localStorage.setItem('dots.sidebar.collapsed', String(!value)); } catch {}
         return !value;
@@ -57,6 +67,7 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
             </section>)}
         </nav>
         <div className="border-t border-border p-3">
+            <button type="button" onClick={() => { setMobileOpen(false); setPrivacyNoticeOpen(true); }} title={compact ? 'Privacy notice' : undefined} aria-label="Privacy notice" className={`mb-1 flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted hover:bg-secondary ${compact ? 'justify-center' : ''}`}><ShieldCheck size={18} />{!compact && 'Privacy notice'}</button>
             <Link href={route('logout')} method="post" as="button" title={compact ? 'Sign out' : undefined} aria-label="Sign out" className={`flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted hover:bg-secondary ${compact ? 'justify-center' : ''}`}><LogOut size={18} />{!compact && 'Sign out'}</Link>
         </div>
     </>;
@@ -92,5 +103,10 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
                 <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
             </div>
         </div>
+        <PrivacyNoticeModal
+            open={privacyNoticeOpen}
+            onClose={() => setPrivacyNoticeOpen(false)}
+            onAcknowledge={() => setPrivacyNoticeOpen(false)}
+        />
     </div>;
 }

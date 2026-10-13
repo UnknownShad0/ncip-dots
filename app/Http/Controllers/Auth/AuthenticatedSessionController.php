@@ -9,6 +9,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -36,6 +37,7 @@ class AuthenticatedSessionController extends Controller
 
         app(AuditTrailWriter::class)->record('login.succeeded', $request->user());
         $request->session()->regenerate();
+        $request->session()->put('privacy_notice_login_id', (string) Str::uuid());
 
         return redirect()->intended(route('dashboard', absolute: false));
     }

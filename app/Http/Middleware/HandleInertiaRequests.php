@@ -52,6 +52,7 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'auth' => [
                 'user' => $authUserData,
+                'loginSessionId' => $authUser ? $request->session()->get('privacy_notice_login_id') : null,
             ],
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
