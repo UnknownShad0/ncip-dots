@@ -89,7 +89,9 @@ export default function PaginatedDocument({ title, content, onTitleChange, onCha
         <style>{styles}</style>
         <div ref={measure} className="pagination-measure" aria-hidden="true" />
         {pages.map((pieces, pageIndex) => <article key={pageIndex} className="document-sheet" aria-label={`Document page ${pageIndex + 1}`}>
-            <header className="sheet-header"><img src="/images/header.png" alt="National Commission on Indigenous Peoples" /></header>
+            {pageIndex === 0
+                ? <header className="sheet-header"><img src="/images/header.png" alt="National Commission on Indigenous Peoples" /></header>
+                : <div className="sheet-header" aria-hidden="true" />}
             <div className="sheet-body">{pieces.map(piece => <div key={`${piece.key}-${piece.start}`} className={`sheet-block sheet-${piece.kind}`} style={{ height: piece.height }}>
                 {piece.kind === 'meta' && <strong>{piece.label}{piece.start > 0 ? ' (cont.)' : ''}:</strong>}
                 {editable ? <><textarea data-block={piece.key} data-start={piece.start} data-end={piece.end} aria-label={`${piece.label}${pageIndex ? `, page ${pageIndex + 1}` : ''}`} required={piece.required && piece.start === 0} spellCheck rows={1} value={piece.value.slice(piece.start, piece.end)} placeholder={piece.placeholder} onChange={event => update(piece, event.target.value, event.target.selectionStart)} onKeyDown={event => {
