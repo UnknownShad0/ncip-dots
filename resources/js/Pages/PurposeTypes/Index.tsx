@@ -178,13 +178,13 @@ export default function PurposeTypesIndex({
                     .print-table-only { position: absolute; left: 0; top: 0; width: 100%; padding: 0; margin: 0; }
                     .no-print { display: none !important; }
                     table { width: 100% !important; }
-                    th, td { font-size: 11px !important; }
+                    th, td { font-size: 14px !important; }
                 }
             `}</style>
 
             <div className="mx-auto flex max-w-[1440px] flex-col gap-5 print-table-only">
                 <section className="no-print">
-                    <div><h2 className="text-lg font-semibold text-foreground">Purpose types</h2><p className="mt-1 text-sm text-muted">Manage the classifications assigned to documents.</p></div>
+                    <div className="mb-5"><h2 className="text-lg font-semibold text-foreground">Purpose types</h2><p className="mt-1 text-sm text-muted">Manage the classifications assigned to documents.</p></div>
 
                     <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
                         <label className="relative block">

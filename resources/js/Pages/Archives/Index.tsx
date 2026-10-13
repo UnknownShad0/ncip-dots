@@ -148,7 +148,7 @@ export default function ArchivesIndex({ documents, canFilterOffices = false, off
                             {documents && <span className="ml-1 text-sm font-normal text-muted">({documents.total})</span>}
                         </h2>
                         {documents && (
-                            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                            <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
                                 {canFilterOffices && (
                                     <label>
                                         <span className="sr-only">Filter by originating bureau or office</span>
@@ -156,7 +156,7 @@ export default function ArchivesIndex({ documents, canFilterOffices = false, off
                                             aria-label="Filter by originating bureau or office"
                                             value={filters.office_id ?? ''}
                                             onChange={event => updateFilters(event.target.value, String(filters.year ?? ''), filters.sort)}
-                                            className="h-10 w-full rounded-lg border-border text-sm sm:w-auto"
+                                            className="h-11 w-full rounded-lg border-border text-sm sm:w-80"
                                         >
                                             <option value="">All bureaus / offices</option>
                                             {offices.map(office => <option key={office.id} value={office.id}>{office.name}</option>)}
@@ -169,7 +169,7 @@ export default function ArchivesIndex({ documents, canFilterOffices = false, off
                                         aria-label="Filter by year"
                                         value={filters.year ?? ''}
                                         onChange={event => updateFilters(String(filters.office_id ?? ''), event.target.value, filters.sort)}
-                                        className="h-10 w-full rounded-lg border-border text-sm sm:w-auto"
+                                        className="h-11 w-full rounded-lg border-border text-sm sm:w-auto"
                                     >
                                         <option value="">All years</option>
                                         {[2022, 2023, 2024, 2025, 2026].map(year => <option key={year} value={year}>{year}</option>)}
@@ -181,7 +181,7 @@ export default function ArchivesIndex({ documents, canFilterOffices = false, off
                                         aria-label="Sort archived documents"
                                         value={filters.sort}
                                         onChange={event => updateFilters(String(filters.office_id ?? ''), String(filters.year ?? ''), event.target.value)}
-                                        className="h-10 w-full rounded-lg border-border text-sm sm:w-auto"
+                                        className="h-11 w-full rounded-lg border-border text-sm sm:w-auto"
                                     >
                                         <option value="newest">Date created: newest first</option>
                                         <option value="oldest">Date created: oldest first</option>
@@ -193,9 +193,9 @@ export default function ArchivesIndex({ documents, canFilterOffices = false, off
                                     <label className="relative min-w-0 flex-1 sm:flex-none">
                                         <span className="sr-only">Search title or tracking number by prefix</span>
                                         <Search size={15} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-                                        <input type="search" aria-label="Search title or tracking number by prefix" value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Title or tracking number" maxLength={100} className="h-10 w-full rounded-lg border-border pl-9 text-sm sm:w-56" />
+                                        <input type="search" aria-label="Search title or tracking number by prefix" value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Title or tracking number" maxLength={100} className="h-11 w-full rounded-lg border-border pl-9 text-sm sm:w-56" />
                                     </label>
-                                    <button type="submit" className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg border border-border bg-background px-3 text-sm font-medium text-foreground hover:bg-secondary">Search</button>
+                                    <button type="submit" className="inline-flex h-11 shrink-0 items-center justify-center rounded-lg border border-border bg-background px-3 text-sm font-medium text-foreground hover:bg-secondary">Search</button>
                                 </form>
                             </div>
                         )}
@@ -258,7 +258,7 @@ export default function ArchivesIndex({ documents, canFilterOffices = false, off
                     <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
                         <div className="flex min-w-0 items-start gap-3">
                             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary"><FileText size={20} aria-hidden="true" /></span>
-                            <div className="min-w-0"><h2 id="archive-document-details-title" className="text-lg font-semibold text-foreground">Document details</h2><p className="mt-0.5 break-words text-sm text-muted">Review document information and transaction history.</p></div>
+                            <div className="min-w-0"><h2 id="archive-document-details-title" className="text-lg font-semibold text-foreground">Document details</h2><p className="mt-1 break-words text-sm text-muted">Review document information and transaction history.</p></div>
                         </div>
                         <button type="button" onClick={() => setViewingDocument(null)} aria-label="Close document details" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground"><X size={19} aria-hidden="true" /></button>
                     </div>
@@ -275,7 +275,7 @@ export default function ArchivesIndex({ documents, canFilterOffices = false, off
                             <div className="sm:col-span-2 lg:col-span-3"><p className="text-xs font-semibold uppercase text-muted">Remarks</p><p className="mt-1 whitespace-pre-wrap break-words text-sm text-foreground">{viewingDocument.remarks || '—'}</p></div>
                         </section>
                         <section aria-labelledby="archive-transaction-history-title">
-                            <div className="mb-3 flex items-center justify-between gap-3"><div><h3 id="archive-transaction-history-title" className="font-semibold text-foreground">Transaction history</h3><p className="mt-0.5 text-sm text-muted">Document activity in workflow order.</p></div><span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold text-muted">{viewingDocument.transactions?.length ?? 0} transactions</span></div>
+                            <div className="mb-3 flex items-center justify-between gap-3"><div><h3 id="archive-transaction-history-title" className="font-semibold text-foreground">Transaction history</h3><p className="mt-1 text-sm text-muted">Document activity in workflow order.</p></div><span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold text-muted">{viewingDocument.transactions?.length ?? 0} transactions</span></div>
                             {viewingDocument.transactions?.length ? <ol className="space-y-3 border-l-2 border-border pl-4">{viewingDocument.transactions.map((transaction, index) => <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="relative rounded-xl border border-border bg-background p-3 before:absolute before:-left-[22px] before:top-4 before:h-2.5 before:w-2.5 before:rounded-full before:bg-primary"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-foreground">{transaction.action || transaction.status || 'Transaction'}</span><span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium uppercase text-muted">{transaction.status || '—'}</span></div><p className="mt-1 text-sm text-muted">{[transaction.from_office_short_name || transaction.from_office, transaction.to_office_short_name || transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder_short_name || transaction.holder ? `Held by ${transaction.holder_short_name || transaction.holder}` : 'Office details unavailable')}</p><p className="mt-1 text-xs text-muted">{[transaction.created_by_short_name || transaction.created_by, transaction.created_at].filter(Boolean).join(' · ') || 'Date and user unavailable'}</p></li>)}</ol> : viewingDocument.details_loading ? null : <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">No transactions recorded.</p>}
                         </section>
                     </div>

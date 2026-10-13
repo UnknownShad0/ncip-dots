@@ -7,16 +7,16 @@ const sections: { title: string; content: ReactNode }[] = [
         title: 'Personal Data We Collect',
         content: <>
             <h4 className="mb-2 font-semibold">Online data collection</h4>
-            <ul className="mb-4 list-inside list-disc space-y-1"><li>Name</li><li>Email Address</li><li>User IP Address</li><li>Search Terms</li><li>Pages and Internal Links Accessed</li><li>Date and Time of Visit</li><li>Geolocation</li><li>Referring Site or Platform</li><li>Browser Type and Operating System</li></ul>
+            <ul className="mb-4 list-inside list-disc space-y-1.5"><li>Name</li><li>Email Address</li><li>User IP Address</li><li>Search Terms</li><li>Pages and Internal Links Accessed</li><li>Date and Time of Visit</li><li>Geolocation</li><li>Referring Site or Platform</li><li>Browser Type and Operating System</li></ul>
             <h4 className="mb-2 font-semibold">On-site data collection</h4>
-            <ul className="mb-4 list-inside list-disc space-y-1"><li>Name</li><li>Home Address</li><li>Contact Details (e.g., phone number, email address)</li><li>Proof of Identity (e.g., government-issued IDs)</li><li>Photographs and Videos</li><li>Ethnic Origin</li><li>Health Records (e.g., medical certificates, if required)</li><li>Other relevant information specific to the purpose of collection</li></ul>
+            <ul className="mb-4 list-inside list-disc space-y-1.5"><li>Name</li><li>Home Address</li><li>Contact Details (e.g., phone number, email address)</li><li>Proof of Identity (e.g., government-issued IDs)</li><li>Photographs and Videos</li><li>Ethnic Origin</li><li>Health Records (e.g., medical certificates, if required)</li><li>Other relevant information specific to the purpose of collection</li></ul>
             <h4 className="mb-2 font-semibold">Sensitive personal information</h4>
-            <ul className="list-inside list-disc space-y-1"><li>Age</li><li>Gender</li><li>Ethnic Origin</li><li>Government-Issued IDs</li><li>Employment History</li><li>Health Information</li></ul>
+            <ul className="list-inside list-disc space-y-1.5"><li>Age</li><li>Gender</li><li>Ethnic Origin</li><li>Government-Issued IDs</li><li>Employment History</li><li>Health Information</li></ul>
         </>,
     },
     {
         title: 'Reasons for Collecting Personal Data',
-        content: <ul className="list-inside list-disc space-y-1"><li>Responding to inquiries and requests for services or interventions.</li><li>Administering and maintaining stakeholder records.</li><li>Organizing and monitoring events, programs, and community outreach activities.</li><li>Ensuring compliance with statutory and regulatory requirements.</li><li>Facilitating programs, services, and benefits for Indigenous Peoples.</li></ul>,
+        content: <ul className="list-inside list-disc space-y-1.5"><li>Responding to inquiries and requests for services or interventions.</li><li>Administering and maintaining stakeholder records.</li><li>Organizing and monitoring events, programs, and community outreach activities.</li><li>Ensuring compliance with statutory and regulatory requirements.</li><li>Facilitating programs, services, and benefits for Indigenous Peoples.</li></ul>,
     },
     {
         title: 'Sharing and Disclosure of Personal Data',
@@ -24,19 +24,19 @@ const sections: { title: string; content: ReactNode }[] = [
     },
     {
         title: 'Retention and Disposal of Personal Data',
-        content: <ul className="list-inside list-disc space-y-1"><li>NCIP retains personal data only as long as necessary to fulfill its declared purposes or comply with legal requirements.</li><li>Shredding of physical documents.</li><li>Permanent deletion of electronic data by authorized personnel.</li></ul>,
+        content: <ul className="list-inside list-disc space-y-1.5"><li>NCIP retains personal data only as long as necessary to fulfill its declared purposes or comply with legal requirements.</li><li>Shredding of physical documents.</li><li>Permanent deletion of electronic data by authorized personnel.</li></ul>,
     },
     {
         title: 'Security Measures',
-        content: <ul className="list-inside list-disc space-y-1"><li>Encryption of sensitive information during transmission.</li><li>Secure storage of both physical and digital records.</li><li>Access control, ensuring that only authorized personnel handle personal data.</li><li>Regular security audits to assess and mitigate risks.</li></ul>,
+        content: <ul className="list-inside list-disc space-y-1.5"><li>Encryption of sensitive information during transmission.</li><li>Secure storage of both physical and digital records.</li><li>Access control, ensuring that only authorized personnel handle personal data.</li><li>Regular security audits to assess and mitigate risks.</li></ul>,
     },
     {
         title: 'Rights of Data Subjects',
-        content: <ul className="list-inside list-disc space-y-1"><li>Right to Information - Be informed about the collection and use of your personal data.</li><li>Right to Access - Request a copy of the personal data held by NCIP.</li><li>Right to Rectification - Correct inaccurate or incomplete personal data.</li><li>Right to Erasure - Request the deletion of personal data that is no longer necessary for its intended purpose.</li><li>Right to Object - Decline participation in specific data processing activities, where applicable.</li></ul>,
+        content: <ul className="list-inside list-disc space-y-1.5"><li>Right to Information - Be informed about the collection and use of your personal data.</li><li>Right to Access - Request a copy of the personal data held by NCIP.</li><li>Right to Rectification - Correct inaccurate or incomplete personal data.</li><li>Right to Erasure - Request the deletion of personal data that is no longer necessary for its intended purpose.</li><li>Right to Object - Decline participation in specific data processing activities, where applicable.</li></ul>,
     },
     {
         title: 'Responsibilities of Data Subjects',
-        content: <ul className="list-inside list-disc space-y-1"><li>Update personal information when changes occur.</li><li>Comply with NCIP policies on the processing of personal data.</li></ul>,
+        content: <ul className="list-inside list-disc space-y-1.5"><li>Update personal information when changes occur.</li><li>Comply with NCIP policies on the processing of personal data.</li></ul>,
     },
     {
         title: 'Changes to this Privacy Notice',
@@ -62,7 +62,7 @@ export default function PrivacyNoticeModal({ open, onClose, onAcknowledge }: { o
                 <header className="flex items-center justify-between gap-4 bg-primary px-5 py-4 text-primary-foreground sm:px-7">
                     <div className="flex min-w-0 items-center gap-3">
                         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/10 text-amber-300"><ShieldCheck size={23} aria-hidden="true" /></span>
-                        <div className="min-w-0"><DialogTitle className="text-lg font-semibold">NCIP Privacy Notice</DialogTitle><p className="mt-0.5 text-xs text-primary-foreground/70">How we collect and protect personal data</p></div>
+                        <div className="min-w-0"><DialogTitle className="text-lg font-semibold">NCIP Privacy Notice</DialogTitle><p className="mt-1 text-xs text-primary-foreground/70">How we collect and protect personal data</p></div>
                     </div>
                     <button type="button" onClick={onClose} aria-label="Close privacy notice" className="rounded-lg p-2 text-primary-foreground/80 transition hover:bg-white/10 hover:text-white"><X size={20} /></button>
                 </header>

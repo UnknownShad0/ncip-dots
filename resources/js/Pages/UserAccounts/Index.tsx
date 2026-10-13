@@ -195,9 +195,9 @@ export default function UserAccountsIndex({
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-                    <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search users..." aria-label="Search users" className="h-10 w-full max-w-sm rounded-lg border-border bg-surface text-sm" />
+                    <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search users..." aria-label="Search users" className="h-11 w-full max-w-sm rounded-lg border-border bg-surface text-sm" />
                     <label className="text-sm text-muted">Rows per page{' '}
-                        <select value={perPage} onChange={(event) => { setPerPage(Number(event.target.value)); setPage(1); }} className="ml-2 h-10 rounded-lg border-border bg-surface text-sm">
+                        <select value={perPage} onChange={(event) => { setPerPage(Number(event.target.value)); setPage(1); }} className="ml-2 h-11 rounded-lg border-border bg-surface text-sm">
                             {[10, 25, 50].map((count) => <option key={count} value={count}>{count}</option>)}
                         </select>
                     </label>
@@ -311,5 +311,5 @@ export default function UserAccountsIndex({
 }
 
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-    return <label className="space-y-1 text-sm font-medium text-foreground"><span className="block">{label}</span>{children}{error && <span className="block text-xs font-normal text-danger">{error}</span>}</label>;
+    return <label className="space-y-1.5 text-sm font-medium text-foreground"><span className="block">{label}</span>{children}{error && <span className="block text-xs font-normal text-danger">{error}</span>}</label>;
 }

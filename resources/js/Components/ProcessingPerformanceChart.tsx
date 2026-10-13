@@ -30,8 +30,8 @@ export default function ProcessingPerformanceChart({ data }: { data: ProcessingP
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={data} layout="vertical" margin={{ top: 8, right: 24, bottom: 16, left: 0 }} accessibilityLayer>
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgb(var(--color-border))" />
-                        <XAxis type="number" domain={[0, 'auto']} tick={{ fontSize: 12 }} tickFormatter={(value: number) => toAxisUnit(value).toLocaleString(undefined, { maximumFractionDigits: axisUnit === 'minutes' ? 1 : 2 })} label={{ value: `${axisUnit[0].toUpperCase()}${axisUnit.slice(1)} (median)`, position: 'insideBottom', offset: -10, fontSize: 12 }} />
-                        <YAxis type="category" dataKey="label" width={115} interval={0} tick={{ fontSize: 11 }} tickFormatter={(name: string) => name.length > 19 ? `${name.slice(0, 18)}…` : name} />
+                        <XAxis type="number" domain={[0, 'auto']} tick={{ fontSize: 15 }} tickFormatter={(value: number) => toAxisUnit(value).toLocaleString(undefined, { maximumFractionDigits: axisUnit === 'minutes' ? 1 : 2 })} label={{ value: `${axisUnit[0].toUpperCase()}${axisUnit.slice(1)} (median)`, position: 'insideBottom', offset: -10, fontSize: 15 }} />
+                        <YAxis type="category" dataKey="label" width={115} interval={0} tick={{ fontSize: 14 }} tickFormatter={(name: string) => name.length > 19 ? `${name.slice(0, 18)}…` : name} />
                         <Tooltip content={({ active, payload }) => {
                             const row = payload?.[0]?.payload as ProcessingPerformanceRow | undefined;
                             return active && row ? <div className="rounded-lg border border-border bg-surface p-3 text-sm shadow-lg">
@@ -40,7 +40,7 @@ export default function ProcessingPerformanceChart({ data }: { data: ProcessingP
                                 <p className="text-tertiary">Approval: {display(row.approval, row.approval_count)}</p>
                             </div> : null;
                         }} />
-                        <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: 16, fontSize: 12 }} />
+                        <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: 16, fontSize: 15 }} />
                         <Bar isAnimationActive={false} dataKey="tracking" name="Document Tracking" fill="rgb(var(--color-primary))" radius={[0, 4, 4, 0]} maxBarSize={20} minPointSize={2} />
                         <Bar isAnimationActive={false} dataKey="approval" name="Document Approval" fill="rgb(var(--color-tertiary))" radius={[0, 4, 4, 0]} maxBarSize={20} minPointSize={2} />
                     </BarChart>

@@ -480,13 +480,13 @@ export default function Index({
                                 <span className="sr-only">Search drafts</span>
                                 <Search
                                     size={16}
-                                    className="absolute left-3 top-3 text-muted"
+                                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted"
                                 />
                                 <input
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                     placeholder="Search documents"
-                                    className="h-10 w-full rounded-lg border-border pl-9 text-sm"
+                                    className="h-11 w-full rounded-lg border-border pl-9 text-sm"
                                 />
                             </label>
                             <select
@@ -495,7 +495,7 @@ export default function Index({
                                 onChange={(e) =>
                                     setStatusFilter(e.target.value)
                                 }
-                                className="h-10 rounded-lg border-border text-sm"
+                                className="h-11 rounded-lg border-border text-sm"
                             >
                                 <option value="all">All statuses</option>
                                 {Array.from(
@@ -630,7 +630,7 @@ export default function Index({
                                                 Approval and verification
                                                 history ({d.events.length})
                                             </summary>
-                                            <ol className="mt-2 space-y-1">
+                                            <ol className="mt-2 space-y-1.5">
                                                 {d.events.map(
                                                     (event, index) => (
                                                         <li

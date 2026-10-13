@@ -146,7 +146,7 @@ export default function ConnectedDocuments({ documents = [], system }: { documen
                     .print-table-only { position: absolute; left: 0; top: 0; width: 100%; padding: 0; margin: 0; }
                     .no-print { display: none !important; }
                     table { width: 100% !important; }
-                    th, td { font-size: 11px !important; }
+                    th, td { font-size: 14px !important; }
                 }
             `}</style>
 
@@ -244,7 +244,7 @@ export default function ConnectedDocuments({ documents = [], system }: { documen
                                         </td>
                                         <td className="px-4 py-4">
                                             <p className="font-medium text-foreground">{doc.originatorName}</p>
-                                            <p className="mt-0.5 break-all text-xs text-muted">{doc.originatorEmail}</p>
+                                            <p className="mt-1 break-all text-xs text-muted">{doc.originatorEmail}</p>
                                         </td>
                                         <td className="whitespace-nowrap px-4 py-4 text-muted">{doc.uploadedAt || '—'}</td>
                                         <td className="whitespace-nowrap px-4 py-4 text-muted">{doc.sharedAt || '—'}</td>
@@ -298,7 +298,7 @@ export default function ConnectedDocuments({ documents = [], system }: { documen
                                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary"><FileText size={20} aria-hidden="true" /></span>
                                 <div className="min-w-0">
                                     <h2 id="connected-details-title" className="text-lg font-semibold text-foreground">Signing details</h2>
-                                    <p className="mt-0.5 break-words text-sm text-muted">{selected.dotsId} · {selected.fileName}</p>
+                                    <p className="mt-1 break-words text-sm text-muted">{selected.dotsId} · {selected.fileName}</p>
                                 </div>
                             </div>
                             <button type="button" onClick={() => setSelected(null)} aria-label="Close signing details" className="rounded-md p-2 text-muted hover:bg-slate-100 hover:text-foreground">
@@ -308,7 +308,7 @@ export default function ConnectedDocuments({ documents = [], system }: { documen
 
                         <div className="space-y-6 p-5 sm:p-6">
                             <section aria-label="Document details" className="grid gap-4 rounded-xl border border-border bg-background p-4 sm:grid-cols-2 lg:grid-cols-3">
-                                <div><p className="text-xs font-semibold uppercase text-muted">Originator</p><p className="mt-1 break-words text-sm font-medium text-foreground">{selected.originatorName}</p><p className="mt-0.5 break-all text-xs text-muted">{selected.originatorEmail}</p></div>
+                                <div><p className="text-xs font-semibold uppercase text-muted">Originator</p><p className="mt-1 break-words text-sm font-medium text-foreground">{selected.originatorName}</p><p className="mt-1 break-all text-xs text-muted">{selected.originatorEmail}</p></div>
                                 <div><p className="text-xs font-semibold uppercase text-muted">File type</p><p className="mt-1 text-sm font-medium text-foreground">{selected.fileType || 'Document'}</p></div>
                                 <div><p className="text-xs font-semibold uppercase text-muted">Status</p><div className="mt-1">{statusBadge(selected.status)}</div></div>
                                 <div><p className="text-xs font-semibold uppercase text-muted">Uploaded</p><p className="mt-1 text-sm text-foreground">{selected.uploadedAt || '—'}</p></div>
@@ -318,7 +318,7 @@ export default function ConnectedDocuments({ documents = [], system }: { documen
 
                             <section aria-labelledby="signing-trails-title">
                                 <div className="mb-3 flex items-center justify-between gap-3">
-                                    <div><h3 id="signing-trails-title" className="font-semibold text-foreground">Signing trail</h3><p className="mt-0.5 text-sm text-muted">Signer actions in workflow order.</p></div>
+                                    <div><h3 id="signing-trails-title" className="font-semibold text-foreground">Signing trail</h3><p className="mt-1 text-sm text-muted">Signer actions in workflow order.</p></div>
                                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-muted">{selected.signingTrails.length} steps</span>
                                 </div>
                                 {selected.signingTrails.length === 0 ? (

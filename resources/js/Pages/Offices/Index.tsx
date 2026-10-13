@@ -250,7 +250,7 @@ export default function OfficesIndex({
                     .print-table-only { position: absolute; left: 0; top: 0; width: 100%; padding: 0; margin: 0; }
                     .no-print { display: none !important; }
                     table { width: 100% !important; }
-                    th, td { font-size: 11px !important; }
+                    th, td { font-size: 14px !important; }
                 }
             `}</style>
 

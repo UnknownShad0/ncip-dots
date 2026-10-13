@@ -54,29 +54,29 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
         </Link>
         <nav aria-label="Main navigation" className="flex-1 space-y-5 overflow-y-auto px-3 py-5">
             {groups.map((group, index) => <section key={index}>
-                {group.label && (compact ? <div className="mx-3 mb-3 border-t border-border" /> : <h2 className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted">{group.label === 'Other information systems' ? 'Connected systems' : group.label}</h2>)}
-                <div className="space-y-1">{group.items.filter((item) => !['libraries.index', 'user-accounts.index'].includes(item.href) || canManageLibraries === true).map(({name, href, anchor, countKey, icon: Icon}) => {
+                {group.label && (compact ? <div className="mx-3 mb-3 border-t border-border" /> : <h2 className="mb-2 px-3 text-[14px] font-semibold uppercase tracking-wider text-muted">{group.label === 'Other information systems' ? 'Connected systems' : group.label}</h2>)}
+                <div className="space-y-1.5">{group.items.filter((item) => !['libraries.index', 'user-accounts.index'].includes(item.href) || canManageLibraries === true).map(({name, href, anchor, countKey, icon: Icon}) => {
                     const active = href === 'libraries.index'
                         ? route().current('libraries.*') || route().current('setup.index') || libraryLinks.some((item) => route().current(item.href))
                         : href === 'connected-systems.index' ? route().current(href) || connectedSystems.some((item) => route().current(item.href)) : route().current(href);
                     const count = countKey ? notificationCounts?.[countKey] : null;
                     const target = `${route(href)}${anchor ? `#${anchor}` : ''}`;
-                    return <Link key={name} href={target} onClick={() => setMobileOpen(false)} aria-current={active ? 'page' : undefined} aria-label={count ? `${name}: ${count}` : name} title={compact ? name : undefined}
-                        className={`flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm transition-colors ${compact ? 'justify-center' : ''} ${active ? 'bg-primary font-semibold text-primary-foreground' : 'text-muted hover:bg-secondary hover:text-foreground'}`}>
-                        <Icon size={18} className="shrink-0" aria-hidden="true" />{!compact && <span className="min-w-0 flex-1">{name}</span>}{count > 0 && <span className="min-w-5 rounded-md bg-secondary px-1.5 py-0.5 text-center text-[11px] font-semibold tabular-nums text-primary">{count > 99 ? '99+' : count}</span>}
+                    return <Link key={name} href={target} onClick={() => setMobileOpen(false)} aria-current={active ? 'page' : undefined} aria-label={count ? `${name}: ${count}` : name} title={compact ? `${name}${count > 0 ? `: ${count > 99 ? '99+' : count}` : ''}` : undefined}
+                        className={`relative flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm transition-colors ${compact ? 'justify-center' : ''} ${active ? 'bg-primary font-semibold text-primary-foreground' : 'text-muted hover:bg-secondary hover:text-foreground'}`}>
+                        <Icon size={18} className="shrink-0" aria-hidden="true" />{!compact && <span className="min-w-0 flex-1">{name}</span>}{count > 0 && !compact && <span className="min-w-5 rounded-md bg-secondary px-1.5 py-0.5 text-center text-[14px] font-semibold tabular-nums text-primary">{count > 99 ? '99+' : count}</span>}{count > 0 && compact && <span aria-hidden="true" className={`absolute right-2 top-2 h-2 w-2 rounded-full ${active ? 'bg-primary-foreground' : 'bg-primary'}`} />}
                     </Link>;
                 })}</div>
             </section>)}
         </nav>
         <div className="border-t border-border p-3">
-            <button type="button" onClick={() => { setMobileOpen(false); setPrivacyNoticeOpen(true); }} title={compact ? 'Privacy notice' : undefined} aria-label="Privacy notice" className={`mb-1 flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted hover:bg-secondary ${compact ? 'justify-center' : ''}`}><ShieldCheck size={18} />{!compact && 'Privacy notice'}</button>
-            <Link href={route('logout')} method="post" as="button" title={compact ? 'Sign out' : undefined} aria-label="Sign out" className={`flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted hover:bg-secondary ${compact ? 'justify-center' : ''}`}><LogOut size={18} />{!compact && 'Sign out'}</Link>
+            <button type="button" onClick={() => { setMobileOpen(false); setPrivacyNoticeOpen(true); }} title={compact ? 'Privacy notice' : undefined} aria-label="Privacy notice" className={`mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted hover:bg-secondary ${compact ? 'justify-center' : ''}`}><ShieldCheck size={18} />{!compact && 'Privacy notice'}</button>
+            <Link href={route('logout')} method="post" as="button" title={compact ? 'Sign out' : undefined} aria-label="Sign out" className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted hover:bg-secondary ${compact ? 'justify-center' : ''}`}><LogOut size={18} />{!compact && 'Sign out'}</Link>
         </div>
     </>;
     return <div className="dots-workspace min-h-screen bg-background text-sm text-foreground">
         <Head><link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" /><link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet" /></Head>
         <div className="flex min-h-screen">
-            <motion.aside initial={false} animate={{width: collapsed ? 80 : 248}} transition={{duration: reduceMotion ? 0 : .2}} className="sticky top-0 hidden h-screen shrink-0 flex-col overflow-hidden border-r border-border bg-surface lg:flex">{navigation(collapsed)}</motion.aside>
+            <motion.aside initial={false} animate={{width: collapsed ? 80 : 300}} transition={{duration: reduceMotion ? 0 : .2}} className="sticky top-0 hidden h-screen shrink-0 flex-col overflow-hidden border-r border-border bg-surface lg:flex">{navigation(collapsed)}</motion.aside>
             <Dialog open={mobileOpen} onClose={setMobileOpen} className="relative z-50 lg:hidden">
                 <div className="fixed inset-0 bg-foreground/40" aria-hidden="true" />
                 <DialogPanel className="dots-workspace fixed inset-y-0 left-0 flex w-[280px] max-w-[85vw] flex-col bg-surface">
@@ -93,7 +93,7 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
                     <DropdownMenu as="div" className="relative shrink-0">
                         <MenuButton className="relative rounded-lg p-2 text-muted transition hover:bg-secondary hover:text-foreground" aria-label={`Notifications${notificationCounts?.total ? `, ${notificationCounts.total} items` : ''}`}>
                             <Bell size={19} aria-hidden="true" />
-                            {notificationCounts?.total > 0 && <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-danger px-1 py-0.5 text-center text-[10px] font-bold leading-none text-white">{notificationCounts.total > 99 ? '99+' : notificationCounts.total}</span>}
+                            {notificationCounts?.total > 0 && <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-danger px-1 py-0.5 text-center text-[13px] font-bold leading-none text-white">{notificationCounts.total > 99 ? '99+' : notificationCounts.total}</span>}
                         </MenuButton>
                         <MenuItems anchor="bottom end" className="dots-workspace z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-surface p-2 shadow-xl">
                             <div className="border-b border-border px-3 py-2"><p className="font-semibold">Notifications</p><p className="text-xs text-muted">Items that may need your attention</p></div>

@@ -570,7 +570,7 @@ export default function DocumentsIndex({
                     body.disposition-printing .disposition-print-root[data-printing="true"] { display: block !important; position: static !important; width: 8.5in; margin: 0; background: #fff; }
                     .no-print { display: none !important; }
                     .print-table-only table { width: 100% !important; }
-                    .print-table-only th, .print-table-only td { font-size: 11px !important; }
+                    .print-table-only th, .print-table-only td { font-size: 14px !important; }
                 }
             `}</style>
 
@@ -694,9 +694,9 @@ export default function DocumentsIndex({
                                         >
                                             <td className="whitespace-nowrap px-4 py-4 text-xs font-semibold text-primary">
                                                 <span className="font-mono">{document.tracking_number || 'N/A'}</span>
-                                                {document.needs_review && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">Needs review</span>}
-                                                {isUrgent && <span className="ml-2 inline-flex rounded-full bg-rose-100 px-2 py-0.5 font-sans text-[10px] font-bold uppercase text-rose-800">Urgent</span>}
-                                                {isLegacy && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 font-sans text-[10px] font-medium text-muted">Legacy</span>}
+                                                {document.needs_review && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[13px] font-medium text-amber-800">Needs review</span>}
+                                                {isUrgent && <span className="ml-2 inline-flex rounded-full bg-rose-100 px-2 py-0.5 font-sans text-[13px] font-bold uppercase text-rose-800">Urgent</span>}
+                                                {isLegacy && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 font-sans text-[13px] font-medium text-muted">Legacy</span>}
                                             </td>
                                             <td className="min-w-[190px] px-4 py-4 font-medium text-foreground">
                                                 <button type="button" onClick={() => openDocumentDetails(document)} className="text-left font-semibold hover:text-primary hover:underline">{document.title || 'Untitled'}</button>
@@ -720,7 +720,7 @@ export default function DocumentsIndex({
                                                 {document.last_transaction_summary ? <div className="flex flex-col gap-1.5">
                                                     <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${getTransactionClasses(document.last_transaction_summary.action, document.last_transaction_summary.status)}`}>{document.last_transaction_summary.action || document.last_transaction_summary.status || 'Transaction'}</span>
                                                     <span className="text-xs text-muted">{[document.last_transaction_summary.from_office_short_name || document.last_transaction_summary.from_office, document.last_transaction_summary.to_office_short_name || document.last_transaction_summary.to_office].filter(Boolean).join(' → ') || document.last_transaction_summary.holder_short_name || document.last_transaction_summary.holder || 'Office not recorded'}</span>
-                                                    <span className="text-[11px] text-slate-400">{document.last_transaction_summary.created_at || document.last_transaction_summary.created_by || '—'}</span>
+                                                    <span className="text-[14px] text-slate-400">{document.last_transaction_summary.created_at || document.last_transaction_summary.created_by || '—'}</span>
                                                 </div> : <span className="text-sm text-slate-400">No transactions</span>}
                                             </td>
                                             <td className="whitespace-nowrap px-4 py-4 no-print">
@@ -794,7 +794,7 @@ export default function DocumentsIndex({
                                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary"><FileText size={20} aria-hidden="true" /></span>
                                 <div className="min-w-0">
                                     <h2 id="document-details-title" className="text-lg font-semibold text-foreground">Document details</h2>
-                                    <p className="mt-0.5 break-words text-sm text-muted">Review document information and transaction history.</p>
+                                    <p className="mt-1 break-words text-sm text-muted">Review document information and transaction history.</p>
                                 </div>
                             </div>
                             <button type="button" onClick={() => setViewingRow(null)} aria-label="Close document details" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
@@ -817,7 +817,7 @@ export default function DocumentsIndex({
 
                             <section aria-labelledby="transaction-history-title">
                                 <div className="mb-3 flex items-center justify-between gap-3">
-                                    <div><h3 id="transaction-history-title" className="font-semibold text-foreground">Transaction history</h3><p className="mt-0.5 text-sm text-muted">Document activity in workflow order.</p></div>
+                                    <div><h3 id="transaction-history-title" className="font-semibold text-foreground">Transaction history</h3><p className="mt-1 text-sm text-muted">Document activity in workflow order.</p></div>
                                     <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold text-muted">{viewingRow.transactions?.length ?? 0} transactions</span>
                                 </div>
                                 {viewingRow.transactions?.length ? <ol className="space-y-3 border-l-2 border-border pl-4">{viewingRow.transactions.map((transaction, index) => <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="relative rounded-xl border border-border bg-background p-3 before:absolute before:-left-[22px] before:top-4 before:h-2.5 before:w-2.5 before:rounded-full before:bg-primary"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-foreground">{transaction.action || transaction.status || 'Transaction'}</span><span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium uppercase text-muted">{transaction.status || '—'}</span></div><p className="mt-1 text-sm text-muted">{[transaction.from_office_short_name || transaction.from_office, transaction.to_office_short_name || transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder_short_name || transaction.holder ? `Held by ${transaction.holder_short_name || transaction.holder}` : 'Office details unavailable')}</p><p className="mt-1 text-xs text-muted">{[transaction.created_by_short_name || transaction.created_by, transaction.created_at].filter(Boolean).join(' · ') || 'Date and user unavailable'}</p></li>)}</ol> : viewingRow.details_loading ? null : <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">No transactions recorded.</p>}
@@ -839,7 +839,7 @@ export default function DocumentsIndex({
                         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
                             <div>
                                 <h2 id="release-document-title" className="text-lg font-semibold text-foreground">Forward document</h2>
-                                <p className="mt-0.5 text-sm text-muted">Choose where this document should go next.</p>
+                                <p className="mt-1 text-sm text-muted">Choose where this document should go next.</p>
                             </div>
                             <button type="button" onClick={closeRelease} aria-label="Close forwarding dialog" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
                                 <X size={19} aria-hidden="true" />
@@ -861,7 +861,7 @@ export default function DocumentsIndex({
                                 </div>
                                 <div className="sm:col-span-2">
                                     <p className="text-xs font-semibold uppercase text-muted">File</p>
-                                    {releasingRow.files?.length ? <ul className="mt-1 space-y-1">{releasingRow.files.map((file) => <li key={file.id} className="flex flex-wrap items-baseline gap-x-2 text-sm"><span className="rounded bg-secondary px-1.5 py-0.5 text-xs font-medium uppercase text-muted">{file.type}</span>{file.url ? <a href={file.url} target="_blank" rel="noreferrer" className="break-all font-medium text-primary underline">{file.name}</a> : <span className="break-all text-muted">{file.name} — File not yet available</span>}{file.uploaded_at && <span className="text-xs text-muted">{file.uploaded_at}</span>}</li>)}</ul> : releasingRow.file_url ? <a href={releasingRow.file_url} target="_blank" rel="noreferrer" className="mt-1 inline-block break-all text-sm font-medium text-primary underline">{releasingRow.file_name || 'View attached file'}</a> : <p className="mt-1 text-sm text-foreground">{releasingRow.file_name || 'No file attached'}</p>}
+                                    {releasingRow.files?.length ? <ul className="mt-1 space-y-1.5">{releasingRow.files.map((file) => <li key={file.id} className="flex flex-wrap items-baseline gap-x-2 text-sm"><span className="rounded bg-secondary px-1.5 py-0.5 text-xs font-medium uppercase text-muted">{file.type}</span>{file.url ? <a href={file.url} target="_blank" rel="noreferrer" className="break-all font-medium text-primary underline">{file.name}</a> : <span className="break-all text-muted">{file.name} — File not yet available</span>}{file.uploaded_at && <span className="text-xs text-muted">{file.uploaded_at}</span>}</li>)}</ul> : releasingRow.file_url ? <a href={releasingRow.file_url} target="_blank" rel="noreferrer" className="mt-1 inline-block break-all text-sm font-medium text-primary underline">{releasingRow.file_name || 'View attached file'}</a> : <p className="mt-1 text-sm text-foreground">{releasingRow.file_name || 'No file attached'}</p>}
                                 </div>
                             </section></details>
 
@@ -934,7 +934,7 @@ export default function DocumentsIndex({
                                 <h3 id="document-modal-title" className="text-lg font-semibold text-foreground">
                                     {editingRow ? 'Update Document' : 'Add Document'}
                                 </h3>
-                                <p className="mt-0.5 text-sm text-muted">{editingRow ? 'Update the document information below.' : 'Enter the details to add a document to the system.'}</p>
+                                <p className="mt-1 text-sm text-muted">{editingRow ? 'Update the document information below.' : 'Enter the details to add a document to the system.'}</p>
                             </div>
 
                             <button type="button" onClick={requestCloseForm} aria-label="Close document form" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
