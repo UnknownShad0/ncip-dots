@@ -6,6 +6,7 @@ use App\Models\Office;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Inertia\Inertia;
 use Tighten\Ziggy\Ziggy;
 
 class HandleInertiaRequests extends Middleware
@@ -54,6 +55,9 @@ class HandleInertiaRequests extends Middleware
                 'user' => $authUserData,
                 'loginSessionId' => $authUser ? $request->session()->get('privacy_notice_login_id') : null,
             ],
+            'notificationCounts' => $authUser
+                ? Inertia::defer(fn () => app(\App\Services\NotificationCounts::class)->forUser($authUser))
+                : null,
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'warning' => fn () => $request->session()->get('warning'),

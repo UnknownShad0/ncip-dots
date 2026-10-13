@@ -339,7 +339,7 @@ class DocumentController extends Controller
         $user = auth()->user();
         $filters = request()->validate([
             'search' => ['nullable', 'string', 'max:200'],
-            'status' => ['nullable', 'in:all,ongoing,approved,released,archived,rejected'],
+            'status' => ['nullable', 'in:all,pending,ongoing,approved,released,archived,rejected'],
             'sort' => ['nullable', 'in:tracking_number,title,document_type,origin_type,status,office_name,last_transaction'],
             'direction' => ['nullable', 'in:asc,desc'],
             'per_page' => ['nullable', 'integer', 'in:5,10,15,20,50'],
@@ -390,7 +390,20 @@ class DocumentController extends Controller
                 }
             });
         }
-        if ($statusFilter !== 'all') {
+        if ($statusFilter === 'pending') {
+            $newDocumentQuery->where('documents.is_archived', false)
+                ->where('documents.legacy_needs_review', false);
+            if ($currentOfficeId === null) {
+                $newDocumentQuery->whereRaw('1 = 0');
+            } else {
+                $newDocumentQuery->whereExists(DB::table('document_trails as pending_trail')
+                    ->selectRaw('1')
+                    ->whereColumn('pending_trail.document_id', 'documents.id')
+                    ->whereRaw('pending_trail.id = (SELECT MAX(latest_pending_trail.id) FROM document_trails AS latest_pending_trail WHERE latest_pending_trail.document_id = documents.id)')
+                    ->where('pending_trail.status', 'pending')
+                    ->where('pending_trail.to_office_id', $currentOfficeId));
+            }
+        } elseif ($statusFilter !== 'all') {
             if ($statusFilter === 'archived') {
                 $newDocumentQuery->where(function ($query) {
                     $query->where('documents.is_archived', true)

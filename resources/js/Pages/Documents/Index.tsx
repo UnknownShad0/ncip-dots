@@ -602,6 +602,7 @@ export default function DocumentsIndex({
                             className="col-span-2 h-11 min-w-0 rounded-xl border border-border bg-background pl-3 pr-10 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 sm:col-span-1"
                         >
                             <option value="all">All statuses</option>
+                            <option value="pending">Pending</option>
                             <option value="ongoing">Ongoing</option>
                             <option value="approved">Approved</option>
                             <option value="released">Released</option>

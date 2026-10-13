@@ -2,18 +2,18 @@ import { connectedSystems } from '@/Components/ConnectedSystemNavigation';
 import { libraryLinks } from '@/Components/LibraryNavigation';
 import { Head, Link, usePage } from '@inertiajs/react';
 import { Dialog, DialogPanel, DialogTitle, Menu as DropdownMenu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
-import { Archive, Building2, ChevronDown, Clock3, Database, FileClock, FileText, Folder, History, LayoutGrid, LogOut, Menu, UserRound, X, BookOpen, PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
+import { Archive, Bell, Building2, ChevronDown, ClipboardCheck, Clock3, Database, FileCheck2, FileClock, FileText, Folder, History, Inbox, LayoutGrid, LogOut, Menu, UserRound, X, BookOpen, PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
 import { PropsWithChildren, ReactNode, useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import PrivacyNoticeModal from '@/Components/PrivacyNoticeModal';
 
 const groups = [
-    { label: '', items: [{ name: 'Dashboard', href: 'dashboard', icon: LayoutGrid }] },
+    { label: '', items: [{ name: 'Dashboard', href: 'dashboard', countKey: 'incoming', icon: LayoutGrid }] },
         { label: 'Documents', items: [
         { name: 'Latest documents', href: 'documents.latest', icon: Clock3 },
-        { name: 'All documents', href: 'documents.index', icon: Folder },
-        { name: 'Generate Document', href: 'document-creation.index', icon: FileText },
-        { name: 'Approved Documents', href: 'approved-documents.index', icon: FileClock },
+        { name: 'All documents', href: 'documents.index', countKey: 'pending', icon: Folder },
+        { name: 'Generate Document', href: 'document-creation.index', countKey: 'approvals', icon: FileText },
+        { name: 'Approved Documents', href: 'approved-documents.index', countKey: 'approved', icon: FileClock },
     ] },
     { label: 'External API', items: [{ name: 'Connected systems', href: 'connected-systems.index', icon: Database }] },
     { label: 'Archives', items: [
@@ -27,7 +27,7 @@ const groups = [
 ];
 
 export default function AuthenticatedLayout({ header, children }: PropsWithChildren<{ header?: ReactNode }>) {
-    const { auth, canManageLibraries } = usePage().props as any;
+    const { auth, canManageLibraries, notificationCounts } = usePage().props as any;
     const user = auth.user;
     const displayName = user.short_name || user.name || 'User';
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -55,13 +55,15 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
         <nav aria-label="Main navigation" className="flex-1 space-y-5 overflow-y-auto px-3 py-5">
             {groups.map((group, index) => <section key={index}>
                 {group.label && (compact ? <div className="mx-3 mb-3 border-t border-border" /> : <h2 className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted">{group.label === 'Other information systems' ? 'Connected systems' : group.label}</h2>)}
-                <div className="space-y-1">{group.items.filter((item) => !['libraries.index', 'user-accounts.index'].includes(item.href) || canManageLibraries === true).map(({name, href, icon: Icon}) => {
+                <div className="space-y-1">{group.items.filter((item) => !['libraries.index', 'user-accounts.index'].includes(item.href) || canManageLibraries === true).map(({name, href, anchor, countKey, icon: Icon}) => {
                     const active = href === 'libraries.index'
                         ? route().current('libraries.*') || route().current('setup.index') || libraryLinks.some((item) => route().current(item.href))
                         : href === 'connected-systems.index' ? route().current(href) || connectedSystems.some((item) => route().current(item.href)) : route().current(href);
-                    return <Link key={href} href={route(href)} onClick={() => setMobileOpen(false)} aria-current={active ? 'page' : undefined} aria-label={name} title={compact ? name : undefined}
+                    const count = countKey ? notificationCounts?.[countKey] : null;
+                    const target = `${route(href)}${anchor ? `#${anchor}` : ''}`;
+                    return <Link key={name} href={target} onClick={() => setMobileOpen(false)} aria-current={active ? 'page' : undefined} aria-label={count ? `${name}: ${count}` : name} title={compact ? name : undefined}
                         className={`flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm transition-colors ${compact ? 'justify-center' : ''} ${active ? 'bg-primary font-semibold text-primary-foreground' : 'text-muted hover:bg-secondary hover:text-foreground'}`}>
-                        <Icon size={18} className="shrink-0" aria-hidden="true" />{!compact && <span>{name}</span>}
+                        <Icon size={18} className="shrink-0" aria-hidden="true" />{!compact && <span className="min-w-0 flex-1">{name}</span>}{count > 0 && <span className="min-w-5 rounded-md bg-secondary px-1.5 py-0.5 text-center text-[11px] font-semibold tabular-nums text-primary">{count > 99 ? '99+' : count}</span>}
                     </Link>;
                 })}</div>
             </section>)}
@@ -88,6 +90,22 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
                     <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open navigation" className="rounded-lg p-2 text-muted hover:bg-secondary lg:hidden"><Menu size={20} /></button>
                     <div className="min-w-0 flex-1 py-4">{header}</div>
                     <div className="hidden min-w-0 max-w-56 items-center gap-2 border-r border-border pr-4 text-muted xl:flex"><Building2 size={16} className="shrink-0" /><span className="truncate" title={[user.office_display_name, user.range].filter(Boolean).join(' · ')}>{user.office_display_name || 'Office not assigned'}</span></div>
+                    <DropdownMenu as="div" className="relative shrink-0">
+                        <MenuButton className="relative rounded-lg p-2 text-muted transition hover:bg-secondary hover:text-foreground" aria-label={`Notifications${notificationCounts?.total ? `, ${notificationCounts.total} items` : ''}`}>
+                            <Bell size={19} aria-hidden="true" />
+                            {notificationCounts?.total > 0 && <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-danger px-1 py-0.5 text-center text-[10px] font-bold leading-none text-white">{notificationCounts.total > 99 ? '99+' : notificationCounts.total}</span>}
+                        </MenuButton>
+                        <MenuItems anchor="bottom end" className="dots-workspace z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-surface p-2 shadow-xl">
+                            <div className="border-b border-border px-3 py-2"><p className="font-semibold">Notifications</p><p className="text-xs text-muted">Items that may need your attention</p></div>
+                            {notificationCounts ? <>
+                                <MenuItem><Link href={`${route('dashboard')}#incoming-documents`} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><Inbox size={17} className="text-primary" /><span className="flex-1">Incoming documents</span><span className="font-semibold tabular-nums">{notificationCounts.incoming}</span></Link></MenuItem>
+                                <MenuItem><Link href={`${route('documents.index')}?status=pending`} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><Folder size={17} className="text-primary" /><span className="flex-1">Pending documents</span><span className="font-semibold tabular-nums">{notificationCounts.pending}</span></Link></MenuItem>
+                                <MenuItem><Link href={`${route('document-creation.index')}?queue=approval`} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><ClipboardCheck size={17} className="text-primary" /><span className="flex-1">Pending approvals</span><span className="font-semibold tabular-nums">{notificationCounts.approvals}</span></Link></MenuItem>
+                                <MenuItem><Link href={route('approved-documents.index')} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><FileCheck2 size={17} className="text-primary" /><span className="flex-1">Approved documents</span><span className="font-semibold tabular-nums">{notificationCounts.approved}</span></Link></MenuItem>
+                                {notificationCounts.total === 0 && <p className="px-3 py-3 text-sm text-muted">You’re all caught up.</p>}
+                            </> : <p className="px-3 py-3 text-sm text-muted">Notifications will appear here.</p>}
+                        </MenuItems>
+                    </DropdownMenu>
                     <DropdownMenu as="div" className="relative shrink-0">
                         <MenuButton className="flex items-center gap-2 rounded-lg p-2 hover:bg-secondary" aria-label="Account menu">
                             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary font-semibold text-primary">{String(displayName).charAt(0).toUpperCase()}</span>

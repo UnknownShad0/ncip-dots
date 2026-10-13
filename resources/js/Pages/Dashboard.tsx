@@ -182,7 +182,7 @@ export default function Dashboard({
                             {receiveError && <p role="alert" className="mt-3 rounded-lg bg-danger-soft p-3 text-sm text-danger">{receiveError}</p>}
                         </div>
                         <div className="p-5">
-                            <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold">Incoming to your office <span className="ml-1 rounded-md bg-secondary px-2 py-0.5 text-xs font-medium text-primary">{incomingDocuments.length}</span></h3>
+                            <div id="incoming-documents" className="mb-4 flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold">Incoming to your office <span className="ml-1 rounded-md bg-secondary px-2 py-0.5 text-xs font-medium text-primary">{incomingDocuments.length}</span></h3>
                                 <label className="relative w-full sm:w-60"><span className="sr-only">Search incoming documents</span><Search size={16} className="pointer-events-none absolute left-3 top-3 text-muted" /><input value={incomingQuery} onChange={(event) => setIncomingQuery(event.target.value)} placeholder="Search incoming" className="h-10 w-full rounded-lg border-border pl-9 text-sm" /></label>
                             </div>
                             <div className="max-h-[420px] divide-y divide-border overflow-y-auto" role="region" aria-label="Incoming documents" tabIndex={0}>
