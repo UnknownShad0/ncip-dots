@@ -1,0 +1,168 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="2660" viewBox="0 0 1800 2660" role="img" aria-labelledby="title desc">
+  <title id="title">DOTS end-to-end system flowchart</title>
+  <desc id="desc">Public tracking and authenticated staff document workflows, including authored document approval, registration, office routing, receipt, and archiving.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M1,1 L11,6 L1,11 z" fill="#52627a"/></marker>
+    <style>
+      text { font-family: Inter, Segoe UI, Arial, sans-serif; fill: #172338; }
+      .title { font-size: 38px; font-weight: 750; }
+      .subtitle { font-size: 17px; fill: #607089; }
+      .lane { font-size: 18px; font-weight: 700; letter-spacing: 1px; fill: #53647d; }
+      .node { fill: #ffffff; stroke: #a8b6c9; stroke-width: 2; }
+      .blue { fill: #eaf2ff; stroke: #6693df; }
+      .purple { fill: #f3edff; stroke: #9a7ad6; }
+      .green { fill: #e9f8f1; stroke: #62aa83; }
+      .amber { fill: #fff5df; stroke: #d5a447; }
+      .red { fill: #fff0ef; stroke: #d77971; }
+      .decision { fill: #fff9e9; stroke: #d3a13e; stroke-width: 2; }
+      .label { font-size: 19px; font-weight: 650; text-anchor: middle; }
+      .small { font-size: 16px; font-weight: 500; text-anchor: middle; fill: #46566e; }
+      .edge { fill: none; stroke: #52627a; stroke-width: 2.5; marker-end: url(#arrow); }
+      .edge-dash { fill: none; stroke: #8b98aa; stroke-width: 2; stroke-dasharray: 7 7; marker-end: url(#arrow); }
+      .tag { font-size: 15px; font-weight: 700; fill: #52627a; }
+      .end { fill: #172338; stroke: #172338; }
+      .endtext { fill: #ffffff; font-size: 16px; font-weight: 700; text-anchor: middle; }
+    </style>
+  </defs>
+  <rect width="1800" height="2400" fill="#f7f9fc"/>
+  <text x="900" y="58" class="title" text-anchor="middle">DOTS · End-to-End Flow</text>
+  <text x="900" y="91" class="subtitle" text-anchor="middle">Public tracking, document creation, office routing, receipt, and archive</text>
+
+  <rect x="45" y="120" width="1710" height="360" rx="20" fill="#f0f5fc" stroke="#dbe4f0"/>
+  <text x="75" y="154" class="lane">PUBLIC TRACKING</text>
+  <rect x="45" y="495" width="1710" height="440" rx="20" fill="#f7f3ff" stroke="#e6ddf5"/>
+  <text x="75" y="529" class="lane">SIGN IN AND CHOOSE A WORKFLOW</text>
+  <rect x="45" y="950" width="1710" height="610" rx="20" fill="#f1f6ff" stroke="#dbe6f8"/>
+  <text x="75" y="984" class="lane">OPTIONAL AUTHORED-DOCUMENT APPROVAL</text>
+  <rect x="45" y="1575" width="1710" height="790" rx="20" fill="#f1f8f4" stroke="#d9ebdf"/>
+  <text x="75" y="1609" class="lane">REGISTER, ROUTE, RECEIVE, AND COMPLETE</text>
+
+  <!-- Entry -->
+  <rect x="740" y="125" width="320" height="65" rx="32" class="end"/>
+  <text x="900" y="165" class="endtext">OPEN DOTS</text>
+  <path d="M900 190 V215" class="edge"/>
+  <polygon points="900,215 1040,275 900,335 760,275" class="decision"/>
+  <text x="900" y="270" class="label"><tspan x="900">Public tracking</tspan><tspan x="900" dy="24">lookup?</tspan></text>
+  <text x="673" y="266" class="tag">YES</text>
+  <path d="M760 275 H590 V300" class="edge"/>
+  <text x="1081" y="266" class="tag">NO</text>
+  <path d="M1040 275 H1220 V500" class="edge"/>
+  <rect x="300" y="300" width="290" height="65" rx="13" class="node blue"/>
+  <text x="445" y="340" class="label">Enter tracking number</text>
+  <path d="M445 365 V388" class="edge"/>
+  <polygon points="445,388 585,448 445,508 305,448" class="decision"/>
+  <text x="445" y="443" class="label"><tspan x="445">Finalized record</tspan><tspan x="445" dy="24">found?</tspan></text>
+  <text x="250" y="440" class="tag">YES</text>
+  <path d="M305 448 H180 V535" class="edge"/>
+  <text x="608" y="440" class="tag">NO</text>
+  <path d="M585 448 H645 V535" class="edge"/>
+  <rect x="70" y="535" width="300" height="80" rx="14" class="node green"/>
+  <text x="220" y="568" class="label"><tspan x="220">Show status, trail,</tspan><tspan x="220" dy="25">and file links</tspan></text>
+  <rect x="495" y="535" width="300" height="80" rx="14" class="node red"/>
+  <text x="645" y="583" class="label">Show not found</text>
+  <rect x="135" y="645" width="170" height="48" rx="24" class="end"/><text x="220" y="675" class="endtext">END</text>
+  <rect x="560" y="645" width="170" height="48" rx="24" class="end"/><text x="645" y="675" class="endtext">END</text>
+  <path d="M220 615 V645" class="edge"/><path d="M645 615 V645" class="edge"/>
+
+  <!-- Authentication and path choice -->
+  <rect x="1080" y="500" width="280" height="65" rx="13" class="node blue"/>
+  <text x="1220" y="540" class="label">Sign in</text>
+  <path d="M1220 565 V585" class="edge"/>
+  <polygon points="1220,585 1360,645 1220,705 1080,645" class="decision"/>
+  <text x="1220" y="640" class="label"><tspan x="1220">Credentials</tspan><tspan x="1220" dy="24">accepted?</tspan></text>
+  <text x="1050" y="640" class="tag">NO</text>
+  <path d="M1080 645 H955 V745" class="edge"/>
+  <text x="1385" y="640" class="tag">YES</text>
+  <path d="M1360 645 H1515 V745" class="edge"/>
+  <rect x="815" y="745" width="280" height="72" rx="14" class="node red"/>
+  <text x="955" y="775" class="label"><tspan x="955">Show login error or</tspan><tspan x="955" dy="24">password setup</tspan></text>
+  <rect x="1375" y="745" width="280" height="72" rx="14" class="node blue"/>
+  <text x="1515" y="790" class="label">Open dashboard</text>
+  <rect x="870" y="845" width="170" height="48" rx="24" class="end"/><text x="955" y="875" class="endtext">END</text>
+  <path d="M955 817 V845" class="edge"/>
+  <path d="M1515 817 V840 H900 V870" class="edge"/>
+  <polygon points="900,870 1030,925 900,980 770,925" class="decision"/>
+  <text x="900" y="920" class="label"><tspan x="900">Author a document</tspan><tspan x="900" dy="23">for approval?</tspan></text>
+  <text x="718" y="920" class="tag">YES</text>
+  <text x="1053" y="920" class="tag">NO</text>
+  <path d="M770 925 H500 V1000" class="edge"/>
+  <path d="M1030 925 H1300 V1000" class="edge"/>
+
+  <!-- Authored approval lane -->
+  <rect x="260" y="1000" width="300" height="70" rx="14" class="node purple"/>
+  <text x="410" y="1043" class="label">Save authoring draft</text>
+  <path d="M410 1070 V1095" class="edge"/>
+  <rect x="260" y="1095" width="300" height="70" rx="14" class="node purple"/>
+  <text x="410" y="1124" class="label"><tspan x="410">Submit a version to</tspan><tspan x="410" dy="24">an eligible office</tspan></text>
+  <path d="M410 1165 V1190" class="edge"/>
+  <rect x="260" y="1190" width="300" height="70" rx="14" class="node purple"/>
+  <text x="410" y="1219" class="label"><tspan x="410">Office administrator</tspan><tspan x="410" dy="24">reviews version</tspan></text>
+  <path d="M410 1260 V1278" class="edge"/>
+  <polygon points="410,1278 540,1333 410,1388 280,1333" class="decision"/>
+  <text x="410" y="1328" class="label"><tspan x="410">Decision</tspan></text>
+  <text x="231" y="1328" class="tag">REVISE</text>
+  <path d="M280 1333 H105 V1150 H260" class="edge"/>
+  <text x="560" y="1328" class="tag">REJECT</text>
+  <path d="M540 1333 H700 V1410" class="edge"/>
+  <text x="430" y="1410" class="tag">APPROVE</text>
+  <path d="M410 1388 V1420" class="edge"/>
+  <rect x="260" y="1420" width="300" height="70" rx="14" class="node green"/>
+  <text x="410" y="1463" class="label">Register approved work</text>
+  <rect x="615" y="1410" width="170" height="48" rx="24" class="end"/><text x="700" y="1440" class="endtext">END</text>
+
+  <!-- Direct creation lane -->
+  <rect x="1150" y="1000" width="300" height="70" rx="14" class="node blue"/>
+  <text x="1300" y="1043" class="label">Create DOTS document</text>
+  <path d="M1300 1070 V1090" class="edge"/>
+  <polygon points="1300,1090 1430,1145 1300,1200 1170,1145" class="decision"/>
+  <text x="1300" y="1138" class="label"><tspan x="1300">Finalize</tspan><tspan x="1300" dy="23">now?</tspan></text>
+  <text x="1145" y="1140" class="tag">NO</text>
+  <path d="M1170 1145 H1080 V1250" class="edge"/>
+  <text x="1450" y="1140" class="tag">YES</text>
+  <path d="M1430 1145 H1590 V1635 H1300 V1680" class="edge"/>
+  <rect x="930" y="1250" width="300" height="70" rx="14" class="node amber"/>
+  <text x="1080" y="1293" class="label">Save as draft</text>
+  <path d="M1080 1250 V1220 H900 V980" class="edge-dash"/>
+
+  <!-- Shared registration and routing -->
+  <path d="M410 1490 V1635 H900 V1680" class="edge"/>
+  <rect x="650" y="1680" width="500" height="76" rx="15" class="node green"/>
+  <text x="900" y="1711" class="label"><tspan x="900">Create finalized DOTS record</tspan><tspan x="900" dy="25">and initial pending trail</tspan></text>
+  <path d="M900 1756 V1780" class="edge"/>
+  <rect x="650" y="1780" width="500" height="72" rx="15" class="node green"/>
+  <text x="900" y="1808" class="label"><tspan x="900">Assign tracking number; attach or generate</tspan><tspan x="900" dy="24">a PDF where applicable</tspan></text>
+  <path d="M900 1852 V1876" class="edge"/>
+  <rect x="650" y="1876" width="500" height="65" rx="15" class="node blue"/>
+  <text x="900" y="1917" class="label">Pending at the origin office</text>
+  <path d="M900 1941 V1960" class="edge"/>
+  <polygon points="900,1960 1040,2020 900,2080 760,2020" class="decision"/>
+  <text x="900" y="2015" class="label"><tspan x="900">Release to another</tspan><tspan x="900" dy="23">office?</tspan></text>
+  <text x="716" y="2015" class="tag">NO</text>
+  <path d="M760 2020 H520 V2115" class="edge"/>
+  <text x="1060" y="2015" class="tag">YES</text>
+  <path d="M1040 2020 H1280 V2115" class="edge"/>
+  <rect x="340" y="2115" width="360" height="70" rx="14" class="node blue"/>
+  <text x="520" y="2144" class="label"><tspan x="520">Continue local processing;</tspan><tspan x="520" dy="24">mark terminal when complete</tspan></text>
+  <rect x="1100" y="2115" width="360" height="70" rx="14" class="node blue"/>
+  <text x="1280" y="2144" class="label"><tspan x="1280">Select action and</tspan><tspan x="1280" dy="24">eligible receiving office</tspan></text>
+  <path d="M1280 2185 V2205" class="edge"/>
+  <rect x="1100" y="2205" width="360" height="70" rx="14" class="node green"/>
+  <text x="1280" y="2234" class="label"><tspan x="1280">Write available trail;</tspan><tspan x="1280" dy="24">receiver sees incoming item</tspan></text>
+  <path d="M1280 2275 V2290" class="edge"/>
+  <polygon points="1280,2290 1410,2345 1280,2400 1150,2345" class="decision"/>
+  <text x="1280" y="2339" class="label"><tspan x="1280">Authorized receiver</tspan><tspan x="1280" dy="22">accepts?</tspan></text>
+  <text x="1118" y="2339" class="tag">NO</text>
+  <path d="M1150 2345 H1060 V2240 H1100" class="edge"/>
+  <text x="1440" y="2339" class="tag">YES</text>
+  <path d="M1410 2345 H1580 V2440 H1280 V2460" class="edge"/>
+
+  <!-- Completion callouts -->
+  <rect x="310" y="2205" width="420" height="80" rx="14" class="node amber"/>
+  <text x="520" y="2237" class="label"><tspan x="520">Mark terminal when processing</tspan><tspan x="520" dy="25">is complete</tspan></text>
+  <path d="M520 2185 V2205" class="edge"/>
+  <path d="M730 2245 H850 V2475" class="edge-dash"/>
+  <rect x="900" y="2460" width="500" height="72" rx="15" class="node green"/>
+  <text x="1150" y="2489" class="label"><tspan x="1150">Write receipt trail; route onward or</tspan><tspan x="1150" dy="24">mark terminal to archive</tspan></text>
+  <path d="M1150 2532 V2555" class="edge"/>
+  <rect x="1070" y="2555" width="160" height="48" rx="24" class="end"/><text x="1150" y="2585" class="endtext">END</text>
+</svg>
