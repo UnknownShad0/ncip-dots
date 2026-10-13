@@ -17,6 +17,8 @@ class DashboardController extends Controller
         $access = app(DocumentAccess::class);
         $officeId = $access->currentOfficeId($user);
         $canViewAllDocuments = $access->canViewAllDocuments($user);
+        $approvalOffice = $user->office ?: ($user->office_code ? $user->officeByCode : null);
+        $canReviewOfficeApprovals = $user->is_active && $user->isAdministrator() && $approvalOffice !== null;
 
         $recentDocuments = $access->scope(Document::query(), $user)
             ->with(['documentType', 'office', 'creator'])
@@ -70,8 +72,16 @@ class DashboardController extends Controller
                 'archived_documents' => $access->scope(Document::query(), $user)->where('is_archived', true)->count(),
             ];
         }
+        $approvalCountQuery = DocumentCreationDraft::query()->where('status', 'pending_approval')
+            ->where(function ($query) use ($user, $approvalOffice, $canReviewOfficeApprovals) {
+                $query->where('approver_id', $user->id);
+                if ($canReviewOfficeApprovals) {
+                    $query->orWhere('approver_office_id', $approvalOffice->id);
+                }
+            });
+
         $stats = array_merge([
-            'awaiting_my_approval' => DocumentCreationDraft::query()->where('approver_id', $user->id)->where('status', 'pending_approval')->count(),
+            'awaiting_my_approval' => $approvalCountQuery->count(),
             'my_submissions_awaiting_approval' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'pending_approval')->count(),
             'returned_for_revision' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'revision_requested')->count(),
             'awaiting_verification' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'awaiting_verification')->count(),
