@@ -17,8 +17,8 @@ export default function AuditTrailIndex({ trail = [], pagination, canFilterBurea
         >
             <Head title="Audit Trail" />
 
-            <div aria-busy={updating} className="mx-auto max-w-[1440px] rounded-2xl border border-[#e2e2df] bg-white p-5 shadow-sm sm:p-6">
-                <div className="mb-5"><h2 className="text-xl font-semibold tracking-tight text-[#171717]">System activity history</h2><p className="mt-1 text-sm text-[#73736e]">Review recorded actions, including imported legacy activity.</p></div>
+            <div aria-busy={updating} className="mx-auto max-w-[1440px] rounded-2xl border border-[#e2e2df] bg-white p-3 shadow-sm sm:p-5 md:p-6">
+                <div className="mb-5"><h2 className="text-lg font-semibold tracking-tight text-[#171717] sm:text-xl">System activity history</h2><p className="mt-1 text-sm text-[#73736e]">Review recorded actions, including imported legacy activity.</p></div>
 
                 {scopeNotice && <p className="mb-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">{scopeNotice}</p>}
 
@@ -38,10 +38,14 @@ export default function AuditTrailIndex({ trail = [], pagination, canFilterBurea
                         <p className="text-slate-500">{filters.office_id ? 'No activity found for this bureau.' : 'No activity recorded yet.'}</p>
                     ) : (
                         trail.map((entry) => (
-                            <div key={entry.id} className="rounded-lg border border-slate-200 p-4">
-                                <div className="flex items-center justify-between gap-4">
-                                    <div>
-                                        <div className="font-medium text-slate-800">{entry.action || 'Unspecified action'}{entry.record_source === 'legacy_import' && <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">Legacy</span>}{entry.result && <span className={`ml-2 rounded px-2 py-0.5 text-xs ${entry.result === 'failure' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{entry.result}</span>}</div>
+                            <div key={entry.id} className="rounded-lg border border-slate-200 p-3 sm:p-4">
+                                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium text-slate-800">
+                                            <span className="break-words">{entry.action || 'Unspecified action'}</span>
+                                            {entry.record_source === 'legacy_import' && <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">Legacy</span>}
+                                            {entry.result && <span className={`rounded px-2 py-0.5 text-xs ${entry.result === 'failure' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{entry.result}</span>}
+                                        </div>
                                         {entry.legacy_module && <div className="mt-1 text-xs text-slate-500">{entry.legacy_module}</div>}
                                         <div className="text-sm text-slate-500">
                                             {entry.actor_name || (entry.user ? (entry.user.short_name || entry.user.name) : entry.action === 'login.failed' || entry.action === 'login.rate_limited' || entry.action === 'password.reset_requested' ? 'Unauthenticated request' : entry.record_source === 'legacy_import' ? 'User not recorded or unavailable' : 'System')}
@@ -50,7 +54,7 @@ export default function AuditTrailIndex({ trail = [], pagination, canFilterBurea
                                         </div>
                                         {entry.details && <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-slate-600">{entry.details}</pre>}
                                     </div>
-                                    <div className="text-xs text-slate-400">
+                                    <div className="shrink-0 text-xs text-slate-400 sm:whitespace-nowrap">
                                         {entry.created_at ? new Date(entry.created_at).toLocaleString() : 'Date not recorded'}
                                     </div>
                                 </div>
@@ -58,11 +62,11 @@ export default function AuditTrailIndex({ trail = [], pagination, canFilterBurea
                         ))
                     )}
                 </div>
-                {pagination && (pagination.to ?? 0) > 0 && <nav aria-label="Audit trail pagination" className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 text-sm">
+                {pagination && (pagination.to ?? 0) > 0 && <nav aria-label="Audit trail pagination" className="mt-5 flex flex-col gap-3 border-t border-slate-200 pt-4 text-sm sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-slate-600">{paginationLabel}</p>
-                    <div className="flex gap-2">
-                        {pagination.prev_page_url ? <Link href={pagination.prev_page_url} onStart={() => setUpdating(true)} onFinish={() => setUpdating(false)} className="rounded-lg border border-slate-300 px-3 py-2 hover:bg-slate-50">Previous</Link> : <span aria-disabled="true" className="rounded-lg border border-slate-200 px-3 py-2 text-slate-400">Previous</span>}
-                        {pagination.next_page_url ? <Link href={pagination.next_page_url} onStart={() => setUpdating(true)} onFinish={() => setUpdating(false)} className="rounded-lg border border-slate-300 px-3 py-2 hover:bg-slate-50">Next</Link> : <span aria-disabled="true" className="rounded-lg border border-slate-200 px-3 py-2 text-slate-400">Next</span>}
+                    <div className="flex w-full gap-2 sm:w-auto">
+                        {pagination.prev_page_url ? <Link href={pagination.prev_page_url} onStart={() => setUpdating(true)} onFinish={() => setUpdating(false)} className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-center hover:bg-slate-50 sm:flex-none">Previous</Link> : <span aria-disabled="true" className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-center text-slate-400 sm:flex-none">Previous</span>}
+                        {pagination.next_page_url ? <Link href={pagination.next_page_url} onStart={() => setUpdating(true)} onFinish={() => setUpdating(false)} className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-center hover:bg-slate-50 sm:flex-none">Next</Link> : <span aria-disabled="true" className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-center text-slate-400 sm:flex-none">Next</span>}
                     </div>
                 </nav>}
             </div>
