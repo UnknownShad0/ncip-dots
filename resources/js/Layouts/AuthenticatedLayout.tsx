@@ -50,7 +50,7 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
     const navigation = (compact = false) => <>
         <Link href={route('dashboard')} className="flex h-20 shrink-0 items-center gap-3 border-b border-border px-5" aria-label="DOTS home">
             <img src="/images/logo/ncip-logo.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
-            {!compact && <span><span className="block text-xl font-bold tracking-tight text-primary">DOTS</span><span className="block text-xs text-muted">Document Tracking System</span></span>}
+            {!compact && <span><span className="block text-xl font-bold tracking-tight text-primary">DOTS</span><span className="block text-xs text-muted">DOcument Tracking System</span></span>}
         </Link>
         <nav aria-label="Main navigation" className="flex-1 space-y-5 overflow-y-auto px-3 py-5">
             {groups.map((group, index) => <section key={index}>
