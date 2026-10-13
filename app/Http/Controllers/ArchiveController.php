@@ -19,20 +19,25 @@ class ArchiveController extends Controller
         $filters = request()->validate([
             'office_id' => ['nullable', 'integer', 'exists:offices,id'],
             'year' => ['nullable', 'integer', 'in:2022,2023,2024,2025,2026'],
+            'search' => ['nullable', 'string', 'max:100'],
             'sort' => ['nullable', 'in:newest,oldest,bureau_asc,bureau_desc'],
         ]);
         $officeId = ! empty($filters['office_id']) ? (int) $filters['office_id'] : null;
         $year = isset($filters['year']) ? (int) $filters['year'] : null;
+        $search = trim($filters['search'] ?? '');
         $sort = $filters['sort'] ?? 'newest';
         $query = $access->scope(Document::query(), auth()->user())
             ->select([
                 'documents.id', 'documents.title', 'documents.tracking_number', 'documents.office_id',
                 'documents.status', 'documents.is_finalized', 'documents.remarks', 'documents.origin_type',
-                'documents.document_type_id', 'documents.other_document_type', 'documents.purpose_type_id', 'documents.created_at',
+                'documents.created_at',
             ])
-            ->with(['office:id,name,short_name', 'documentType:id,name', 'purposeType:id,name'])
+            ->with('office:id,name,short_name')
             ->where('is_archived', true)
             ->when($officeId !== null, fn ($q) => $q->where('office_id', $officeId))
+            ->when($search !== '', fn ($q) => $q->where(fn ($matching) => $matching
+                ->where('documents.title', 'like', "$search%")
+                ->orWhere('documents.tracking_number', 'like', "$search%")))
             ->when($year !== null, fn ($q) => $q
                 ->where('documents.created_at', '>=', "$year-01-01")
                 ->where('documents.created_at', '<', ($year + 1).'-01-01'));
@@ -41,7 +46,7 @@ class ArchiveController extends Controller
         }
         $documents = $query->orderBy('documents.created_at', $sort === 'oldest' ? 'asc' : 'desc')
             ->orderBy('documents.id', $sort === 'oldest' ? 'asc' : 'desc')
-            ->paginate(25)
+            ->paginate(10)
             ->withQueryString()
             ->through(fn (Document $document) => [
                 'id' => $document->id,
@@ -51,11 +56,8 @@ class ArchiveController extends Controller
                 'office' => $document->office,
                 'office_name' => $document->office?->name ?? '',
                 'office_short_name' => $document->office?->short_name,
-                'document_type' => $document->documentType?->name ?? '',
-                'other_document_type' => $document->other_document_type,
-                'purpose_type' => $document->purposeType?->name ?? '',
                 'origin_type' => $document->origin_type ?? '',
-                'status' => 'archived',
+                'status' => $document->status ?? 'archived',
                 'remarks' => $document->remarks ?? '',
                 'is_finalized' => (bool) $document->is_finalized,
                 'created_at' => $document->created_at?->format('F j Y h:i:s A'),
@@ -65,7 +67,7 @@ class ArchiveController extends Controller
             'documents' => $documents,
             'canFilterOffices' => $canFilterOffices,
             'offices' => $canFilterOffices ? Office::orderBy('name')->get(['id', 'name']) : [],
-            'filters' => ['office_id' => $officeId, 'year' => $year, 'sort' => $sort],
+            'filters' => ['office_id' => $officeId, 'year' => $year, 'search' => $search, 'sort' => $sort],
         ]);
     }
 

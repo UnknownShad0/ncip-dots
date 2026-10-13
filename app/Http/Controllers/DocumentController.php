@@ -53,6 +53,10 @@ class DocumentController extends Controller
         $latestFile = $document->files->sortByDesc('id')->first();
 
         return response()->json([
+            'document_type' => $document->documentType?->name ?? '',
+            'other_document_type' => $document->other_document_type,
+            'purpose_type' => $document->purposeType?->name ?? '',
+            'origin_type' => $document->origin_type ?? '',
             'file_name' => $latestFile?->original_name ?? $latestFile?->file_name,
             'file_url' => $latestFile?->downloadUrl(),
             'files' => $document->files->sortBy('id')->map(fn ($file) => [
