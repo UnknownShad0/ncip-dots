@@ -1124,11 +1124,9 @@ class DocumentController extends Controller
 
     private function approvedDraftHtml(DocumentCreationDraft $draft): string
     {
-        return view('documents.generated', [
-            'title' => $draft->title,
-            'content' => $draft->content ?? [],
-            'header' => 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('images/header.png'))),
-        ])->render();
+        $pdf = app(\App\Services\DocumentPdf::class);
+
+        return $pdf->html($draft->title, $pdf->approvedContent($draft));
     }
 
     private function formatTrailTransaction(?DocumentTrail $trail): string

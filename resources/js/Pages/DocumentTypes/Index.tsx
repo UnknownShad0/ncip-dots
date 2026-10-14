@@ -12,14 +12,18 @@ type DocumentTypeRow = {
     description?: string;
     is_active: number;
     source?: string;
+    default_template_version_id?: number | null;
+    template_name?: string;
 };
 
 type SortKey = 'name' | 'code' | 'description' | 'is_active';
 
 export default function DocumentTypesIndex({
     documentTypes = [],
+    templates = [],
 }: {
     documentTypes?: DocumentTypeRow[];
+    templates?: { id: number; name: string; version: number }[];
 }) {
     const [processing, setProcessing] = useState(false);
     const [formError, setFormError] = useState('');
@@ -35,6 +39,7 @@ export default function DocumentTypesIndex({
         name: '',
         code: '',
         description: '',
+        default_template_version_id: '',
         is_active: true,
     });
 
@@ -45,6 +50,7 @@ export default function DocumentTypesIndex({
             name: '',
             code: '',
             description: '',
+        default_template_version_id: '',
             is_active: true,
         });
     };
@@ -60,6 +66,7 @@ export default function DocumentTypesIndex({
             name: row.name ?? '',
             code: row.code ?? '',
             description: row.description ?? '',
+            default_template_version_id: String(row.default_template_version_id ?? ''),
             is_active: Number(row.is_active) === 1,
         });
     };
@@ -72,6 +79,7 @@ export default function DocumentTypesIndex({
             name: '',
             code: '',
             description: '',
+        default_template_version_id: '',
             is_active: true,
         });
     };
@@ -269,7 +277,7 @@ export default function DocumentTypesIndex({
 
                                     return (
                                         <tr key={`${row.id ?? 'row'}-${index}`} className="border-t border-border transition-colors hover:bg-background">
-                                            <td className="px-4 py-3 font-medium text-foreground">{row.name}</td>
+                                            <td className="px-4 py-3 font-medium text-foreground">{row.name}<p className="mt-1 text-xs font-normal text-muted">{row.template_name || "NCIP Standard"}</p></td>
                                             <td className="px-4 py-3 text-muted">{row.code || '—'}</td>
                                             <td className="px-4 py-3 text-muted">{row.description || '—'}</td>
                                             <td className="px-4 py-3">
@@ -383,6 +391,14 @@ export default function DocumentTypesIndex({
                                 />
                             </div>
 
+                            <div>
+                                <label htmlFor="default-document-template" className="mb-1 block text-sm font-medium text-foreground">Document template / header</label>
+                                <select id="default-document-template" value={form.default_template_version_id} onChange={event => setForm({ ...form, default_template_version_id: event.target.value })} className="w-full rounded-lg border border-border px-3 py-2">
+                                    <option value="">NCIP Standard (default)</option>
+                                    {templates.map(template => <option key={template.id} value={template.id}>{template.name} · v{template.version}</option>)}
+                                </select>
+                                <p className="mt-1 text-xs text-muted">Applies to new documents. Saved versions retain their original header.</p>
+                            </div>
                             <div className="flex items-center gap-2">
                                 <input
                                     id="is_active"

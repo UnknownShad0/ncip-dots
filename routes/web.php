@@ -31,6 +31,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/documents/latest', [DocumentController::class, 'latest'])->name('documents.latest');
     Route::get('/documents/{id}/details', [DocumentController::class, 'details'])->whereNumber('id')->name('documents.details');
     Route::get('/document-creation', [DocumentCreationController::class, 'index'])->name('document-creation.index');
+    Route::get('/document-assets/{filename}', [\App\Services\DocumentTemplates::class, 'show'])->where('filename', '[a-f0-9]{64}\.(png|jpg)')->name('document-assets.show');
+    Route::post('/document-creation/preview', [DocumentCreationController::class, 'preview'])->middleware('throttle:30,1')->name('document-creation.preview');
+    Route::get('/document-creation/{draft}/preview', [DocumentCreationController::class, 'previewSubmission'])->middleware('throttle:30,1')->name('document-creation.preview-submission');
     Route::get('/drafts', [DraftsController::class, 'index'])->name('drafts.index');
     Route::get('/approved-documents', function (\Illuminate\Http\Request $request) {
         $request->query->set('queue', 'approved');

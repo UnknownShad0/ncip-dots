@@ -4,7 +4,6 @@ import InfoTip from "@/Components/InfoTip";
 import {
     Search,
     FilePlus2,
-    Printer,
     Save,
     Send,
     Pencil,
@@ -17,7 +16,8 @@ import {
     Eye,
     type LucideIcon,
 } from "lucide-react";
-import DocumentPaper from "@/Components/PaginatedDocument";
+import DocumentPaper, { type DocumentTemplate } from "@/Components/PaginatedDocument";
+import DocumentPdfPreview from "@/Components/DocumentPdfPreview";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import { Head, router } from "@inertiajs/react";
 import { FormEvent, useEffect, useState } from "react";
@@ -82,6 +82,9 @@ type Option = {
     role?: string;
     source?: string;
     disabled?: boolean;
+    template?: DocumentTemplate;
+    template_error?: string;
+    sample_content?: Record<string, any> | null;
 };
 const blank = {
     for: "",
@@ -310,6 +313,7 @@ export default function Index({
     const [typeId, setTypeId] = useState(String(draftToEdit?.document_type_id ?? ""));
     const [title, setTitle] = useState(draftToEdit?.title ?? "");
     const [content, setContent] = useState<Record<string, any>>({ ...blank, ...(draftToEdit?.content ?? {}) });
+    const [savedTemplate, setSavedTemplate] = useState<{ typeId: string; template?: DocumentTemplate } | null>(draftToEdit ? { typeId: String(draftToEdit.document_type_id), template: draftToEdit.content.template } : null);
     const [approverOfficeId, setApproverOfficeId] = useState(String(draftToEdit?.approver_office_id ?? ""));
     const [previewOpen, setPreviewOpen] = useState(false);
     const [submissionTarget, setSubmissionTarget] = useState<{
@@ -352,6 +356,7 @@ export default function Index({
     useEffect(() => {
         if (!draftToEdit) return;
         setEditing(draftToEdit.id);
+        setSavedTemplate({ typeId: String(draftToEdit.document_type_id), template: draftToEdit.content.template });
         setTypeId(String(draftToEdit.document_type_id));
         setTitle(draftToEdit.title);
         setContent({ ...blank, ...draftToEdit.content });
@@ -409,6 +414,7 @@ export default function Index({
 
     const startNew = () => {
         setEditing(null);
+        setSavedTemplate(null);
         setTypeId("");
         setTitle("");
         setContent({ ...blank });
@@ -418,6 +424,7 @@ export default function Index({
     };
     const editDraft = (draft: Draft) => {
         setEditing(draft.id);
+        setSavedTemplate({ typeId: String(draft.document_type_id), template: draft.content.template });
         setTypeId(String(draft.document_type_id));
         setTitle(draft.title);
         setContent({ ...blank, ...draft.content });
@@ -442,6 +449,7 @@ export default function Index({
             onError: (errors: Record<string, string>) => setErrors(errors),
             onSuccess: (page: any) => {
                 setEditing(Number(page.props.savedDraftId));
+                setSavedTemplate({ typeId, template: content.template });
                 setDirty(false);
                 setErrors({});
                 setSuccessAlert({
@@ -534,7 +542,19 @@ export default function Index({
               : "Request revision";
     const showApprovalTasks =
         canReviewOfficeApprovals || (approvalTasksPagination?.total ?? 0) > 0;
-    const print = () => window.print();
+    const selectedType = documentTypes.find(type => String(type.id) === typeId);
+    const loadSample = () => {
+        if (!selectedType?.sample_content) return;
+        const apply = () => {
+            const { title: sampleTitle, ...sample } = selectedType.sample_content!;
+            setTitle(sampleTitle || selectedType.name.toUpperCase());
+            setContent(current => ({ ...current, ...sample, body: "" }));
+            setDirty(true);
+        };
+        if (title || content.body || content.body_document) {
+            setConfirmation({ title: "Load sample content?", message: "This replaces the current title, sample fields, and document body. Your assigned header stays in place.", label: "Load sample", destructive: false, action: apply });
+        } else apply();
+    };
 
     return (
         <AuthenticatedLayout
@@ -667,7 +687,9 @@ export default function Index({
                                             required
                                             value={typeId}
                                             onChange={(e) => {
-                                                setTypeId(e.target.value);
+                                                const next = e.target.value;
+                                                setTypeId(next);
+                                                setContent(current => ({ ...current, template: savedTemplate?.typeId === next ? savedTemplate.template : documentTypes.find(type => String(type.id) === next)?.template }));
                                                 setDirty(true);
                                             }}
                                             className="max-w-[260px] rounded-lg border-border bg-surface py-1.5 text-sm"
@@ -681,17 +703,18 @@ export default function Index({
                                                     value={x.id}
                                                     disabled={x.disabled}
                                                 >
-                                                    {x.name}
+                                                    {x.name}{x.template_error ? " (template unavailable)" : ""}
                                                 </option>
                                             ))}
                                         </select>
                                     </label>
+                                    <button type="button" onClick={loadSample} disabled={!selectedType?.sample_content || saving} className="dots-button-secondary disabled:opacity-40">Load sample content</button>
                                     <p className="text-xs text-muted">
-                                        Letter · Portrait{" "}
+                                        {content.template?.name || "NCIP Standard"} · Letter · Portrait{" "}
                                         <span className="mx-2 text-slate-300">
                                             |
                                         </span>{" "}
-                                        Click the page to write
+                                        Use Preview for page breaks
                                     </p>
                                 </div>
                                 {Object.keys(errors).length > 0 && (
@@ -715,7 +738,7 @@ export default function Index({
                                             setDirty(true);
                                         }}
                                         onChange={change}
-                                        printTarget={!reviewing}
+                                        disabled={saving}
                                     />
                                 </div>
                             </fieldset>
@@ -815,7 +838,7 @@ export default function Index({
                             </div>
                         </div>
                         <div className="max-h-[70vh] overflow-auto rounded-lg border border-border bg-surface p-3 sm:p-6">
-                            <DocumentPaper title={title} content={content} printTarget />
+                            {previewOpen && <DocumentPdfPreview payload={{ draft_id: editing, document_type_id: typeId, title, content }} />}
                         </div>
                         <div className="mt-4 flex flex-wrap justify-end gap-2">
                             <button
@@ -824,14 +847,6 @@ export default function Index({
                                 className="dots-button-secondary"
                             >
                                 Back to editing
-                            </button>
-                            <button
-                                type="button"
-                                onClick={print}
-                                className="dots-button-secondary inline-flex items-center gap-2"
-                            >
-                                <Printer size={16} aria-hidden="true" />
-                                Print / Save as PDF
                             </button>
                             <button
                                 type="button"
@@ -953,22 +968,10 @@ export default function Index({
                                 </button>
                             </div>
                             <div className="overflow-x-auto">
-                                <DocumentPaper
-                                    title={reviewing.title}
-                                    content={
-                                        reviewing.current_submission.content
-                                    }
-                                    printTarget
-                                />
+                                <DocumentPdfPreview draftId={reviewing.id} />
                             </div>
                             {reviewing.can_decide ? (
                                 <div className="mt-4 flex flex-wrap justify-end gap-2">
-                                    <button
-                                        onClick={print}
-                                        className="rounded-lg border bg-surface px-4 py-2 text-sm"
-                                    >
-                                        Print / Save as PDF
-                                    </button>
                                     <button
                                         onClick={() =>
                                             decision(

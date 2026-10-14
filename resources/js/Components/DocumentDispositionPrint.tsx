@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 
 type DocumentItem = {
     tracking_number?: string;
-    tracking_url?: string;
+    tracking_url?: string | null;
     title?: string;
     office_name?: string;
     office_short_name?: string | null;

@@ -17,11 +17,17 @@ class DocumentType extends Model
         'description',
         'is_active',
         'created_by',
+        'default_template_version_id',
     ];
 
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function defaultTemplateVersion(): BelongsTo
+    {
+        return $this->belongsTo(DocumentTemplateVersion::class, 'default_template_version_id');
     }
 
     public function documents(): HasMany

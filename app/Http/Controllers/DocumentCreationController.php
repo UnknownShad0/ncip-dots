@@ -9,12 +9,17 @@ use App\Models\DocumentType;
 use App\Models\Office;
 use App\Models\User;
 use App\Services\AuditTrailWriter;
+use App\Services\DocumentTemplates;
+use App\Services\DocumentPdf;
+use App\Services\RichDocumentContent;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Support\Arr;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class DocumentCreationController extends Controller
@@ -107,6 +112,7 @@ class DocumentCreationController extends Controller
             $draftToEdit = $draftToEdit->only([
                 'id', 'title', 'content', 'document_type_id', 'version_number', 'created_by', 'approver_office_id', 'status',
             ]);
+            $draftToEdit['content'] = app(DocumentTemplates::class)->presentContent($draftToEdit['content']);
         }
 
         $myWorkQuery = DocumentCreationDraft::query()->with($relations)
@@ -219,6 +225,7 @@ class DocumentCreationController extends Controller
         }
 
         $drafts->transform(function (DocumentCreationDraft $draft) use ($user, $userOffice, $canReviewOfficeApprovals, $currentVersions) {
+            $draft->content = app(DocumentTemplates::class)->presentContent($draft->content ?? []);
             $version = $currentVersions->get($draft->id.':'.$draft->version_number);
             $draft->setAttribute('current_submission', $version ? [
                 'version_number' => $version->version_number,
@@ -261,7 +268,7 @@ class DocumentCreationController extends Controller
     public function update(Request $request, DocumentCreationDraft $draft)
     {
         abort_unless((int) $draft->created_by === (int) $request->user()->id && in_array($draft->status, ['draft', 'revision_requested'], true), 403);
-        $data = $this->validateDraft($request);
+        $data = $this->validateDraft($request, $draft);
         $draft->update([...$data, 'status' => 'draft']);
         $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Draft updated']);
         app(AuditTrailWriter::class)->record('document.draft_updated', $draft, [
@@ -273,7 +280,8 @@ class DocumentCreationController extends Controller
 
     public function submitCurrent(Request $request)
     {
-        $data = $this->validateDraft($request);
+        $existing = $this->editableDraft($request);
+        $data = $this->validateDraft($request, $existing);
         $validated = $request->validate([
             'draft_id' => ['nullable', 'integer'],
             'approver_office_id' => ['required', 'integer', 'exists:offices,id'],
@@ -319,7 +327,7 @@ class DocumentCreationController extends Controller
             return $draft;
         });
 
-        return back()->with('success', 'PDF version submitted for approval.')
+        return back()->with('success', 'Document version submitted for approval.')
             ->with('savedDraftId', $draft->id);
     }
 
@@ -331,11 +339,15 @@ class DocumentCreationController extends Controller
         abort_unless($approverOffice, 422, 'Choose an office with an active admin.');
         $this->submitDraftVersion($request, $draft, $approverOffice);
 
-        return back()->with('success', 'PDF version submitted for approval.');
+        return back()->with('success', 'Document version submitted for approval.');
     }
 
     private function submitDraftVersion(Request $request, DocumentCreationDraft $draft, Office $approverOffice): void
     {
+        $content = $draft->content;
+        $content['document_title'] = $draft->title;
+        $content['template_snapshot'] ??= app(DocumentTemplates::class)->defaultSnapshot();
+        $draft->update(['content' => $content]);
         $number = $draft->version_number + 1;
         $draft->versions()->create(['version_number' => $number, 'content' => $draft->content, 'created_by' => $request->user()->id]);
         $draft->update([
@@ -412,7 +424,35 @@ class DocumentCreationController extends Controller
         return back()->with('success', 'Registered as '.$document->tracking_number.'.');
     }
 
-    private function validateDraft(Request $request): array
+    public function preview(Request $request)
+    {
+        $data = $this->validateDraft($request, $this->editableDraft($request));
+
+        return app(DocumentPdf::class)->response($data['title'], $data['content']);
+    }
+
+    public function previewSubmission(Request $request, DocumentCreationDraft $draft)
+    {
+        $user = $request->user();
+        abort_unless($this->canAccess($draft, $request)
+            || ($draft->approver_office_id && $this->userCanApproveForOffice($user, $draft->approver_office_id)), 403);
+        $version = $draft->versions()->where('version_number', $draft->version_number)->firstOrFail();
+
+        return app(DocumentPdf::class)->response($draft->title, $version->content);
+    }
+
+    private function editableDraft(Request $request): ?DocumentCreationDraft
+    {
+        $request->validate(['draft_id' => ['nullable', 'integer']]);
+        if (! $request->filled('draft_id')) {
+            return null;
+        }
+
+        return DocumentCreationDraft::query()->whereKey($request->integer('draft_id'))
+            ->where('created_by', $request->user()->id)->whereIn('status', ['draft', 'revision_requested'])->firstOrFail();
+    }
+
+    private function validateDraft(Request $request, ?DocumentCreationDraft $existing = null): array
     {
         $data = $request->validate([
             'document_type_id' => ['required', 'integer', 'exists:document_types,id'],
@@ -421,9 +461,27 @@ class DocumentCreationController extends Controller
             'content.for' => ['nullable', 'string', 'max:255'], 'content.thru' => ['nullable', 'string', 'max:255'],
             'content.attention' => ['nullable', 'string', 'max:255'], 'content.from' => ['required', 'string', 'max:255'],
             'content.subject' => ['required', 'string', 'max:255'], 'content.date' => ['required', 'date'],
-            'content.body' => ['required', 'string', 'max:50000'], 'content.cc' => ['nullable', 'array'], 'content.cc.*' => ['nullable', 'string', 'max:255'],
+            'content.body' => ['required_without:content.body_document', 'nullable', 'string', 'max:50000'],
+            'content.body_document' => ['nullable', 'array'],
+            'content.cc' => ['nullable', 'array', 'max:100'], 'content.cc.*' => ['nullable', 'string', 'max:255'],
         ]);
-        abort_unless(DocumentType::query()->whereKey($data['document_type_id'])->where('is_active', true)->exists(), 422, 'Choose an active document type.');
+        $type = DocumentType::query()->whereKey($data['document_type_id'])->where('is_active', true)->first();
+        abort_unless($type, 422, 'Choose an active document type.');
+        $data['content'] = Arr::only($data['content'], ['for', 'thru', 'attention', 'from', 'subject', 'date', 'body', 'body_document', 'cc']);
+        if (isset($data['content']['body_document'])) {
+            $rich = app(RichDocumentContent::class);
+            $data['content']['body_document'] = $rich->normalize($data['content']['body_document']);
+            $data['content']['body'] = $rich->plainText($data['content']['body_document']);
+            if (trim($data['content']['body']) === '') {
+                throw ValidationException::withMessages(['content.body_document' => 'Write some document content before saving or submitting.']);
+            }
+            $data['content']['schema_version'] = 2;
+        }
+        $templates = app(DocumentTemplates::class);
+        $data['content']['template_snapshot'] = $existing && (int) $existing->document_type_id === (int) $type->id
+            ? ($existing->content['template_snapshot'] ?? $templates->defaultSnapshot())
+            : $templates->forType($type)['snapshot'];
+        $data['content']['document_title'] = $data['title'];
         $data['content']['cc'] = array_values(array_filter($data['content']['cc'] ?? []));
 
         return $data;
@@ -432,14 +490,24 @@ class DocumentCreationController extends Controller
     private function documentTypeOptions(): array
     {
         $options = DocumentType::query()
+            ->with('defaultTemplateVersion')
             ->orderBy('name')
-            ->get(['id', 'name', 'is_active'])
-            ->map(fn (DocumentType $type) => [
+            ->get(['id', 'name', 'is_active', 'default_template_version_id'])
+            ->map(function (DocumentType $type) {
+                $templates = app(DocumentTemplates::class);
+                try {
+                    $resolved = $type->is_active ? $templates->forType($type) : null;
+                } catch (ValidationException $exception) {
+                    return ['id' => (string) $type->id, 'name' => $type->name, 'disabled' => true, 'template_error' => $exception->getMessage()];
+                }
+                return [
                 'id' => (string) $type->id,
                 'name' => $type->name,
                 'source' => 'New DB',
                 'disabled' => ! (bool) $type->is_active,
-            ]);
+                'template' => $resolved ? $templates->presentation($resolved['snapshot']) : null,
+                'sample_content' => $resolved['sample_content'] ?? null,
+            ]; });
 
         return $options->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)->values()->all();
     }

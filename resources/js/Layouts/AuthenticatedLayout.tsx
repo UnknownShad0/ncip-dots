@@ -57,12 +57,12 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
         <nav aria-label="Main navigation" className="flex-1 space-y-5 overflow-y-auto px-3 py-5">
             {groups.map((group, index) => <section key={index}>
                 {group.label && (compact ? <div className="mx-3 mb-3 border-t border-border" /> : <h2 className="mb-2 px-3 text-[14px] font-semibold uppercase tracking-wider text-muted">{group.label === 'Other information systems' ? 'Connected systems' : group.label}</h2>)}
-                <div className="space-y-1.5">{group.items.filter((item) => !['libraries.index', 'user-accounts.index'].includes(item.href) || canManageLibraries === true).map(({name, href, anchor, countKey, icon: Icon}) => {
+                <div className="space-y-1.5">{group.items.filter((item) => !['libraries.index', 'user-accounts.index'].includes(item.href) || canManageLibraries === true).map(({name, href, countKey, icon: Icon}) => {
                     const active = href === 'libraries.index'
                         ? route().current('libraries.*') || route().current('setup.index') || libraryLinks.some((item) => route().current(item.href))
                         : href === 'connected-systems.index' ? route().current(href) || connectedSystems.some((item) => route().current(item.href)) : route().current(href);
                     const count = countKey ? notificationCounts?.[countKey] : null;
-                    const target = `${route(href)}${anchor ? `#${anchor}` : ''}`;
+                    const target = route(href);
                     return <Link key={name} href={target} onClick={() => setMobileOpen(false)} aria-current={active ? 'page' : undefined} aria-label={count ? `${name}: ${count}` : name} title={compact ? `${name}${count > 0 ? `: ${count > 99 ? '99+' : count}` : ''}` : undefined}
                         className={`relative flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm transition-colors ${compact ? 'justify-center' : ''} ${active ? 'bg-primary font-semibold text-primary-foreground' : 'text-muted hover:bg-secondary hover:text-foreground'}`}>
                         <Icon size={18} className="shrink-0" aria-hidden="true" />{!compact && <span className="min-w-0 flex-1">{name}</span>}{count > 0 && !compact && <span className="min-w-5 rounded-md bg-secondary px-1.5 py-0.5 text-center text-[14px] font-semibold tabular-nums text-primary">{count > 99 ? '99+' : count}</span>}{count > 0 && compact && <span aria-hidden="true" className={`absolute right-2 top-2 h-2 w-2 rounded-full ${active ? 'bg-primary-foreground' : 'bg-primary'}`} />}

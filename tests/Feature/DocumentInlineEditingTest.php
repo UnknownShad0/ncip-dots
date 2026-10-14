@@ -24,9 +24,9 @@ class DocumentInlineEditingTest extends TestCase
         $this->put('/document-creation/'.$draft->id, ['document_type_id' => $type->id, 'title' => 'Memo revised', 'content' => $content])
             ->assertSessionHasNoErrors()->assertSessionHas('savedDraftId', $draft->id);
         $this->assertSame(1, DocumentCreationDraft::count());
-        $props = $this->get('/document-creation')->assertOk()->viewData('page')['props'];
-        $this->assertSame($content['body'], $props['drafts'][0]['content']['body']);
-        $this->assertSame($content['cc'], $props['drafts'][0]['content']['cc']);
+        $props = $this->get('/document-creation?edit_draft_id='.$draft->id)->assertOk()->viewData('page')['props'];
+        $this->assertSame($content['body'], $props['draftToEdit']['content']['body']);
+        $this->assertSame($content['cc'], $props['draftToEdit']['content']['cc']);
     }
 
     public function test_long_document_exports_to_multiple_pages_with_reserved_header_and_footer(): void

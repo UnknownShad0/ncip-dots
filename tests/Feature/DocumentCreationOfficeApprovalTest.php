@@ -38,6 +38,7 @@ class DocumentCreationOfficeApprovalTest extends TestCase
         $creator->update(['firstname' => 'Alexandra', 'lastname' => 'Molina']);
         $this->user($office, 'Admin Staff', 3);
         $draft = $this->draft($creator);
+        $draft->update(['status' => 'revision_requested']);
         $draft->events()->create(['user_id' => $creator->id, 'event' => 'Draft created']);
 
         $this->actingAs($creator)->get('/document-creation')->assertInertia(fn (Assert $page) => $page
