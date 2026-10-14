@@ -193,7 +193,7 @@ export default function ArchivesIndex({ documents, canFilterOffices = false, off
                                     <label className="relative min-w-0 flex-1 sm:flex-none">
                                         <span className="sr-only">Search title or tracking number by prefix</span>
                                         <Search size={15} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-                                        <input type="search" aria-label="Search title or tracking number by prefix" value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Title or tracking number" maxLength={100} className="h-11 w-full rounded-lg border-border pl-9 text-sm sm:w-56" />
+                                        <input type="search" aria-label="Search title or tracking number by prefix" value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Title or tracking no." maxLength={100} className="h-11 w-full rounded-lg border-border pl-9 text-sm sm:w-56" />
                                     </label>
                                     <button type="submit" className="inline-flex h-11 shrink-0 items-center justify-center rounded-lg border border-border bg-background px-3 text-sm font-medium text-foreground hover:bg-secondary">Search</button>
                                 </form>
