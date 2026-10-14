@@ -7,6 +7,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\DocumentCreationController;
 use App\Http\Controllers\DocumentTypeController;
+use App\Http\Controllers\DraftsController;
 use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\IplumaController;
 use App\Http\Controllers\OfficeController;
@@ -30,11 +31,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/documents/latest', [DocumentController::class, 'latest'])->name('documents.latest');
     Route::get('/documents/{id}/details', [DocumentController::class, 'details'])->whereNumber('id')->name('documents.details');
     Route::get('/document-creation', [DocumentCreationController::class, 'index'])->name('document-creation.index');
+    Route::get('/drafts', [DraftsController::class, 'index'])->name('drafts.index');
     Route::get('/approved-documents', function (\Illuminate\Http\Request $request) {
         $request->query->set('queue', 'approved');
         return app(DocumentCreationController::class)->index($request);
     })->name('approved-documents.index');
     Route::post('/document-creation', [DocumentCreationController::class, 'store'])->name('document-creation.store');
+    Route::post('/document-creation/submit-current', [DocumentCreationController::class, 'submitCurrent'])->name('document-creation.submit-current');
     Route::put('/document-creation/{draft}', [DocumentCreationController::class, 'update'])->name('document-creation.update');
     Route::post('/document-creation/{draft}/submit', [DocumentCreationController::class, 'submit'])->name('document-creation.submit');
     Route::post('/document-creation/{draft}/decision', [DocumentCreationController::class, 'decide'])->name('document-creation.decision');

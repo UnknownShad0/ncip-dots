@@ -1,7 +1,22 @@
 import WorkspaceDialog from "@/Components/WorkspaceDialog";
 import WorkspaceAlert from "@/Components/WorkspaceAlert";
 import InfoTip from "@/Components/InfoTip";
-import { Search, FilePlus2, Printer, Save, Send } from "lucide-react";
+import {
+    Search,
+    FilePlus2,
+    Printer,
+    Save,
+    Send,
+    Pencil,
+    Clock3,
+    CircleCheck,
+    CircleAlert,
+    CircleX,
+    FileCheck2,
+    CircleHelp,
+    Eye,
+    type LucideIcon,
+} from "lucide-react";
 import DocumentPaper from "@/Components/PaginatedDocument";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import { Head, router } from "@inertiajs/react";
@@ -43,6 +58,23 @@ type Draft = {
         };
     }[];
 };
+type PaginationSummary = {
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+};
+type ListFilters = {
+    queue?: string;
+    my_search?: string;
+    my_status?: string;
+    approval_search?: string;
+    search?: string;
+    status?: string;
+    my_page?: number;
+    approval_page?: number;
+    page?: number;
+};
 type Option = {
     id: number | string;
     name: string;
@@ -62,33 +94,236 @@ const blank = {
     cc: [] as string[],
 };
 
+const statusPresentation: Record<
+    string,
+    { label: string; className: string; Icon: LucideIcon }
+> = {
+    draft: { label: "Draft", className: "bg-slate-100 text-slate-700", Icon: Pencil },
+    pending_approval: { label: "Awaiting approval", className: "bg-warning-soft text-warning", Icon: Clock3 },
+    revision_requested: { label: "Returned for revision", className: "bg-warning-soft text-warning", Icon: CircleAlert },
+    rejected: { label: "Rejected", className: "bg-danger-soft text-danger", Icon: CircleX },
+    approved: { label: "Approved", className: "bg-success-soft text-success", Icon: CircleCheck },
+    awaiting_verification: { label: "Awaiting verification", className: "bg-warning-soft text-warning", Icon: Clock3 },
+    verified: { label: "Verified", className: "bg-success-soft text-success", Icon: FileCheck2 },
+    registered: { label: "Registered", className: "bg-success-soft text-success", Icon: CircleCheck },
+};
+
+function DraftStatusBadge({ status }: { status: string }) {
+    const presentation = statusPresentation[status] ?? {
+        label: status.replaceAll("_", " "),
+        className: "bg-slate-100 text-slate-700",
+        Icon: CircleHelp,
+    };
+    const Icon = presentation.Icon;
+
+    return (
+        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${presentation.className}`}>
+            <Icon size={14} aria-hidden="true" />
+            {presentation.label}
+        </span>
+    );
+}
+
+function DraftListSection({
+    id,
+    title,
+    emptyMessage,
+    mode,
+    drafts,
+    pagination,
+    currentUserId,
+    saving,
+    search,
+    onSearchChange,
+    onSearchSubmit,
+    status = "all",
+    statusOptions,
+    onStatusChange,
+    onPageChange,
+    onEdit,
+    onSubmitApproval,
+    onReview,
+    onRegister,
+}: {
+    id: string;
+    title: string;
+    emptyMessage: string;
+    mode: "work" | "approval" | "approved";
+    drafts: Draft[];
+    pagination: PaginationSummary;
+    currentUserId: number;
+    saving: boolean;
+    search: string;
+    onSearchChange: (value: string) => void;
+    onSearchSubmit: () => void;
+    status?: string;
+    statusOptions?: [string, string][];
+    onStatusChange?: (value: string) => void;
+    onPageChange: (page: number) => void;
+    onEdit?: (draft: Draft) => void;
+    onSubmitApproval?: (draft: Draft) => void;
+    onReview?: (draft: Draft) => void;
+    onRegister?: (draft: Draft) => void;
+}) {
+    return (
+        <section id={id} className="scroll-mt-6 rounded-xl border border-border bg-surface p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold">
+                    {title}{" "}
+                    <span className="ml-1 text-sm font-normal text-muted">({pagination.total})</span>
+                </h2>
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                    <form onSubmit={(event: FormEvent) => { event.preventDefault(); onSearchSubmit(); }} className="flex gap-2">
+                        <label className="relative min-w-0 flex-1">
+                            <span className="sr-only">Search {title.toLowerCase()}</span>
+                            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+                            <input
+                                value={search}
+                                onChange={(event) => onSearchChange(event.target.value)}
+                                placeholder="Search documents"
+                                className="h-11 w-full rounded-lg border-border pl-9 text-sm"
+                            />
+                        </label>
+                        <button type="submit" className="dots-button-secondary">Search</button>
+                    </form>
+                    {statusOptions && onStatusChange && (
+                        <select
+                            aria-label={`Filter ${title.toLowerCase()} by status`}
+                            value={status}
+                            onChange={(event) => onStatusChange(event.target.value)}
+                            className="h-11 rounded-lg border-border text-sm"
+                        >
+                            <option value="all">All statuses</option>
+                            {statusOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                        </select>
+                    )}
+                </div>
+            </div>
+            <div className="divide-y divide-border">
+                {drafts.length === 0 ? (
+                    <p className="rounded-lg bg-background p-5 text-sm text-muted">
+                        {search || status !== "all" ? "No documents match these filters." : emptyMessage}
+                    </p>
+                ) : drafts.map((draft) => (
+                    <article key={draft.id} className="py-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <h3 className="font-semibold">{draft.title}</h3>
+                                <p className="text-sm text-muted">
+                                    {draft.document_type?.name} · Created by {draft.creator?.short_name || draft.creator?.name} · Version {draft.version_number || "draft"}
+                                </p>
+                                <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                                    <DraftStatusBadge status={draft.status} />
+                                    {draft.approver_office
+                                        ? ` · Approval office: ${draft.approver_office.short_name || draft.approver_office.name}`
+                                        : draft.approver
+                                            ? ` · Approver: ${draft.approver.short_name || draft.approver.name}`
+                                            : ""}
+                                    {draft.decision_maker ? ` · Decided by: ${draft.decision_maker.short_name || draft.decision_maker.name}` : ""}
+                                </p>
+                                {(draft.decision_remarks || draft.verification_notes) && (
+                                    <p className="mt-2 text-sm text-muted">{draft.decision_remarks || draft.verification_notes}</p>
+                                )}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {mode === "work" && draft.created_by === currentUserId && ["draft", "revision_requested"].includes(draft.status) && (
+                                    <>
+                                        <button type="button" disabled={saving} onClick={() => onEdit?.(draft)} className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:bg-background disabled:opacity-50">
+                                            <Pencil size={16} aria-hidden="true" />
+                                            Continue editing
+                                        </button>
+                                        <button type="button" disabled={saving} onClick={() => onSubmitApproval?.(draft)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-hover disabled:opacity-50">
+                                            <Send size={16} aria-hidden="true" />
+                                            Submit for approval
+                                        </button>
+                                    </>
+                                )}
+                                {mode === "approval" && draft.status === "pending_approval" && draft.can_decide && draft.current_submission && (
+                                    <button type="button" disabled={saving} onClick={() => onReview?.(draft)} className="inline-flex items-center gap-2 rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-primary">
+                                        <Eye size={16} aria-hidden="true" />
+                                        Review version {draft.current_submission.version_number}
+                                    </button>
+                                )}
+                                {mode === "approved" && draft.created_by === currentUserId && ["approved", "awaiting_verification", "verified"].includes(draft.status) && !draft.official_document_id && (
+                                    <button type="button" disabled={saving} onClick={() => onRegister?.(draft)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm text-white"><FileCheck2 size={16} aria-hidden="true" />Register in DOTS</button>
+                                )}
+                                {draft.official_document_id && (
+                                    <span className="rounded-lg bg-success-soft px-3 py-2 text-sm text-success">Registered in Documents</span>
+                                )}
+                            </div>
+                        </div>
+                        {draft.events?.length ? (
+                            <details className="mt-3 border-t pt-3">
+                                <summary className="cursor-pointer text-xs font-medium text-muted">Approval and verification history ({draft.events.length})</summary>
+                                <ol className="mt-2 space-y-1.5">
+                                    {draft.events.map((event, index) => (
+                                        <li key={index} className="text-xs text-muted">
+                                            {event.event} · {event.user?.short_name || event.user?.name || "Former user"}
+                                            {event.user?.office_short_name ? ` · ${event.user.office_short_name}` : ""} · {new Date(event.created_at).toLocaleString()}
+                                            {event.remarks ? ` — ${event.remarks}` : ""}
+                                        </li>
+                                    ))}
+                                </ol>
+                            </details>
+                        ) : null}
+                    </article>
+                ))}
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4 text-sm text-muted">
+                <span>{pagination.total} documents · {pagination.per_page} per page</span>
+                <div className="flex items-center gap-3">
+                    <button disabled={pagination.current_page <= 1} onClick={() => onPageChange(pagination.current_page - 1)} className="dots-button-secondary">Previous</button>
+                    <span>Page {pagination.current_page} of {pagination.last_page}</span>
+                    <button disabled={pagination.current_page >= pagination.last_page} onClick={() => onPageChange(pagination.current_page + 1)} className="dots-button-secondary">Next</button>
+                </div>
+            </div>
+        </section>
+    );
+}
+
 export default function Index({
     drafts = [],
+    draftsPagination = { current_page: 1, last_page: 1, per_page: 5, total: 0 },
+    approvalTasks = [],
+    approvalTasksPagination = { current_page: 1, last_page: 1, per_page: 5, total: 0 },
     documentTypes = [],
     approverOffices = [],
     currentUserId,
     approvedOnly = false,
+    canReviewOfficeApprovals = false,
+    draftToEdit = null,
+    filters = {},
 }: {
     drafts: Draft[];
+    draftsPagination?: PaginationSummary;
+    approvalTasks?: Draft[] | null;
+    approvalTasksPagination?: PaginationSummary | null;
     documentTypes: Option[];
     approverOffices: Option[];
     currentUserId: number;
     approvedOnly?: boolean;
+    canReviewOfficeApprovals?: boolean;
+    draftToEdit?: Draft | null;
+    filters?: ListFilters;
 }) {
-    const [editing, setEditing] = useState<number | null>(null);
-    const [typeId, setTypeId] = useState("");
-    const [title, setTitle] = useState("");
-    const [content, setContent] = useState<Record<string, any>>({ ...blank });
-    const [approverOfficeId, setApproverOfficeId] = useState("");
+    const [editing, setEditing] = useState<number | null>(draftToEdit?.id ?? null);
+    const [typeId, setTypeId] = useState(String(draftToEdit?.document_type_id ?? ""));
+    const [title, setTitle] = useState(draftToEdit?.title ?? "");
+    const [content, setContent] = useState<Record<string, any>>({ ...blank, ...(draftToEdit?.content ?? {}) });
+    const [approverOfficeId, setApproverOfficeId] = useState(String(draftToEdit?.approver_office_id ?? ""));
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const [submissionTarget, setSubmissionTarget] = useState<{
+        id: number | null;
+        title: string;
+        fromEditor: boolean;
+    } | null>(null);
+    const [submissionOfficeId, setSubmissionOfficeId] = useState("");
     const [reviewing, setReviewing] = useState<Draft | null>(null);
     const [saving, setSaving] = useState(false);
     const [dirty, setDirty] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [notice, setNotice] = useState("");
     const [successAlert, setSuccessAlert] = useState<{ title: string; message: string } | null>(null);
-    const [search, setSearch] = useState("");
-    const [statusFilter, setStatusFilter] = useState("all");
-    const [page, setPage] = useState(1);
     const [confirmation, setConfirmation] = useState<{
         title: string;
         message: string;
@@ -102,24 +337,44 @@ export default function Index({
     } | null>(null);
     const [remarks, setRemarks] = useState("");
     const [actionError, setActionError] = useState("");
-    const filtered = drafts.filter(
-        (d) =>
-            (statusFilter === "all" || d.status === statusFilter) &&
-            [
-                d.title,
-                d.document_type?.name,
-                d.creator?.name,
-                d.creator?.short_name,
-            ].some((value) =>
-                value?.toLowerCase().includes(search.trim().toLowerCase()),
-            ),
-    );
-    const pages = Math.max(1, Math.ceil(filtered.length / 15));
-    const visibleDrafts = filtered.slice((page - 1) * 15, page * 15);
-    useEffect(() => setPage(1), [search, statusFilter]);
+    const [mySearch, setMySearch] = useState(filters.my_search ?? "");
+    const [myStatus, setMyStatus] = useState(filters.my_status ?? "all");
+    const [approvalSearch, setApprovalSearch] = useState(filters.approval_search ?? "");
+    const [approvedSearch, setApprovedSearch] = useState(filters.search ?? "");
+    const [approvedStatus, setApprovedStatus] = useState(filters.status ?? "all");
     useEffect(() => {
-        if (page > pages) setPage(pages);
-    }, [page, pages]);
+        setMySearch(filters.my_search ?? "");
+        setMyStatus(filters.my_status ?? "all");
+        setApprovalSearch(filters.approval_search ?? "");
+        setApprovedSearch(filters.search ?? "");
+        setApprovedStatus(filters.status ?? "all");
+    }, [filters]);
+    useEffect(() => {
+        if (!draftToEdit) return;
+        setEditing(draftToEdit.id);
+        setTypeId(String(draftToEdit.document_type_id));
+        setTitle(draftToEdit.title);
+        setContent({ ...blank, ...draftToEdit.content });
+        setApproverOfficeId(String(draftToEdit.approver_office_id ?? ""));
+        setDirty(false);
+        setErrors({});
+        setPreviewOpen(false);
+    }, [draftToEdit?.id]);
+    const visitQuery = (changes: Record<string, string | number>) => {
+        router.get(window.location.pathname, { ...filters, ...changes }, {
+            preserveScroll: true,
+            preserveState: true,
+            replace: true,
+            only: approvedOnly
+                ? ["drafts", "draftsPagination", "filters"]
+                : ["drafts", "draftsPagination", "approvalTasks", "approvalTasksPagination", "filters"],
+        });
+    };
+    useEffect(() => {
+        if (!approvedOnly && filters.queue === "approval") {
+            document.getElementById("approval-tasks")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+    }, [approvedOnly, filters.queue]);
     const guardChanges = (action: () => void) => {
         if (saving) return;
         if (!dirty) {
@@ -198,37 +453,78 @@ export default function Index({
         if (editing) router.put(`/document-creation/${editing}`, data, options);
         else router.post("/document-creation", data, options);
     };
-    const submitForApproval = () => {
+    const openSubmissionDialog = (
+        target: { id: number | null; title: string; fromEditor: boolean },
+        selectedOfficeId?: number | string | null,
+    ) => {
+        if (!approverOffices.length) {
+            setNotice("There are no available approval offices. Contact an administrator.");
+            return;
+        }
+        setNotice("");
+        setSubmissionTarget(target);
+        setSubmissionOfficeId(String(selectedOfficeId ?? ""));
+    };
+    const requestDraftSubmission = (draft: Draft) => {
         if (dirty) {
-            setNotice("Save your changes before submitting for approval.");
+            setNotice("Save or finish your current edits before submitting another draft.");
             return;
         }
-        if (!editing || !approverOfficeId) {
-            setNotice("Save the draft first, then select an approver office.");
-            return;
-        }
-        setConfirmation({
-            title: "Submit for approval?",
-            label: "Submit for approval",
-            message: `Send this saved version to ${approverOffices.find((office) => String(office.id) === approverOfficeId)?.name || "the selected approval office"}?`,
-            action: () =>
-                postAction(
-                    `/document-creation/${editing}/submit`,
-                    { approver_office_id: approverOfficeId },
-                    () => {
-                        startNew();
-                        setSuccessAlert({
-                            title: "Submitted for approval",
-                            message: "The document version was sent to the selected approval office.",
-                        });
-                    },
-                ),
-        });
+        openSubmissionDialog(
+            { id: draft.id, title: draft.title, fromEditor: false },
+            draft.approver_office_id,
+        );
+    };
+    const submitForApproval = () => {
+        openSubmissionDialog({ id: editing, title, fromEditor: true }, approverOfficeId);
+    };
+    const submitToApprovalOffice = () => {
+        if (!submissionTarget || !submissionOfficeId) return;
+        const target = submissionTarget;
+        setSubmissionTarget(null);
+        postAction(
+            target.fromEditor ? "/document-creation/submit-current" : `/document-creation/${target.id}/submit`,
+            target.fromEditor
+                ? {
+                    draft_id: target.id,
+                    document_type_id: typeId,
+                    title,
+                    content,
+                    approver_office_id: submissionOfficeId,
+                }
+                : { approver_office_id: submissionOfficeId },
+            () => {
+                if (target.fromEditor || editing === target.id) startNew();
+                setSuccessAlert({
+                    title: "Submitted for approval",
+                    message: "The document version was sent to the selected approval office.",
+                });
+            },
+        );
     };
     const decision = (draft: Draft, value: string) => {
         setRemarks("");
         setActionError("");
         setPendingDecision({ draft, value });
+    };
+    const openReview = (draft: Draft) => {
+        setActionError("");
+        setReviewing(draft);
+    };
+    const registerDraft = (draft: Draft) => {
+        setConfirmation({
+            title: "Register in DOTS?",
+            label: "Register document",
+            message: `Create an official tracking record for ${draft.title}?`,
+            action: () => postAction(
+                `/document-creation/${draft.id}/register`,
+                {},
+                () => setSuccessAlert({
+                    title: "Document registered",
+                    message: "The document was registered in DOTS.",
+                }),
+            ),
+        });
     };
     const decisionLabel =
         pendingDecision?.value === "approved"
@@ -236,6 +532,8 @@ export default function Index({
             : pendingDecision?.value === "rejected"
               ? "Reject document"
               : "Request revision";
+    const showApprovalTasks =
+        canReviewOfficeApprovals || (approvalTasksPagination?.total ?? 0) > 0;
     const print = () => window.print();
 
     return (
@@ -300,7 +598,7 @@ export default function Index({
                                                 : "New document"}
                                         </h2>
                                     </div>
-                                    <div className="flex flex-wrap items-center gap-2">
+                                    <div id="document-actions" className="flex flex-wrap items-center gap-2">
                                         <span
                                             role="status"
                                             className="mr-2 text-xs text-muted"
@@ -308,7 +606,7 @@ export default function Index({
                                             {saving
                                                 ? "Saving…"
                                                 : dirty
-                                                  ? "Unsaved changes"
+                                                ? "Unsaved changes"
                                                   : editing
                                                     ? "All changes saved"
                                                     : "New draft"}
@@ -329,25 +627,35 @@ export default function Index({
                                         </button>
                                         <button
                                             type="button"
-                                            onClick={print}
+                                            onClick={() => setPreviewOpen(true)}
                                             className="rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:bg-background"
                                         >
-                                            <Printer
+                                            <Eye
                                                 size={16}
                                                 className="mr-2 inline"
                                             />
-                                            Print / PDF
+                                            Preview
                                         </button>
                                         <button
                                             type="submit"
                                             disabled={saving}
-                                            className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-hover disabled:opacity-50"
+                                            className="inline-flex items-center rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-background disabled:opacity-50"
                                         >
                                             <Save
                                                 size={16}
                                                 className="mr-2 inline"
                                             />
-                                            {saving ? "Saving…" : "Save draft"}
+                                            {saving ? "Saving…" : editing ? "Save changes" : "Save draft"}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={submitForApproval}
+                                            disabled={saving}
+                                            title="Choose an approval office; current edits will be saved and submitted"
+                                            className="inline-flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            <Send size={16} className="mr-2" aria-hidden="true" />
+                                            Submit for approval
                                         </button>
                                     </div>
                                 </div>
@@ -412,281 +720,204 @@ export default function Index({
                                 </div>
                             </fieldset>
                         </form>
-                        {editing && (
-                            <div className="m-5 grid gap-3 rounded-xl border border-border bg-surface p-4 md:grid-cols-[1fr_auto]">
-                                <div>
-                                    <label className="block text-sm font-medium">
-                                        Approver Office
-                                        <select
-                                            disabled={saving}
-                                            value={approverOfficeId}
-                                            onChange={(e) =>
-                                                setApproverOfficeId(
-                                                    e.target.value,
-                                                )
-                                            }
-                                            className="mt-1 w-full rounded-lg border-border"
-                                        >
-                                            <option value="">
-                                                {approverOffices.length
-                                                    ? "Select office"
-                                                    : "No offices have an active admin"}
-                                            </option>
-                                            {approverOffices.map((office) => (
-                                                <option
-                                                    key={office.id}
-                                                    value={office.id}
-                                                >
-                                                    {office.short_name ||
-                                                        office.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </label>
-                                    <p className="mt-2 text-xs text-muted">
-                                        Save your latest changes, then select
-                                        the office that will review this
-                                        document.
-                                    </p>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={submitForApproval}
-                                    disabled={
-                                        !approverOfficeId || dirty || saving
-                                    }
-                                    className="self-end rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    <Send size={16} className="mr-2 inline" />
-                                    Submit for approval
-                                </button>
-                            </div>
-                        )}
                     </section>
                 )}
 
-                <section className="rounded-xl border border-border bg-surface p-5">
-                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                        <h2 className="text-lg font-semibold">
-                            {approvedOnly
-                                ? "Approved documents"
-                                : "Drafts and approval tasks"}{" "}
-                            <span className="ml-1 text-sm font-normal text-muted">
-                                ({drafts.length})
-                            </span>
-                        </h2>
-                        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                            <label className="relative">
-                                <span className="sr-only">Search drafts</span>
-                                <Search
-                                    size={16}
-                                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted"
-                                />
-                                <input
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search documents"
-                                    className="h-11 w-full rounded-lg border-border pl-9 text-sm"
-                                />
-                            </label>
-                            <select
-                                aria-label="Filter document status"
-                                value={statusFilter}
-                                onChange={(e) =>
-                                    setStatusFilter(e.target.value)
-                                }
-                                className="h-11 rounded-lg border-border text-sm"
-                            >
-                                <option value="all">All statuses</option>
-                                {Array.from(
-                                    new Set(drafts.map((d) => d.status)),
-                                )
-                                    .sort()
-                                    .map((value) => (
-                                        <option key={value} value={value}>
-                                            {value.replaceAll("_", " ")}
-                                        </option>
-                                    ))}
-                            </select>
-                        </div>
-                    </div>
-                    <div className="divide-y divide-border">
-                        {filtered.length === 0 ? (
-                            <p className="rounded-lg bg-background p-5 text-sm text-muted">
-                                {search || statusFilter !== "all"
-                                    ? "No documents match these filters."
-                                    : "No drafts or approval tasks available."}
-                            </p>
-                        ) : (
-                            visibleDrafts.map((d) => (
-                                <article key={d.id} className="py-4">
-                                    <div className="flex flex-wrap items-start justify-between gap-3">
-                                        <div>
-                                            <h3 className="font-semibold">
-                                                {d.title}
-                                            </h3>
-                                            <p className="text-sm text-muted">
-                                                {d.document_type?.name} ·
-                                                Created by{" "}
-                                                {d.creator?.short_name ||
-                                                    d.creator?.name}{" "}
-                                                · Version{" "}
-                                                {d.version_number || "draft"}
-                                            </p>
-                                            <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-primary">
-                                                {d.status.replaceAll("_", " ")}
-                                                {d.approver_office
-                                                    ? ` · Approval office: ${d.approver_office.short_name || d.approver_office.name}`
-                                                    : d.approver
-                                                      ? ` · Approver: ${d.approver.short_name || d.approver.name}`
-                                                      : ""}
-                                                {d.decision_maker
-                                                    ? ` · Decided by: ${d.decision_maker.short_name || d.decision_maker.name}`
-                                                    : ""}
-                                            </p>
-                                            {(d.decision_remarks ||
-                                                d.verification_notes) && (
-                                                <p className="mt-2 text-sm text-muted">
-                                                    {d.decision_remarks ||
-                                                        d.verification_notes}
-                                                </p>
-                                            )}
-                                        </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {d.created_by === currentUserId &&
-                                                [
-                                                    "draft",
-                                                    "revision_requested",
-                                                ].includes(d.status) && (
-                                                    <button
-                                                        disabled={saving}
-                                                        onClick={() =>
-                                                            guardChanges(() =>
-                                                                editDraft(d),
-                                                            )
-                                                        }
-                                                        className="rounded-lg border px-3 py-2 text-sm"
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                )}
-                                            {d.status === "pending_approval" &&
-                                                d.current_submission && (
-                                                    <button
-                                                        disabled={saving}
-                                                        onClick={() => {
-                                                            setActionError("");
-                                                            setReviewing(d);
-                                                        }}
-                                                        className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-primary"
-                                                    >
-                                                        Review version{" "}
-                                                        {
-                                                            d.current_submission
-                                                                .version_number
-                                                        }
-                                                    </button>
-                                                )}
-                                            {d.created_by === currentUserId &&
-                                                [
-                                                    "approved",
-                                                    "awaiting_verification",
-                                                    "verified",
-                                                ].includes(d.status) &&
-                                                !d.official_document_id && (
-                                                    <button
-                                                        disabled={saving}
-                                                        onClick={() =>
-                                                            setConfirmation({
-                                                                title: "Register in DOTS?",
-                                                                label: "Register document",
-                                                                message: `Create an official tracking record for ${d.title}?`,
-                                                                action: () =>
-                                                                    postAction(
-                                                                        `/document-creation/${d.id}/register`,
-                                                                        {},
-                                                                        () => setSuccessAlert({
-                                                                            title: "Document registered",
-                                                                            message: "The document was registered in DOTS.",
-                                                                        }),
-                                                                    ),
-                                                            })
-                                                        }
-                                                        className="rounded-lg bg-primary px-3 py-2 text-sm text-white"
-                                                    >
-                                                        Register in DOTS
-                                                    </button>
-                                                )}
-                                            {d.official_document_id && (
-                                                <span className="rounded-lg bg-success-soft px-3 py-2 text-sm text-success">
-                                                    Registered in Documents
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    {d.events?.length ? (
-                                        <details className="mt-3 border-t pt-3">
-                                            <summary className="cursor-pointer text-xs font-medium text-muted">
-                                                Approval and verification
-                                                history ({d.events.length})
-                                            </summary>
-                                            <ol className="mt-2 space-y-1.5">
-                                                {d.events.map(
-                                                    (event, index) => (
-                                                        <li
-                                                            key={index}
-                                                            className="text-xs text-muted"
-                                                        >
-                                                            {event.event} ·{" "}
-                                                            {event.user
-                                                                ?.short_name ||
-                                                                event.user
-                                                                    ?.name ||
-                                                                "Former user"}
-                                                            {event.user
-                                                                ?.office_short_name
-                                                                ? ` · ${event.user.office_short_name}`
-                                                                : ""}{" "}
-                                                            ·{" "}
-                                                            {new Date(
-                                                                event.created_at,
-                                                            ).toLocaleString()}
-                                                            {event.remarks
-                                                                ? ` — ${event.remarks}`
-                                                                : ""}
-                                                        </li>
-                                                    ),
-                                                )}
-                                            </ol>
-                                        </details>
-                                    ) : null}
-                                </article>
-                            ))
+                {approvedOnly ? (
+                    <DraftListSection
+                        id="approved-documents"
+                        title="My approved documents"
+                        emptyMessage="No approved documents are ready for registration."
+                        mode="approved"
+                        drafts={drafts}
+                        pagination={draftsPagination}
+                        currentUserId={currentUserId}
+                        saving={saving}
+                        search={approvedSearch}
+                        onSearchChange={setApprovedSearch}
+                        onSearchSubmit={() => visitQuery({ search: approvedSearch, page: 1 })}
+                        status={approvedStatus}
+                        statusOptions={[
+                            ["approved", "Approved"],
+                            ["awaiting_verification", "Awaiting verification"],
+                            ["verified", "Verified"],
+                            ["registered", "Registered"],
+                        ]}
+                        onStatusChange={(status) => {
+                            setApprovedStatus(status);
+                            visitQuery({ status, page: 1 });
+                        }}
+                        onPageChange={(page) => visitQuery({ page })}
+                        onRegister={registerDraft}
+                    />
+                ) : (
+                    <div className={showApprovalTasks ? "grid items-start gap-6 xl:grid-cols-2" : "space-y-6"}>
+                        <DraftListSection
+                            id="my-work"
+                            title="My submissions"
+                            emptyMessage="You have no items awaiting approval or returned for action."
+                            mode="work"
+                            drafts={drafts}
+                            pagination={draftsPagination}
+                            currentUserId={currentUserId}
+                            saving={saving}
+                            search={mySearch}
+                            onSearchChange={setMySearch}
+                            onSearchSubmit={() => visitQuery({ my_search: mySearch, my_page: 1 })}
+                            status={myStatus}
+                            statusOptions={[
+                                ["pending_approval", "Awaiting approval"],
+                                ["revision_requested", "Returned for revision"],
+                                ["rejected", "Rejected"],
+                            ]}
+                            onStatusChange={(status) => {
+                                setMyStatus(status);
+                                visitQuery({ my_status: status, my_page: 1 });
+                            }}
+                            onPageChange={(page) => visitQuery({ my_page: page })}
+                            onEdit={(draft) => guardChanges(() => editDraft(draft))}
+                            onSubmitApproval={requestDraftSubmission}
+                        />
+                        {showApprovalTasks && (
+                            <DraftListSection
+                                id="approval-tasks"
+                                title="Approval tasks"
+                                emptyMessage="No submissions are waiting for your decision."
+                                mode="approval"
+                                drafts={approvalTasks ?? []}
+                                pagination={approvalTasksPagination ?? { current_page: 1, last_page: 1, per_page: 5, total: 0 }}
+                                currentUserId={currentUserId}
+                                saving={saving}
+                                search={approvalSearch}
+                                onSearchChange={setApprovalSearch}
+                                onSearchSubmit={() => visitQuery({ approval_search: approvalSearch, approval_page: 1 })}
+                                onPageChange={(page) => visitQuery({ approval_page: page })}
+                                onReview={openReview}
+                            />
                         )}
                     </div>
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4 text-sm text-muted">
-                        <span>{filtered.length} documents · 15 per page</span>
-                        <div className="flex items-center gap-3">
+                )}
+                <WorkspaceDialog
+                    open={previewOpen}
+                    onClose={() => setPreviewOpen(false)}
+                    labelledBy="document-preview-title"
+                    width="max-w-6xl"
+                >
+                    <div className="bg-background p-4 sm:p-6">
+                        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <h2 id="document-preview-title" className="text-xl font-semibold">
+                                    Preview document
+                                </h2>
+                                <p className="mt-1 text-sm text-muted">
+                                    Review the final layout. Close the preview to save as a draft or submit for approval.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="max-h-[70vh] overflow-auto rounded-lg border border-border bg-surface p-3 sm:p-6">
+                            <DocumentPaper title={title} content={content} printTarget />
+                        </div>
+                        <div className="mt-4 flex flex-wrap justify-end gap-2">
                             <button
-                                disabled={page === 1}
-                                onClick={() => setPage((p) => p - 1)}
+                                type="button"
+                                onClick={() => setPreviewOpen(false)}
                                 className="dots-button-secondary"
                             >
-                                Previous
+                                Back to editing
                             </button>
-                            <span>
-                                Page {page} of {pages}
-                            </span>
                             <button
-                                disabled={page >= pages}
-                                onClick={() => setPage((p) => p + 1)}
-                                className="dots-button-secondary"
+                                type="button"
+                                onClick={print}
+                                className="dots-button-secondary inline-flex items-center gap-2"
                             >
-                                Next
+                                <Printer size={16} aria-hidden="true" />
+                                Print / Save as PDF
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setPreviewOpen(false);
+                                    window.setTimeout(() => document.getElementById("document-actions")?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
+                                }}
+                                className="dots-button-primary"
+                            >
+                                Looks good — close preview
                             </button>
                         </div>
                     </div>
-                </section>
+                </WorkspaceDialog>
+                <WorkspaceDialog
+                    open={Boolean(submissionTarget)}
+                    onClose={() => setSubmissionTarget(null)}
+                    labelledBy="submit-document-title"
+                    width="max-w-lg"
+                    busy={saving}
+                >
+                    {submissionTarget && (
+                        <form
+                            className="space-y-5 p-6"
+                            onSubmit={(event) => {
+                                event.preventDefault();
+                                submitToApprovalOffice();
+                            }}
+                        >
+                            <fieldset disabled={saving} className="space-y-4">
+                                <div>
+                                    <h2 id="submit-document-title" className="text-xl font-semibold">
+                                        Submit for approval
+                                    </h2>
+                                    <p className="mt-1 text-sm text-muted">
+                                        Choose who should review {submissionTarget.fromEditor ? "this document" : "the saved version of this document"}.
+                                    </p>
+                                </div>
+                                <label htmlFor="submission-office" className="block text-sm font-medium">
+                                    Approver office
+                                    <select
+                                        id="submission-office"
+                                        required
+                                        value={submissionOfficeId}
+                                        onChange={(event) => {
+                                            setSubmissionOfficeId(event.target.value);
+                                            if (editing === submissionTarget?.id) {
+                                                setApproverOfficeId(event.target.value);
+                                            }
+                                        }}
+                                        className="mt-1 w-full rounded-lg border-border"
+                                    >
+                                        <option value="">Select an office</option>
+                                        {approverOffices.map((office) => (
+                                            <option key={office.id} value={office.id}>
+                                                {office.short_name || office.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
+                                <p className="text-xs text-muted">
+                                    {submissionTarget.fromEditor
+                                        ? "Your current edits will be saved as a new version and submitted."
+                                        : "The saved version will be submitted for review."}
+                                </p>
+                                <div className="flex justify-end gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSubmissionTarget(null)}
+                                        className="dots-button-secondary"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={!submissionOfficeId || saving}
+                                        className="dots-button-primary inline-flex items-center gap-2"
+                                    >
+                                        <Send size={16} aria-hidden="true" />
+                                        Submit for approval
+                                    </button>
+                                </div>
+                            </fieldset>
+                        </form>
+                    )}
+                </WorkspaceDialog>
                 <WorkspaceDialog
                     open={Boolean(reviewing?.current_submission)}
                     onClose={() => setReviewing(null)}

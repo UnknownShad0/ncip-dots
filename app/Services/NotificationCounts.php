@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Document;
 use App\Models\DocumentCreationDraft;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
@@ -9,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 
 class NotificationCounts
 {
-    /** @return array{incoming: int, pending: int, approvals: int, approved: int, total: int} */
+    /** @return array{incoming: int, pending: int, approvals: int, approved: int, drafts: int, total: int} */
     public function forUser(User $user): array
     {
         $approvalOffice = $user->office ?: ($user->office_code ? $user->officeByCode : null);
@@ -17,7 +18,7 @@ class NotificationCounts
         $officeId = $user->office_id ? (int) $user->office_id : null;
         $canReviewOfficeApprovals = $user->is_active && $user->isAdministrator() && $approvalOfficeId !== null;
         $cacheKey = implode(':', [
-            'notification-counts-v2',
+            'notification-counts-v3',
             $user->id,
             $officeId ?? 'none',
             $approvalOfficeId ?? 'no-approval-office',
@@ -59,12 +60,35 @@ class NotificationCounts
                 ->whereNull('official_document_id')
                 ->count();
 
+            $documentAccess = app(DocumentAccess::class);
+            $trackingDraftsQuery = Document::query()
+                ->where('documents.legacy_needs_review', false)
+                ->where('documents.is_finalized', false)
+                ->where('documents.is_archived', false)
+                ->where('documents.status', 'draft');
+
+            if (! $documentAccess->canViewAllDocuments($user)) {
+                $trackingDraftsQuery->where('documents.created_by', $user->id);
+                if ($officeId === null) {
+                    $trackingDraftsQuery->whereRaw('1 = 0');
+                } else {
+                    $trackingDraftsQuery->where('documents.office_id', $officeId);
+                }
+            }
+
+            $drafts = $trackingDraftsQuery->count()
+                + DocumentCreationDraft::query()
+                    ->where('created_by', $user->id)
+                    ->where('status', 'draft')
+                    ->count();
+
             return [
                 'incoming' => $incoming,
                 'pending' => $pending,
                 'approvals' => $approvals,
                 'approved' => $approved,
-                'total' => $incoming + $pending + $approvals + $approved,
+                'drafts' => $drafts,
+                'total' => $incoming + $pending + $approvals + $approved + $drafts,
             ];
         });
     }

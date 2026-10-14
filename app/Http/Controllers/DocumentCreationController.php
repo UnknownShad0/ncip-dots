@@ -9,7 +9,9 @@ use App\Models\DocumentType;
 use App\Models\Office;
 use App\Models\User;
 use App\Services\AuditTrailWriter;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -23,7 +25,13 @@ class DocumentCreationController extends Controller
         $userOffice = $this->userOffice($user);
         $canReviewOfficeApprovals = $user->is_active && $user->isAdministrator() && $userOffice !== null;
         $approvedOnly = $request->query('queue') === 'approved';
-        $draftQuery = DocumentCreationDraft::query()->with([
+        $queue = (string) $request->query('queue', '');
+
+        if (! $approvedOnly && $queue === 'verification') {
+            return redirect()->route('approved-documents.index', ['status' => 'awaiting_verification']);
+        }
+
+        $relations = [
             'creator:id,name,firstname,lastname',
             'approver:id,name,firstname,lastname',
             'approverOffice:id,name,short_name',
@@ -32,77 +40,210 @@ class DocumentCreationController extends Controller
             'events.user:id,name,firstname,lastname,office_id,office_code',
             'events.user.office:id,name,short_name',
             'events.user.officeByCode:id,name,short_name',
-        ])->where(function ($query) use ($user, $userOffice, $canReviewOfficeApprovals) {
-            $query->where('created_by', $user->id)
-                ->orWhere('approver_id', $user->id)
-                ->orWhere('verified_by', $user->id);
-            if ($canReviewOfficeApprovals) {
-                $query->orWhere('approver_office_id', $userOffice->id);
-            }
-        });
+        ];
 
-        $drafts = $draftQuery
-            ->when($request->query('queue') === 'approval', function ($query) use ($user, $userOffice, $canReviewOfficeApprovals) {
-                $query->where('status', 'pending_approval')
-                    ->where(function ($approvalQuery) use ($user, $userOffice, $canReviewOfficeApprovals) {
-                        $approvalQuery->where('approver_id', $user->id);
-                        if ($canReviewOfficeApprovals) {
-                            $approvalQuery->orWhere('approver_office_id', $userOffice->id);
-                        }
-                    });
-            })
-            ->when($request->query('queue') === 'submitted', fn ($q) => $q->where('created_by', $user->id)->where('status', 'pending_approval'))
-            ->when($request->query('queue') === 'revision', fn ($q) => $q->where('created_by', $user->id)->where('status', 'revision_requested'))
-            ->when($approvedOnly, fn ($q) => $q->where('created_by', $user->id)->whereIn('status', ['approved', 'awaiting_verification', 'verified', 'registered']))
-            ->latest()->get();
+        $workStatuses = ['pending_approval', 'revision_requested', 'rejected'];
+        $approvedStatuses = ['approved', 'awaiting_verification', 'verified', 'registered'];
+        $approvedStatus = (string) $request->query('status', 'all');
+        $approvedSearch = trim((string) $request->query('search', ''));
 
-        // Batch current-version lookups by version number instead of issuing
-        // one query from inside the per-draft response mapper.
-        $currentVersions = [];
-        foreach ($drafts->groupBy('version_number') as $versionNumber => $versionDrafts) {
-            foreach (DocumentCreationVersion::query()
-                ->where('version_number', $versionNumber)
-                ->whereIn('draft_id', $versionDrafts->modelKeys())
-                ->get(['id', 'draft_id', 'version_number', 'content', 'created_at']) as $version) {
-                $currentVersions[$version->draft_id] = $version;
+        if ($approvedOnly) {
+            $approvedQuery = DocumentCreationDraft::query()->with($relations)
+                ->where('created_by', $user->id)
+                ->whereIn('status', $approvedStatuses);
+
+            if (in_array($approvedStatus, $approvedStatuses, true)) {
+                $approvedQuery->where('status', $approvedStatus);
+            } else {
+                $approvedStatus = 'all';
             }
+            $this->applyDraftSearch($approvedQuery, $approvedSearch);
+
+            $drafts = $this->prepareDraftPage(
+                $approvedQuery->latest()->paginate(5)->withQueryString(),
+                $user,
+                $userOffice,
+                $canReviewOfficeApprovals,
+            );
+
+            return Inertia::render('DocumentCreation/Index', [
+                'drafts' => $drafts->items(),
+                'draftsPagination' => $this->paginationSummary($drafts),
+                'approvalTasks' => null,
+                'approvalTasksPagination' => null,
+                'documentTypes' => [],
+                'savedDraftId' => session('savedDraftId'),
+                'approverOffices' => [],
+                'currentUserId' => $user->id,
+                'approvedOnly' => true,
+                'canReviewOfficeApprovals' => $canReviewOfficeApprovals,
+                'filters' => [
+                    'queue' => 'approved',
+                    'search' => $approvedSearch,
+                    'status' => $approvedStatus,
+                    'page' => $drafts->currentPage(),
+                ],
+            ]);
         }
 
-        $drafts = $drafts->map(function (DocumentCreationDraft $draft) use ($user, $userOffice, $canReviewOfficeApprovals, $currentVersions) {
-                $version = $currentVersions[$draft->id] ?? null;
-                $draft->setAttribute('current_submission', $version ? [
-                    'version_number' => $version->version_number,
-                    'content' => $version->content,
-                    'submitted_at' => $version->created_at,
-                ] : null);
-                $draft->setAttribute('can_decide', (int) $draft->created_by !== (int) $user->id
-                    && ((int) $draft->approver_id === (int) $user->id
-                        || ($canReviewOfficeApprovals && (int) $draft->approver_office_id === (int) $userOffice->id)));
-                foreach (['creator', 'approver', 'decisionMaker'] as $relation) {
-                    if ($draft->{$relation}) {
-                        $draft->{$relation}->setAttribute('short_name', $this->shortUserName($draft->{$relation}));
-                    }
-                }
-                $draft->events->each(function ($event) {
-                    if ($event->user) {
-                        $event->user->setAttribute('short_name', $this->shortUserName($event->user));
-                        $event->user->setAttribute('office_short_name', $this->userOffice($event->user)?->short_name);
-                    }
-                });
+        $myStatus = (string) $request->query('my_status', match ($queue) {
+            'submitted' => 'pending_approval',
+            'revision' => 'revision_requested',
+            default => 'all',
+        });
+        if (! in_array($myStatus, [...$workStatuses, 'all'], true)) {
+            $myStatus = 'all';
+        }
+        $mySearch = trim((string) $request->query('my_search', ''));
+        $approvalSearch = trim((string) $request->query('approval_search', ''));
+        $draftToEdit = null;
+        if ($request->filled('edit_draft_id')) {
+            $draftToEdit = DocumentCreationDraft::query()
+                ->whereKey($request->integer('edit_draft_id'))
+                ->where('created_by', $user->id)
+                ->where('status', 'draft')
+                ->first();
+            abort_unless($draftToEdit, 404);
+            $draftToEdit = $draftToEdit->only([
+                'id', 'title', 'content', 'document_type_id', 'version_number', 'created_by', 'approver_office_id', 'status',
+            ]);
+        }
 
-                return $draft;
+        $myWorkQuery = DocumentCreationDraft::query()->with($relations)
+            ->where('created_by', $user->id)
+            ->whereIn('status', $workStatuses);
+        if ($myStatus !== 'all') {
+            $myWorkQuery->where('status', $myStatus);
+        }
+        $this->applyDraftSearch($myWorkQuery, $mySearch);
+
+        $approvalTasksQuery = DocumentCreationDraft::query()->with($relations)
+            ->where('status', 'pending_approval')
+            ->where('created_by', '!=', $user->id)
+            ->where(function ($query) use ($user, $userOffice, $canReviewOfficeApprovals) {
+                $query->where('approver_id', $user->id);
+                if ($canReviewOfficeApprovals) {
+                    $query->orWhere('approver_office_id', $userOffice->id);
+                }
             });
+        $this->applyDraftSearch($approvalTasksQuery, $approvalSearch, includeCreator: true);
+
+        $myWork = $this->prepareDraftPage(
+            $myWorkQuery->latest()->paginate(5, ['*'], 'my_page')->withQueryString(),
+            $user,
+            $userOffice,
+            $canReviewOfficeApprovals,
+        );
+        $approvalTasks = $this->prepareDraftPage(
+            $approvalTasksQuery->latest()->paginate(5, ['*'], 'approval_page')->withQueryString(),
+            $user,
+            $userOffice,
+            $canReviewOfficeApprovals,
+        );
 
         return Inertia::render('DocumentCreation/Index', [
-            'drafts' => $drafts,
+            'drafts' => $myWork->items(),
+            'draftsPagination' => $this->paginationSummary($myWork),
+            'approvalTasks' => $approvalTasks->items(),
+            'approvalTasksPagination' => $this->paginationSummary($approvalTasks),
             'documentTypes' => $this->documentTypeOptions(),
+            'draftToEdit' => $draftToEdit,
             'savedDraftId' => session('savedDraftId'),
             'approverOffices' => $this->approverOffices()
                 ->map(fn (Office $office) => ['id' => $office->id, 'name' => $office->name, 'short_name' => $office->short_name])
                 ->all(),
             'currentUserId' => $user->id,
-            'approvedOnly' => $approvedOnly,
+            'approvedOnly' => false,
+            'canReviewOfficeApprovals' => $canReviewOfficeApprovals,
+            'filters' => [
+                'queue' => $queue,
+                'my_search' => $mySearch,
+                'my_status' => $myStatus,
+                'approval_search' => $approvalSearch,
+                'my_page' => $myWork->currentPage(),
+                'approval_page' => $approvalTasks->currentPage(),
+            ],
         ]);
+    }
+
+    private function paginationSummary(LengthAwarePaginator $page): array
+    {
+        return [
+            'current_page' => $page->currentPage(),
+            'last_page' => $page->lastPage(),
+            'per_page' => $page->perPage(),
+            'total' => $page->total(),
+        ];
+    }
+
+    private function applyDraftSearch(Builder $query, string $search, bool $includeCreator = false): void
+    {
+        if ($search === '') {
+            return;
+        }
+
+        $query->where(function (Builder $matches) use ($search, $includeCreator) {
+            $matches->where('title', 'like', '%'.$search.'%')
+                ->orWhereHas('documentType', fn (Builder $type) => $type->where('name', 'like', '%'.$search.'%'));
+
+            if ($includeCreator) {
+                $matches->orWhereHas('creator', fn (Builder $creator) => $creator
+                    ->where('name', 'like', '%'.$search.'%')
+                    ->orWhere('firstname', 'like', '%'.$search.'%')
+                    ->orWhere('lastname', 'like', '%'.$search.'%'));
+            }
+        });
+    }
+
+    private function prepareDraftPage(
+        LengthAwarePaginator $page,
+        User $user,
+        ?Office $userOffice,
+        bool $canReviewOfficeApprovals,
+    ): LengthAwarePaginator {
+        $drafts = $page->getCollection();
+        $currentVersions = collect();
+
+        if ($drafts->isNotEmpty()) {
+            $currentVersions = DocumentCreationVersion::query()
+                ->where(function (Builder $query) use ($drafts) {
+                    foreach ($drafts as $draft) {
+                        $query->orWhere(function (Builder $version) use ($draft) {
+                            $version->where('draft_id', $draft->id)
+                                ->where('version_number', $draft->version_number);
+                        });
+                    }
+                })
+                ->get(['id', 'draft_id', 'version_number', 'content', 'created_at'])
+                ->keyBy(fn (DocumentCreationVersion $version) => $version->draft_id.':'.$version->version_number);
+        }
+
+        $drafts->transform(function (DocumentCreationDraft $draft) use ($user, $userOffice, $canReviewOfficeApprovals, $currentVersions) {
+            $version = $currentVersions->get($draft->id.':'.$draft->version_number);
+            $draft->setAttribute('current_submission', $version ? [
+                'version_number' => $version->version_number,
+                'content' => $version->content,
+                'submitted_at' => $version->created_at,
+            ] : null);
+            $draft->setAttribute('can_decide', (int) $draft->created_by !== (int) $user->id
+                && ((int) $draft->approver_id === (int) $user->id
+                    || ($canReviewOfficeApprovals && (int) $draft->approver_office_id === (int) $userOffice?->id)));
+            foreach (['creator', 'approver', 'decisionMaker'] as $relation) {
+                if ($draft->{$relation}) {
+                    $draft->{$relation}->setAttribute('short_name', $this->shortUserName($draft->{$relation}));
+                }
+            }
+            $draft->events->each(function ($event) {
+                if ($event->user) {
+                    $event->user->setAttribute('short_name', $this->shortUserName($event->user));
+                    $event->user->setAttribute('office_short_name', $this->userOffice($event->user)?->short_name);
+                }
+            });
+
+            return $draft;
+        });
+
+        return $page->setCollection($drafts);
     }
 
     public function store(Request $request)
@@ -130,12 +271,71 @@ class DocumentCreationController extends Controller
         return back()->with('success', 'Draft updated.')->with('savedDraftId', $draft->id);
     }
 
+    public function submitCurrent(Request $request)
+    {
+        $data = $this->validateDraft($request);
+        $validated = $request->validate([
+            'draft_id' => ['nullable', 'integer'],
+            'approver_office_id' => ['required', 'integer', 'exists:offices,id'],
+        ]);
+        $approverOffice = $this->approverOffices()->first(
+            fn (Office $office) => (int) $office->id === (int) $validated['approver_office_id'],
+        );
+        abort_unless($approverOffice, 422, 'Choose an office with an active admin.');
+
+        $draft = DB::transaction(function () use ($request, $data, $validated, $approverOffice) {
+            if (! empty($validated['draft_id'])) {
+                $draft = DocumentCreationDraft::query()
+                    ->whereKey($validated['draft_id'])
+                    ->where('created_by', $request->user()->id)
+                    ->whereIn('status', ['draft', 'revision_requested'])
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                $draft->update([...$data, 'status' => 'draft']);
+                $draft->events()->create([
+                    'user_id' => $request->user()->id,
+                    'event' => 'Draft updated',
+                ]);
+                app(AuditTrailWriter::class)->record('document.draft_updated', $draft, [
+                    'title' => $draft->title,
+                ]);
+            } else {
+                $draft = DocumentCreationDraft::create([
+                    ...$data,
+                    'created_by' => $request->user()->id,
+                    'status' => 'draft',
+                ]);
+                $draft->events()->create([
+                    'user_id' => $request->user()->id,
+                    'event' => 'Draft created',
+                ]);
+                app(AuditTrailWriter::class)->record('document.draft_created', $draft, [
+                    'title' => $draft->title,
+                ]);
+            }
+
+            $this->submitDraftVersion($request, $draft, $approverOffice);
+
+            return $draft;
+        });
+
+        return back()->with('success', 'PDF version submitted for approval.')
+            ->with('savedDraftId', $draft->id);
+    }
+
     public function submit(Request $request, DocumentCreationDraft $draft)
     {
         abort_unless((int) $draft->created_by === (int) $request->user()->id && in_array($draft->status, ['draft', 'revision_requested'], true), 403);
         $data = $request->validate(['approver_office_id' => ['required', 'integer', 'exists:offices,id']]);
         $approverOffice = $this->approverOffices()->first(fn (Office $office) => (int) $office->id === (int) $data['approver_office_id']);
         abort_unless($approverOffice, 422, 'Choose an office with an active admin.');
+        $this->submitDraftVersion($request, $draft, $approverOffice);
+
+        return back()->with('success', 'PDF version submitted for approval.');
+    }
+
+    private function submitDraftVersion(Request $request, DocumentCreationDraft $draft, Office $approverOffice): void
+    {
         $number = $draft->version_number + 1;
         $draft->versions()->create(['version_number' => $number, 'content' => $draft->content, 'created_by' => $request->user()->id]);
         $draft->update([
@@ -155,8 +355,6 @@ class DocumentCreationController extends Controller
             'approver_office_id' => $approverOffice->id,
             'approver_office_name' => $approverOffice->name,
         ]);
-
-        return back()->with('success', 'PDF version submitted for approval.');
     }
 
     public function decide(Request $request, DocumentCreationDraft $draft)

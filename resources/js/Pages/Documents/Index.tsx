@@ -155,6 +155,7 @@ export default function DocumentsIndex({
     officeRangeLabel = null,
     approvedDocuments = [],
     maxUploadSizeKb,
+    editDraftId = null,
 }: {
     documents?: DocumentItem[];
     title?: string;
@@ -167,11 +168,13 @@ export default function DocumentsIndex({
     officeRangeLabel?: string | null;
     approvedDocuments?: ApprovedDocument[];
     maxUploadSizeKb: number;
+    editDraftId?: number | string | null;
 }) {
     const uploadLimitKb = Number(maxUploadSizeKb ?? 0);
     const [processing, setProcessing] = useState(false);
     const [formError, setFormError] = useState('');
     const formBaseline = useRef('');
+    const autoOpenedDraftId = useRef<string | null>(null);
     const [editingRow, setEditingRow] = useState<DocumentItem | null>(null);
     const [crudAlert, setCrudAlert] = useState<CrudAlert | null>(null);
     const [viewingRow, setViewingRow] = useState<DocumentItem | null>(null);
@@ -279,6 +282,16 @@ export default function DocumentsIndex({
             file: null,
         });
     };
+
+    useEffect(() => {
+        const requestedId = editDraftId == null ? '' : String(editDraftId);
+        if (!requestedId || autoOpenedDraftId.current === requestedId) return;
+        const draft = documents.find((item) => String(item.id) === requestedId);
+        if (draft?.can_update) {
+            autoOpenedDraftId.current = requestedId;
+            openEdit(draft);
+        }
+    }, [documents, editDraftId]);
 
     const openCreate = () => {
         setFormError('');

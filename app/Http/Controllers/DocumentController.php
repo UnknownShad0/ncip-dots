@@ -358,6 +358,30 @@ class DocumentController extends Controller
         $currentOfficeId = $access->currentOfficeId($user);
         $isAdministrator = $access->canViewAllDocuments($user);
         $newDocumentQuery = $access->scope(Document::query(), $user);
+        $editDraftId = request()->integer('edit_draft_id');
+
+        if ($editDraftId > 0) {
+            $newDocumentQuery->where('documents.id', $editDraftId)
+                ->where('documents.status', 'draft')
+                ->where('documents.is_finalized', false)
+                ->where('documents.legacy_needs_review', false)
+                ->where('documents.is_archived', false);
+
+            if (! $isAdministrator) {
+                $newDocumentQuery->where('documents.created_by', $user->id);
+                if ($currentOfficeId === null) {
+                    $newDocumentQuery->whereRaw('1 = 0');
+                } else {
+                    $newDocumentQuery->where('documents.office_id', $currentOfficeId);
+                }
+            }
+        } else {
+            $newDocumentQuery->where(function ($tracked) {
+                $tracked->where('documents.status', '!=', 'draft')
+                    ->orWhere('documents.is_finalized', true);
+            });
+        }
+
         if ($latestOnly) {
             $newDocumentQuery->where('created_at', '>=', now()->subDays(15));
         }
@@ -521,6 +545,7 @@ class DocumentController extends Controller
                 'sort' => $sortKey,
                 'direction' => $sortDirection,
             ],
+            'editDraftId' => request()->query('edit_draft_id'),
             'title' => $latestOnly ? 'Latest Documents' : 'All Documents',
             ...$this->documentFormOptions(),
         ]);
