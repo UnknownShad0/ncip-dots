@@ -11,29 +11,22 @@ use App\Support\LegacyDocumentTypeMap;
 use Database\Seeders\ActionTypeSeeder;
 use Database\Seeders\DocumentTypeSeeder;
 use Database\Seeders\PurposeTypeSeeder;
-use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class LibraryDatabaseSourceTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_libraries_and_document_creation_use_only_the_new_type_tables(): void
     {
+        Storage::fake('local');
         config(['database.connections.legacy' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']]);
         DB::purge('legacy');
         // The legacy connection deliberately has no tables, so any legacy type read fails.
-        foreach (['document_types', 'action_types', 'purpose_types'] as $table) {
-            Schema::create($table, function (Blueprint $table) {
-                $table->id();
-                $table->string('name');
-                $table->string('code')->nullable();
-                $table->text('description')->nullable();
-                $table->boolean('is_active')->default(true);
-                $table->timestamps();
-            });
-        }
 
         (new DocumentTypeSeeder)->run();
         (new ActionTypeSeeder)->run();
@@ -57,8 +50,11 @@ class LibraryDatabaseSourceTest extends TestCase
         $this->assertSame(['New DB'], array_values(array_unique(array_column($options, 'source'))));
         $this->assertTrue(collect($options)->firstWhere('name', 'Purchase Request')['disabled']);
 
-        // Legacy ID 4 means Letter; the new seeded ID 4 belongs to Purchase Order.
-        $this->assertSame('Purchase Order', DocumentType::findOrFail(4)->name);
-        $this->assertSame('Letter', LegacyDocumentTypeMap::typesByLegacyId()->get(4)->name);
+        // Migrations create Others before seeding, so its new ID differs from legacy ID 19.
+        $others = DocumentType::where('name', 'Others')->firstOrFail();
+        $legacyTypes = LegacyDocumentTypeMap::typesByLegacyId();
+        $this->assertNotSame(19, $others->id);
+        $this->assertSame($others->id, $legacyTypes->get(19)->id);
+        $this->assertSame('Letter', $legacyTypes->get(4)->name);
     }
 }

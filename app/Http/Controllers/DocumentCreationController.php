@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\AuditTrailWriter;
 use App\Services\DocumentTemplates;
 use App\Services\DocumentPdf;
+use App\Services\DocumentMetadata;
 use App\Services\RichDocumentContent;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -37,7 +38,8 @@ class DocumentCreationController extends Controller
         }
 
         $relations = [
-            'creator:id,name,firstname,lastname',
+            'creator:id,name,firstname,lastname,office_id',
+            'creator.office:id,name',
             'approver:id,name,firstname,lastname',
             'approverOffice:id,name,short_name',
             'decisionMaker:id,name,firstname,lastname',
@@ -80,6 +82,7 @@ class DocumentCreationController extends Controller
                 'savedDraftId' => session('savedDraftId'),
                 'approverOffices' => [],
                 'currentUserId' => $user->id,
+                'footerOfficeName' => DocumentMetadata::officeName($user),
                 'approvedOnly' => true,
                 'canReviewOfficeApprovals' => $canReviewOfficeApprovals,
                 'filters' => [
@@ -112,7 +115,7 @@ class DocumentCreationController extends Controller
             $draftToEdit = $draftToEdit->only([
                 'id', 'title', 'content', 'document_type_id', 'version_number', 'created_by', 'approver_office_id', 'status',
             ]);
-            $draftToEdit['content'] = app(DocumentTemplates::class)->presentContent($draftToEdit['content']);
+            $draftToEdit['content'] = app(DocumentTemplates::class)->presentContent(DocumentMetadata::present($draftToEdit['content'], $user));
         }
 
         $myWorkQuery = DocumentCreationDraft::query()->with($relations)
@@ -159,6 +162,7 @@ class DocumentCreationController extends Controller
                 ->map(fn (Office $office) => ['id' => $office->id, 'name' => $office->name, 'short_name' => $office->short_name])
                 ->all(),
             'currentUserId' => $user->id,
+            'footerOfficeName' => DocumentMetadata::officeName($user),
             'approvedOnly' => false,
             'canReviewOfficeApprovals' => $canReviewOfficeApprovals,
             'filters' => [
@@ -225,7 +229,7 @@ class DocumentCreationController extends Controller
         }
 
         $drafts->transform(function (DocumentCreationDraft $draft) use ($user, $userOffice, $canReviewOfficeApprovals, $currentVersions) {
-            $draft->content = app(DocumentTemplates::class)->presentContent($draft->content ?? []);
+            $draft->content = app(DocumentTemplates::class)->presentContent(DocumentMetadata::present($draft->content ?? [], $draft->creator));
             $version = $currentVersions->get($draft->id.':'.$draft->version_number);
             $draft->setAttribute('current_submission', $version ? [
                 'version_number' => $version->version_number,
@@ -344,7 +348,7 @@ class DocumentCreationController extends Controller
 
     private function submitDraftVersion(Request $request, DocumentCreationDraft $draft, Office $approverOffice): void
     {
-        $content = $draft->content;
+        $content = DocumentMetadata::present($draft->content, $draft->creator);
         $content['document_title'] = $draft->title;
         $content['template_snapshot'] ??= app(DocumentTemplates::class)->defaultSnapshot();
         $draft->update(['content' => $content]);
@@ -438,7 +442,7 @@ class DocumentCreationController extends Controller
             || ($draft->approver_office_id && $this->userCanApproveForOffice($user, $draft->approver_office_id)), 403);
         $version = $draft->versions()->where('version_number', $draft->version_number)->firstOrFail();
 
-        return app(DocumentPdf::class)->response($draft->title, $version->content);
+        return app(DocumentPdf::class)->response($draft->title, DocumentMetadata::present($version->content, $draft->creator));
     }
 
     private function editableDraft(Request $request): ?DocumentCreationDraft
@@ -456,18 +460,24 @@ class DocumentCreationController extends Controller
     {
         $data = $request->validate([
             'document_type_id' => ['required', 'integer', 'exists:document_types,id'],
-            'title' => ['required', 'string', 'max:255'],
+            'title' => ['nullable', 'string', 'max:255'],
             'content' => ['required', 'array'],
+            'content.recipient_label' => ['nullable', 'in:FOR,TO'],
             'content.for' => ['nullable', 'string', 'max:255'], 'content.thru' => ['nullable', 'string', 'max:255'],
             'content.attention' => ['nullable', 'string', 'max:255'], 'content.from' => ['required', 'string', 'max:255'],
-            'content.subject' => ['required', 'string', 'max:255'], 'content.date' => ['required', 'date'],
+            'content.subject' => ['required', 'string', 'max:255'], 'content.date' => ['nullable', 'string', 'max:100'],
+            'content.for_position' => ['nullable', 'string', 'max:255'],
+            'content.thru_position' => ['nullable', 'string', 'max:255'],
+            'content.attention_position' => ['nullable', 'string', 'max:255'],
+            'content.from_position' => ['nullable', 'string', 'max:255'],
             'content.body' => ['required_without:content.body_document', 'nullable', 'string', 'max:50000'],
             'content.body_document' => ['nullable', 'array'],
             'content.cc' => ['nullable', 'array', 'max:100'], 'content.cc.*' => ['nullable', 'string', 'max:255'],
         ]);
         $type = DocumentType::query()->whereKey($data['document_type_id'])->where('is_active', true)->first();
         abort_unless($type, 422, 'Choose an active document type.');
-        $data['content'] = Arr::only($data['content'], ['for', 'thru', 'attention', 'from', 'subject', 'date', 'body', 'body_document', 'cc']);
+        $data['content'] = Arr::only($data['content'], ['recipient_label', 'for', 'thru', 'attention', 'from', 'for_position', 'thru_position', 'attention_position', 'from_position', 'subject', 'date', 'body', 'body_document', 'cc']);
+        $data['content']['recipient_label'] ??= 'FOR';
         if (isset($data['content']['body_document'])) {
             $rich = app(RichDocumentContent::class);
             $data['content']['body_document'] = $rich->normalize($data['content']['body_document']);
@@ -481,7 +491,11 @@ class DocumentCreationController extends Controller
         $data['content']['template_snapshot'] = $existing && (int) $existing->document_type_id === (int) $type->id
             ? ($existing->content['template_snapshot'] ?? $templates->defaultSnapshot())
             : $templates->forType($type)['snapshot'];
+        // The editor uses Subject as the record name; accept titles from older clients.
+        $data['title'] = filled($data['title'] ?? null) ? $data['title'] : $data['content']['subject'];
         $data['content']['document_title'] = $data['title'];
+        $data['content']['footer_office_name'] = $existing?->content['footer_office_name'] ?? DocumentMetadata::officeName($request->user());
+        $data['content']['date'] = DocumentMetadata::displayDate($data['content']['date'] ?? null);
         $data['content']['cc'] = array_values(array_filter($data['content']['cc'] ?? []));
 
         return $data;

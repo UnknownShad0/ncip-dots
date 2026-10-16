@@ -87,12 +87,17 @@ type Option = {
     sample_content?: Record<string, any> | null;
 };
 const blank = {
+    recipient_label: "FOR",
     for: "",
     thru: "",
     attention: "",
     from: "",
     subject: "",
-    date: new Date().toISOString().slice(0, 10),
+    date: new Intl.DateTimeFormat("en-US", { month: "long", day: "2-digit", year: "numeric", timeZone: "Asia/Manila" }).format(new Date()),
+    for_position: "",
+    thru_position: "",
+    attention_position: "",
+    from_position: "",
     body: "",
     cc: [] as string[],
 };
@@ -292,6 +297,7 @@ export default function Index({
     documentTypes = [],
     approverOffices = [],
     currentUserId,
+    footerOfficeName = "NATIONAL COMMISSION ON INDIGENOUS PEOPLES",
     approvedOnly = false,
     canReviewOfficeApprovals = false,
     draftToEdit = null,
@@ -304,6 +310,7 @@ export default function Index({
     documentTypes: Option[];
     approverOffices: Option[];
     currentUserId: number;
+    footerOfficeName?: string;
     approvedOnly?: boolean;
     canReviewOfficeApprovals?: boolean;
     draftToEdit?: Draft | null;
@@ -311,8 +318,7 @@ export default function Index({
 }) {
     const [editing, setEditing] = useState<number | null>(draftToEdit?.id ?? null);
     const [typeId, setTypeId] = useState(String(draftToEdit?.document_type_id ?? ""));
-    const [title, setTitle] = useState(draftToEdit?.title ?? "");
-    const [content, setContent] = useState<Record<string, any>>({ ...blank, ...(draftToEdit?.content ?? {}) });
+    const [content, setContent] = useState<Record<string, any>>({ ...blank, footer_office_name: footerOfficeName, ...(draftToEdit?.content ?? {}) });
     const [savedTemplate, setSavedTemplate] = useState<{ typeId: string; template?: DocumentTemplate } | null>(draftToEdit ? { typeId: String(draftToEdit.document_type_id), template: draftToEdit.content.template } : null);
     const [approverOfficeId, setApproverOfficeId] = useState(String(draftToEdit?.approver_office_id ?? ""));
     const [previewOpen, setPreviewOpen] = useState(false);
@@ -358,7 +364,6 @@ export default function Index({
         setEditing(draftToEdit.id);
         setSavedTemplate({ typeId: String(draftToEdit.document_type_id), template: draftToEdit.content.template });
         setTypeId(String(draftToEdit.document_type_id));
-        setTitle(draftToEdit.title);
         setContent({ ...blank, ...draftToEdit.content });
         setApproverOfficeId(String(draftToEdit.approver_office_id ?? ""));
         setDirty(false);
@@ -416,8 +421,7 @@ export default function Index({
         setEditing(null);
         setSavedTemplate(null);
         setTypeId("");
-        setTitle("");
-        setContent({ ...blank });
+        setContent({ ...blank, footer_office_name: footerOfficeName });
         setApproverOfficeId("");
         setDirty(false);
         setErrors({});
@@ -426,7 +430,6 @@ export default function Index({
         setEditing(draft.id);
         setSavedTemplate({ typeId: String(draft.document_type_id), template: draft.content.template });
         setTypeId(String(draft.document_type_id));
-        setTitle(draft.title);
         setContent({ ...blank, ...draft.content });
         setApproverOfficeId(String(draft.approver_office_id ?? ""));
         setDirty(false);
@@ -441,7 +444,7 @@ export default function Index({
         if (saving) return;
         setNotice("");
         setActionError("");
-        const data = { document_type_id: typeId, title, content };
+        const data = { document_type_id: typeId, content };
         const options = {
             preserveScroll: true,
             onStart: () => setSaving(true),
@@ -484,7 +487,7 @@ export default function Index({
         );
     };
     const submitForApproval = () => {
-        openSubmissionDialog({ id: editing, title, fromEditor: true }, approverOfficeId);
+        openSubmissionDialog({ id: editing, title: content.subject || "New document", fromEditor: true }, approverOfficeId);
     };
     const submitToApprovalOffice = () => {
         if (!submissionTarget || !submissionOfficeId) return;
@@ -496,7 +499,6 @@ export default function Index({
                 ? {
                     draft_id: target.id,
                     document_type_id: typeId,
-                    title,
                     content,
                     approver_office_id: submissionOfficeId,
                 }
@@ -547,12 +549,11 @@ export default function Index({
         if (!selectedType?.sample_content) return;
         const apply = () => {
             const { title: sampleTitle, ...sample } = selectedType.sample_content!;
-            setTitle(sampleTitle || selectedType.name.toUpperCase());
             setContent(current => ({ ...current, ...sample, body: "" }));
             setDirty(true);
         };
-        if (title || content.body || content.body_document) {
-            setConfirmation({ title: "Load sample content?", message: "This replaces the current title, sample fields, and document body. Your assigned header stays in place.", label: "Load sample", destructive: false, action: apply });
+        if (content.subject || content.body || content.body_document) {
+            setConfirmation({ title: "Load sample content?", message: "This replaces the current sample fields and document body. Your assigned header stays in place.", label: "Load sample", destructive: false, action: apply });
         } else apply();
     };
 
@@ -628,8 +629,8 @@ export default function Index({
                                                 : dirty
                                                 ? "Unsaved changes"
                                                   : editing
-                                                    ? "All changes saved"
-                                                    : "New draft"}
+                                                    ? ""
+                                                    : ""}
                                         </span>
                                         <button
                                             type="button"
@@ -708,7 +709,7 @@ export default function Index({
                                             ))}
                                         </select>
                                     </label>
-                                    <button type="button" onClick={loadSample} disabled={!selectedType?.sample_content || saving} className="dots-button-secondary disabled:opacity-40">Load sample content</button>
+                                    {/* <button type="button" onClick={loadSample} disabled={!selectedType?.sample_content || saving} className="dots-button-secondary disabled:opacity-40">Load sample content</button> */}
                                     <p className="text-xs text-muted">
                                         {content.template?.name || "NCIP Standard"} · Letter · Portrait{" "}
                                         <span className="mx-2 text-slate-300">
@@ -731,12 +732,7 @@ export default function Index({
                                 )}
                                 <div className="overflow-x-auto px-3 py-8 sm:px-8 sm:py-10">
                                     <DocumentPaper
-                                        title={title}
                                         content={content}
-                                        onTitleChange={(value) => {
-                                            setTitle(value);
-                                            setDirty(true);
-                                        }}
                                         onChange={change}
                                         disabled={saving}
                                     />
@@ -838,7 +834,7 @@ export default function Index({
                             </div>
                         </div>
                         <div className="max-h-[70vh] overflow-auto rounded-lg border border-border bg-surface p-3 sm:p-6">
-                            {previewOpen && <DocumentPdfPreview payload={{ draft_id: editing, document_type_id: typeId, title, content }} />}
+                            {previewOpen && <DocumentPdfPreview payload={{ draft_id: editing, document_type_id: typeId, content }} />}
                         </div>
                         <div className="mt-4 flex flex-wrap justify-end gap-2">
                             <button

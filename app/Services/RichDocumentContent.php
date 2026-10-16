@@ -66,7 +66,10 @@ class RichDocumentContent
         }
         if (in_array($type, ['tableCell', 'tableHeader'], true)) {
             $this->check(($attrs['colspan'] ?? 1) === 1 && ($attrs['rowspan'] ?? 1) === 1, 'Merged cells are not supported yet. Split merged cells before pasting.');
-            $out['attrs'] = ['colspan' => 1, 'rowspan' => 1, 'colwidth' => null];
+            $width = $attrs['colwidth'] ?? null;
+            $this->check($width === null || (is_array($width) && array_is_list($width) && count($width) === 1
+                && is_int($width[0]) && $width[0] >= 40 && $width[0] <= 2000), 'Invalid table column width.');
+            $out['attrs'] = ['colspan' => 1, 'rowspan' => 1, 'colwidth' => $width];
         }
         $children = $node['content'] ?? [];
         $this->check(is_array($children) && array_is_list($children), 'Invalid document content.');
@@ -88,6 +91,17 @@ class RichDocumentContent
                             'Keep table header cells under 80 characters and on at most three lines.');
                     }
                 }
+            }
+            // The first row defines the entire table, including continuation pages.
+            if (array_filter($out['content'][0]['content'], fn ($cell) => $cell['attrs']['colwidth'] !== null)) {
+                $widths = $this->columnWidths($out);
+                foreach ($out['content'] as &$row) {
+                    foreach ($row['content'] as $index => &$cell) {
+                        $cell['attrs']['colwidth'] = [$widths[$index]];
+                    }
+                    unset($cell);
+                }
+                unset($row);
             }
         }
 
@@ -129,23 +143,30 @@ class RichDocumentContent
         }
         if ($type === 'table') {
             $rows = $node['content'];
+            $widths = $this->columnWidths($node);
+            $colgroup = '<colgroup>'.implode('', array_map(fn ($width) => '<col style="width:'.$this->widthPercent($width).'%">', $widths)).'</colgroup>';
             $header = $this->isHeader($rows[0]) ? '<thead>'.$this->render(array_shift($rows)).'</thead>' : '';
             $body = '';
             foreach ($rows as $row) {
                 // Dompdf cannot split a single tall row. Fragment long cells before layout,
                 // retaining inline marks and all text in aligned continuation rows.
-                $cells = array_map(fn ($cell) => $this->cellFragments($cell), $row['content']);
+                $cells = [];
+                foreach ($row['content'] as $index => $cell) {
+                    // Bound row height using the actual column width, including narrow columns.
+                    $limit = max(8, (int) floor(($widths[$index] * .75 - 10) / 12) * 8);
+                    $cells[] = $this->cellFragments($cell, $limit);
+                }
                 $count = max(array_map('count', $cells));
                 for ($i = 0; $i < $count; $i++) {
                     $body .= '<tr'.($i ? ' class="continuation-row"' : '').'>';
-                    foreach ($cells as $parts) {
-                        $body .= '<td>'.$this->render($parts[$i] ?? ['type' => 'paragraph']).'</td>';
+                    foreach ($cells as $index => $parts) {
+                        $body .= '<td style="width:'.$this->widthPercent($widths[$index]).'%">'.$this->render($parts[$i] ?? ['type' => 'paragraph']).'</td>';
                     }
                     $body .= '</tr>';
                 }
             }
 
-            return '<table class="rich-table">'.$header.'<tbody>'.$body.'</tbody></table>';
+            return '<table class="rich-table">'.$colgroup.$header.'<tbody>'.$body.'</tbody></table>';
         }
         $inner = implode('', array_map(fn ($child) => $this->render($child), $node['content'] ?? []));
         if ($type === 'doc') {
@@ -160,11 +181,14 @@ class RichDocumentContent
         if ($type === 'orderedList') {
             $attrs .= ' start="'.$node['attrs']['start'].'"';
         }
+        if (in_array($type, ['tableCell', 'tableHeader'], true) && isset($node['attrs']['colwidth'][0])) {
+            $attrs .= ' style="width:'.$this->widthPercent($node['attrs']['colwidth'][0]).'%"';
+        }
 
         return '<'.$tag.$attrs.'>'.($inner ?: ($type === 'paragraph' ? '<br>' : '')).'</'.$tag.'>';
     }
 
-    private function cellFragments(array $cell): array
+    private function cellFragments(array $cell, int $limit): array
     {
         $parts = [];
         foreach ($cell['content'] as $paragraph) {
@@ -174,7 +198,7 @@ class RichDocumentContent
             foreach ($paragraph['content'] ?? [] as $inline) {
                 $characters = $inline['type'] === 'text' ? mb_str_split($inline['text']) : ["\n"];
                 foreach ($characters as $char) {
-                    if ($length >= 120 || $breaks >= 3) {
+                    if ($length >= $limit || $breaks >= 3) {
                         $parts[] = $current;
                         $current['content'] = [];
                         $length = $breaks = 0;
@@ -197,6 +221,37 @@ class RichDocumentContent
         }
 
         return $parts;
+    }
+
+    private function widthPercent(int $width): string
+    {
+        return number_format($width / 691 * 100, 4, '.', '');
+    }
+
+    private function columnWidths(array $table): array
+    {
+        $cells = $table['content'][0]['content'];
+        $desired = array_map(fn ($cell) => $cell['attrs']['colwidth'][0] ?? 691 / count($cells), $cells);
+        $widths = array_fill(0, count($cells), 0);
+        $pending = array_keys($cells);
+        $remaining = 691;
+        while ($pending) {
+            $sum = array_sum(array_intersect_key($desired, array_flip($pending)));
+            $small = array_filter($pending, fn ($index) => $desired[$index] / $sum * $remaining < 40);
+            if (! $small) {
+                // Avoid one-pixel drift from floating-point rounding on repeated saves.
+                foreach ($pending as $index) $widths[$index] = (int) floor($desired[$index] / $sum * $remaining + 1e-9);
+                break;
+            }
+            foreach ($small as $index) {
+                $widths[$index] = 40;
+                $remaining -= 40;
+            }
+            $pending = array_diff($pending, $small);
+        }
+        $widths[array_search(max($widths), $widths)] += 691 - array_sum($widths);
+
+        return $widths;
     }
 
     private function isHeader(array $row): bool

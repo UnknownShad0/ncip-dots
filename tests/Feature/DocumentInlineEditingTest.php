@@ -10,6 +10,66 @@ class DocumentInlineEditingTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_spaces_around_inline_marks_survive_save_update_and_reopen(): void
+    {
+        $type = DocumentType::create(['name' => 'Memo', 'is_active' => true]);
+        $this->actingAs(User::factory()->create());
+        $nodes = [
+            ['type' => 'text', 'text' => 'John '],
+            ['type' => 'text', 'text' => 'Mark', 'marks' => [['type' => 'bold']]],
+            ['type' => 'text', 'text' => ' '],
+            ['type' => 'text', 'text' => ' Molina ', 'marks' => [['type' => 'italic']]],
+            ['type' => 'text', 'text' => 'reports.'],
+        ];
+        $payload = ['document_type_id' => $type->id, 'content' => [
+            'from' => ' Sender ', 'subject' => ' Spacing ',
+            'body_document' => ['type' => 'doc', 'content' => [['type' => 'paragraph', 'content' => $nodes]]],
+        ]];
+        $this->post('/document-creation', $payload)->assertSessionHasNoErrors();
+        $draft = DocumentCreationDraft::firstOrFail();
+        $this->putJson('/document-creation/'.$draft->id, $payload)->assertSessionHasNoErrors();
+        $draft->refresh();
+        $this->assertSame('Sender', $draft->content['from']);
+        $this->assertSame('John Mark  Molina reports.', $draft->content['body']);
+        $props = $this->get('/document-creation?edit_draft_id='.$draft->id)->assertOk()->viewData('page')['props'];
+        $this->assertSame($nodes, $props['draftToEdit']['content']['body_document']['content'][0]['content']);
+        $html = app(\App\Services\DocumentPdf::class)->html($draft->title, $draft->content);
+        $this->assertStringContainsString('John <strong>Mark</strong> <em> Molina </em>reports.', $html);
+        $this->postJson('/document-creation/preview', $payload)->assertOk()->assertHeader('Content-Type', 'application/pdf');
+    }
+
+    public function test_recipient_label_round_trips_and_empty_optional_rows_are_hidden(): void
+    {
+        $type = DocumentType::create(['name' => 'Memo', 'is_active' => true]);
+        $this->actingAs(User::factory()->create());
+        $payload = ['document_type_id' => $type->id, 'content' => [
+            'recipient_label' => 'TO', 'for' => 'John Mark', 'for_position' => 'Director',
+            'from' => 'Sender', 'subject' => 'Recipient labels', 'body' => 'Test body.',
+        ]];
+        $this->post('/document-creation', $payload)->assertSessionHasNoErrors();
+        $draft = DocumentCreationDraft::firstOrFail();
+        $props = $this->get('/document-creation?edit_draft_id='.$draft->id)->assertOk()->viewData('page')['props'];
+        $this->assertSame('TO', $props['draftToEdit']['content']['recipient_label']);
+        $pdf = app(\App\Services\DocumentPdf::class);
+        $html = $pdf->html($draft->title, $draft->content);
+        $this->assertStringContainsString('<th>TO</th>', $html);
+        $this->assertStringContainsString('Director', $html);
+        $this->assertStringNotContainsString('<th>FOR</th>', $html);
+
+        unset($payload['content']['recipient_label']);
+        $this->put('/document-creation/'.$draft->id, $payload)->assertSessionHasNoErrors();
+        $this->assertStringContainsString('<th>FOR</th>', $pdf->html($draft->title, $draft->fresh()->content));
+        $payload['content']['for'] = '';
+        $payload['content']['for_position'] = '';
+        $this->put('/document-creation/'.$draft->id, $payload)->assertSessionHasNoErrors();
+        $html = $pdf->html($draft->title, $draft->fresh()->content);
+        foreach (['FOR', 'TO', 'THRU', 'ATTENTION'] as $label) $this->assertStringNotContainsString('<th>'.$label.'</th>', $html);
+        $this->assertStringContainsString('<th>FROM</th>', $html);
+
+        $payload['content']['recipient_label'] = 'INVALID';
+        $this->putJson('/document-creation/'.$draft->id, $payload)->assertUnprocessable()->assertJsonValidationErrors('content.recipient_label');
+    }
+
     public function test_save_returns_draft_identity_and_preserves_inline_content_on_reopen(): void
     {
         $user = User::factory()->create(['office_id' => Office::create(['name' => 'Office'])->id]);
@@ -37,7 +97,7 @@ class DocumentInlineEditingTest extends TestCase
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)->setPaper('letter');
         $pdf->output();
         $this->assertGreaterThan(1, $pdf->getDomPDF()->getCanvas()->get_page_count());
-        $this->assertStringContainsString('margin: 1.6667in .65in 1.75in', $html);
+        $this->assertStringContainsString('margin: 1.71875in .65in 1.75in', $html);
         $this->assertStringContainsString('header { position: fixed;', $html);
         $this->assertStringContainsString('footer { position: fixed;', $html);
     }
@@ -49,6 +109,6 @@ class DocumentInlineEditingTest extends TestCase
         $this->assertStringContainsString('National Commission on Indigenous Peoples', $html);
         $this->assertStringContainsString("First\n\n&lt;script&gt;alert(1)&lt;/script&gt;", $html);
         $this->assertStringNotContainsString('<script>', $html);
-        $this->assertStringNotContainsString('THRU:', $html);
+        $this->assertStringNotContainsString('<th>THRU</th>', $html);
     }
 }
