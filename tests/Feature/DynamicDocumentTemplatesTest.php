@@ -109,6 +109,19 @@ class DynamicDocumentTemplatesTest extends TestCase
         $this->assertSame(0, DocumentCreationDraft::count());
     }
 
+    public function test_visible_field_whitespace_and_blank_cc_lines_survive_saving(): void
+    {
+        $payload = $this->payload($this->type());
+        $payload['content']['from'] = " Sender\n";
+        $payload['content']['for_position'] = " First designation\nSecond designation ";
+        $payload['content']['cc'] = ['Records', '', 'Another office', ''];
+        $this->actingAs(User::factory()->create())->post('/document-creation', $payload)->assertSessionHasNoErrors();
+        $saved = DocumentCreationDraft::firstOrFail()->content;
+        $this->assertSame($payload['content']['from'], $saved['from']);
+        $this->assertSame($payload['content']['for_position'], $saved['for_position']);
+        $this->assertSame($payload['content']['cc'], $saved['cc']);
+    }
+
     public function test_document_without_a_title_uses_its_subject_through_registration(): void
     {
         $type = $this->type();

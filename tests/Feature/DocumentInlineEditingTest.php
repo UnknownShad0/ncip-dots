@@ -29,7 +29,7 @@ class DocumentInlineEditingTest extends TestCase
         $draft = DocumentCreationDraft::firstOrFail();
         $this->putJson('/document-creation/'.$draft->id, $payload)->assertSessionHasNoErrors();
         $draft->refresh();
-        $this->assertSame('Sender', $draft->content['from']);
+        $this->assertSame(' Sender ', $draft->content['from']);
         $this->assertSame('John Mark  Molina reports.', $draft->content['body']);
         $props = $this->get('/document-creation?edit_draft_id='.$draft->id)->assertOk()->viewData('page')['props'];
         $this->assertSame($nodes, $props['draftToEdit']['content']['body_document']['content'][0]['content']);

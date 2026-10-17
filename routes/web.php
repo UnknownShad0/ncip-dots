@@ -6,6 +6,7 @@ use App\Http\Controllers\AuditTrailController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\DocumentCreationController;
+use App\Http\Controllers\DocumentFontController;
 use App\Http\Controllers\DocumentTypeController;
 use App\Http\Controllers\DraftsController;
 use App\Http\Controllers\IntegrationController;
@@ -31,6 +32,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/documents/latest', [DocumentController::class, 'latest'])->name('documents.latest');
     Route::get('/documents/{id}/details', [DocumentController::class, 'details'])->whereNumber('id')->name('documents.details');
     Route::get('/document-creation', [DocumentCreationController::class, 'index'])->name('document-creation.index');
+    Route::get('/document-fonts/{face}', DocumentFontController::class)
+        ->where('face', 'regular|bold|italic|bold-italic')->name('document-fonts.show');
     Route::get('/document-assets/{filename}', [\App\Services\DocumentTemplates::class, 'show'])->where('filename', '[a-f0-9]{64}\.(png|jpg)')->name('document-assets.show');
     Route::post('/document-creation/preview', [DocumentCreationController::class, 'preview'])->middleware('throttle:30,1')->name('document-creation.preview');
     Route::get('/document-creation/{draft}/preview', [DocumentCreationController::class, 'previewSubmission'])->middleware('throttle:30,1')->name('document-creation.preview-submission');

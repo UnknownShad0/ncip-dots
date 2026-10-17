@@ -3,6 +3,7 @@ import type { Node as DocumentNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { PAGE_CONTENT_HEIGHT, pagesForContent, spaceBeforePageUnit } from './documentPaginationLayout';
+import { documentFontsReady } from './documentFonts';
 
 const key = new PluginKey<DecorationSet>('documentPagination');
 type Line = { top: number; height: number; position: number };
@@ -181,7 +182,7 @@ export const DocumentPagination = Extension.create<{ onPageCount: (pages: number
                 };
                 const observer = new ResizeObserver(schedule);
                 view.dom.addEventListener('compositionend', schedule);
-                void document.fonts.ready.then(schedule);
+                void documentFontsReady().then(schedule).catch(() => {});
                 schedule();
                 return {
                     update(updated, previous) {

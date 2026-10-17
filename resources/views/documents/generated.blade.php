@@ -16,6 +16,7 @@ header .full-header { height: 90px; max-width: 100%; }
 .header-layout .header-text div:nth-child(2) { font-weight:bold; }
 .metadata { padding-bottom: 24px; border-bottom: 1px solid #222; margin-bottom: 26px; }
 .metadata table, table.cc { width: 100%; border-collapse: collapse; }
+.metadata th, .metadata td { padding:0; }
 .metadata th, .cc th { width: 106px; text-align: left; vertical-align: top; font-size: 11pt; font-weight:bold; line-height:1.3; }
 .metadata td, .cc td { padding-left: 36px; vertical-align: top; white-space: pre-wrap; overflow-wrap: break-word; }
 .metadata th, .metadata td, .cc th, .cc td { padding-top: 4px; padding-bottom: 4px; }

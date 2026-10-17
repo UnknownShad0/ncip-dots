@@ -715,7 +715,7 @@ export default function Index({
                                         <span className="mx-2 text-slate-300">
                                             |
                                         </span>{" "}
-                                        Use Preview for page breaks
+                                        Edit and preview use the same page layout
                                     </p>
                                 </div>
                                 {Object.keys(errors).length > 0 && (

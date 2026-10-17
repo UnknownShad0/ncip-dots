@@ -12,7 +12,8 @@ use App\Models\PurposeType;
 use App\Models\User;
 use App\Services\AuditTrailWriter;
 use App\Services\DocumentAccess;
-use Barryvdh\DomPDF\Facade\Pdf;
+use App\Services\DocumentPdf;
+use App\Services\RenderedDocumentPdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -681,7 +682,7 @@ class DocumentController extends Controller
             $this->storeDocumentFile($document, $request->file('file'), 'original', $initialTrail);
         } elseif ($approvedDraft) {
             $path = 'documents/'.$document->tracking_number.'.pdf';
-            $pdf = Pdf::loadHTML($this->approvedDraftHtml($approvedDraft))->setPaper('letter');
+            $pdf = $this->approvedDraftPdf($approvedDraft);
             Storage::disk('public')->put($path, $pdf->output());
             $document->files()->create([
                 'file_name' => basename($path),
@@ -842,7 +843,7 @@ class DocumentController extends Controller
                 ]);
 
                 if ($approvedDraft) {
-                    $pdf = Pdf::loadHTML($this->approvedDraftHtml($approvedDraft))->setPaper('letter')->output();
+                    $pdf = $this->approvedDraftPdf($approvedDraft)->output();
                     $approvedPath = 'documents/versions/'.Str::uuid().'.pdf';
                     if (! Storage::disk('public')->put($approvedPath, $pdf)) {
                         throw new \RuntimeException('Could not save the approved document version.');
@@ -1122,11 +1123,11 @@ class DocumentController extends Controller
         ];
     }
 
-    private function approvedDraftHtml(DocumentCreationDraft $draft): string
+    private function approvedDraftPdf(DocumentCreationDraft $draft): RenderedDocumentPdf
     {
-        $pdf = app(\App\Services\DocumentPdf::class);
+        $pdf = app(DocumentPdf::class);
 
-        return $pdf->html($draft->title, $pdf->approvedContent($draft));
+        return $pdf->pdf($draft->title, $pdf->approvedContent($draft));
     }
 
     private function formatTrailTransaction(?DocumentTrail $trail): string

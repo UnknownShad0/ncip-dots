@@ -495,8 +495,9 @@ class DocumentCreationController extends Controller
         $data['title'] = filled($data['title'] ?? null) ? $data['title'] : $data['content']['subject'];
         $data['content']['document_title'] = $data['title'];
         $data['content']['footer_office_name'] = $existing?->content['footer_office_name'] ?? DocumentMetadata::officeName($request->user());
+        // Preserve the exact visible fields, including blank CC lines, for shared layout.
         $data['content']['date'] = DocumentMetadata::displayDate($data['content']['date'] ?? null);
-        $data['content']['cc'] = array_values(array_filter($data['content']['cc'] ?? []));
+        $data['content']['cc'] = array_map(fn ($line) => $line ?? '', array_values($data['content']['cc'] ?? []));
 
         return $data;
     }

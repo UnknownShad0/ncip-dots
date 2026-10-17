@@ -153,3 +153,22 @@ The user's live document was not visually compared because no browser connection
 The PDF metadata previously used natural text heights with cell padding, while the editor uses minimum-height input boxes and 8px gaps. Updated only the PDF metadata rules to match 30px names, 22px designations, 31px single-line subject/date fields, and 8px field gaps. The space after DATE now matches the editor's 32px divider margin, 1px border, and 26px body margin. Empty optional fields retain their existing omission behavior.
 
 A rendered-layout regression test uses the user's fully filled TO/THRU/ATTENTION/FROM/SUBJECT/DATE sample. It verifies each input box's height and vertical position and the body start at 534 CSS pixels from the top of the page. These expectations come from the editor's CSS and textarea sizing, not a live browser measurement. `DocumentPdfLayoutTest` and `DocumentInlineEditingTest` passed together: 7 tests, 398 assertions. `git diff --check` passed.
+
+### Metadata horizontal spacing
+
+Reset Dompdf's default metadata cell padding before applying the explicit field padding. This removes a 3px rightward offset and restores 4px of text width. Rendered measurements now match the editor CSS: metadata text starts at 242.4px with 505.2px available width; body text remains at 62.4px with 691.2px width. Extended the existing layout regression test to verify these measurements. Layout and inline-editing tests passed: 7 tests, 420 assertions; `git diff --check` passed. This addresses metadata wrapping, without claiming to resolve every page-boundary difference.
+
+## Shared edit and PDF renderer — October 17, 2026
+
+This supersedes the earlier Dompdf spacing adjustments for document-creation PDFs. Matching CSS values across two independent layout engines still left different line wrapping, orphan rules, table fragmentation, blank optional fields, and page boundaries.
+
+- Current-content preview, submitted-version preview, and generated registration/release attachments now use headless Chromium with the same React document component and pagination extension as the editor.
+- The renderer waits for all fonts, images, and pagination, then freezes each measured sheet into a fixed Letter page. It removes the inter-page screen gaps without repaginating the text. Before export it checks that the text rectangles in the frozen print pages match the measured source.
+- Both editor and PDF use the same four private Arial files, through authenticated font routes in the editor and embedded font data in the renderer.
+- Blank optional fields and CC line spacing stay in the output; placeholders and editing controls do not print. Metadata whitespace is preserved through validation, and ISO dates use the same display formatting in the editor and server.
+- `npm run build` includes the standalone renderer bundle; the Vite dev server builds/watches the shared renderer too. Restart an existing Vite process to activate the new watcher.
+- Node and Chrome/Chromium are now runtime requirements. There is no Dompdf fallback. Deployment details are in `docs/document-rendering.md`; fonts are documented in `docs/document-fonts.md`.
+
+Verification now compares actual editable and output browser renders, including field boxes, every body-text rectangle, page spacers, and actual PDF page objects. The four parity cases cover a full first page plus one extra line, blank optional/CC fields, wrapped metadata with bold/italic, and lists with an oversized table cell. These passed, as did the font-access tests, JavaScript pagination/table tests, and the document workflow suites after updating the old metadata-trimming assertion. Existing PDF attachments are not regenerated automatically. Browser parity was tested with the installed Chromium engine; identical rasterization across unrelated browsers/operating systems is not guaranteed.
+
+Final verification: 38 feature tests passed across the shared-layout, font-access, dynamic-template, inline-editing, approved-reuse, forwarding, and office-approval suites (including focused reruns after correcting the old trimming assertion). All 9 JavaScript tests, TypeScript, client/SSR/shared-renderer builds, and `git diff --check` passed. A two-page PDF using the supplied metadata example and 24 body paragraphs was rendered with macOS PDFKit and visually inspected: all paragraphs, repeated headers/footers, CC, and page numbers appeared without clipping. Test PDFs/screenshots were temporary, not production documents.

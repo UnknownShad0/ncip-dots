@@ -1,0 +1,14 @@
+/* The document component owns its typography and geometry in edit and output. */
+html, body { margin:0; padding:0; }
+#document-renderer-root { width:816px; }
+#document-renderer-root .document-editor-tools, #document-renderer-root .document-editor-workspace > p { display:none; }
+.document-print-page { position:relative; width:816px; height:1056px; overflow:hidden; contain:strict; break-inside:avoid; break-after:page; }
+.document-print-page:last-child { break-after:auto; }
+#document-print-pages { display:none; }
+@page { size:letter portrait; margin:0; }
+@media print {
+    html, body { width:816px; margin:0; padding:0; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+    #document-renderer-root { display:none; }
+    #document-print-pages { display:block; }
+    .document-print-page .document-body-editor::before { display:none; }
+}

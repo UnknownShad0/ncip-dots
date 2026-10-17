@@ -1,0 +1,142 @@
+// No browser automation dependency: Chromium's DevTools Protocol travels over
+// inherited pipes. No debugging port or application HTTP session is exposed.
+import { spawn } from 'node:child_process';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
+import path from 'node:path';
+
+const options = JSON.parse(await readFile(process.argv[2], 'utf8'));
+const documentUrl = pathToFileURL(path.resolve(options.html)).href;
+await mkdir(options.profile, { recursive: true, mode: 0o700 });
+const arguments_ = [
+    '--headless=new', '--remote-debugging-pipe', `--user-data-dir=${options.profile}`,
+    '--no-first-run', '--no-default-browser-check', '--disable-background-networking',
+    '--disable-component-update', '--disable-default-apps', '--disable-sync',
+    '--disable-extensions', '--disable-dev-shm-usage', '--metrics-recording-only',
+    '--noerrdialogs', '--hide-scrollbars', '--force-color-profile=srgb',
+];
+if (options.sandbox === false) arguments_.push('--no-sandbox');
+
+let browser;
+let sequence = 0;
+let buffer = '';
+let errorText = '';
+let session;
+let scriptError = '';
+const pending = new Map();
+const deadline = Date.now() + options.timeout * 1000;
+const pause = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+
+function command(method, params = {}, sessionId = session) {
+    return new Promise((resolve, reject) => {
+        const id = ++sequence;
+        const timer = setTimeout(() => {
+            pending.delete(id);
+            reject(new Error(`Chromium timed out during ${method}.`));
+        }, Math.max(1, Math.min(15000, deadline - Date.now())));
+        pending.set(id, { resolve, reject, timer });
+        browser.stdio[3].write(`${JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) })}\0`);
+    });
+}
+
+function receive(message) {
+    if (message.id) {
+        const request = pending.get(message.id);
+        if (!request) return;
+        clearTimeout(request.timer);
+        pending.delete(message.id);
+        if (message.error) request.reject(new Error(`${message.error.message} (${message.id})`));
+        else request.resolve(message.result);
+    } else if (message.method === 'Fetch.requestPaused') {
+        // The only non-data resource permitted is the exact generated document.
+        // In particular, never allow content to fetch private files or URLs.
+        const { requestId, request } = message.params;
+        const allow = request.url === documentUrl || request.url.startsWith('data:');
+        void command(allow ? 'Fetch.continueRequest' : 'Fetch.failRequest', {
+            requestId, ...(!allow ? { errorReason: 'BlockedByClient' } : {}),
+        }, message.sessionId).catch(() => {});
+    } else if (message.method === 'Runtime.exceptionThrown') {
+        scriptError = message.params.exceptionDetails.exception?.description
+            ?? message.params.exceptionDetails.text ?? 'The document renderer failed.';
+    }
+}
+
+try {
+    browser = spawn(options.browser, arguments_, { stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'] });
+    browser.stderr.on('data', chunk => { errorText = (errorText + chunk.toString()).slice(-4000); });
+    browser.stdio[3].on('error', () => {});
+    browser.stdio[4].setEncoding('utf8');
+    browser.stdio[4].on('data', chunk => {
+        buffer += chunk;
+        let end;
+        while ((end = buffer.indexOf('\0')) !== -1) {
+            const json = buffer.slice(0, end);
+            buffer = buffer.slice(end + 1);
+            if (json) receive(JSON.parse(json));
+        }
+    });
+    const failed = error => {
+        for (const request of pending.values()) {
+            clearTimeout(request.timer);
+            request.reject(error);
+        }
+        pending.clear();
+    };
+    browser.on('error', error => failed(new Error(`Could not start Chromium: ${error.message}`)));
+    browser.on('exit', code => failed(new Error(`Chromium exited (${code}). ${errorText}`)));
+
+    const { targetId } = await command('Target.createTarget', { url: 'about:blank' }, null);
+    ({ sessionId: session } = await command('Target.attachToTarget', { targetId, flatten: true }, null));
+    await command('Page.enable');
+    await command('Runtime.enable');
+    await command('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }] });
+    await command('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+    await command('Emulation.setEmulatedMedia', { media: 'screen' });
+    const navigation = await command('Page.navigate', { url: documentUrl });
+    if (navigation.errorText) throw new Error(`Could not open the generated document: ${navigation.errorText}`);
+
+    let layout;
+    while (Date.now() < deadline) {
+        const result = await command('Runtime.evaluate', {
+            expression: 'window.__DOCUMENT_RENDER_RESULT__ || null', returnByValue: true,
+        });
+        layout = result.result.value;
+        if (layout?.error) throw new Error(`Document layout failed: ${layout.error}`);
+        if (layout && Number.isInteger(layout.pages) && layout.pages > 0) break;
+        if (scriptError) throw new Error(`Document script failed: ${scriptError}`);
+        await pause(50);
+    }
+    if (!layout || !Number.isInteger(layout.pages) || layout.pages < 1) {
+        throw new Error('Document pagination did not become ready before the PDF timeout.');
+    }
+    // Remove the measurement-only screen media override: print the frozen sheet
+    // slices, not the continuous editor (which includes 24px inter-page gaps).
+    await command('Emulation.setEmulatedMedia', { media: 'print' });
+    const verification = await command('Runtime.evaluate', {
+        expression: 'window.__DOCUMENT_VERIFY_PRINT__()', returnByValue: true,
+    });
+    if (verification.exceptionDetails || verification.result.value?.error) {
+        throw new Error(verification.result.value?.error || 'Could not verify the frozen print sheets.');
+    }
+    const pdf = await command('Page.printToPDF', {
+        printBackground: true, displayHeaderFooter: false, preferCSSPageSize: true,
+        paperWidth: 8.5, paperHeight: 11, marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
+        transferMode: 'ReturnAsBase64',
+    });
+    const bytes = Buffer.from(pdf.data, 'base64');
+    if (!bytes.subarray(0, 5).equals(Buffer.from('%PDF-'))) throw new Error('Chromium did not return a valid PDF.');
+    await writeFile(options.output, bytes, { mode: 0o600 });
+    process.stdout.write(JSON.stringify(layout));
+} catch (error) {
+    process.stderr.write(`${error.message}\n`);
+    process.exitCode = 1;
+} finally {
+    if (browser && browser.exitCode === null) {
+        await command('Browser.close', {}, null).catch(() => {});
+        if (browser.exitCode === null) {
+            await Promise.race([new Promise(resolve => browser.once('exit', resolve)), pause(1500)]);
+            if (browser.exitCode === null) browser.kill('SIGKILL');
+        }
+    }
+    for (const request of pending.values()) clearTimeout(request.timer);
+}

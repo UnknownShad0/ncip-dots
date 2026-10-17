@@ -1,25 +1,29 @@
-/* Use locally installed Arial in the editor. PDF font files stay private on the server. */
+/* Editor and PDF use the same installed files, served only to authenticated users. */
 @font-face {
-    font-family: Arial;
-    src: local('Arial'), local('ArialMT');
+    font-family: 'Document Arial';
+    src: url('/document-fonts/regular') format('truetype');
     font-style: normal;
     font-weight: 400;
+    font-display: block;
 }
 @font-face {
-    font-family: Arial;
-    src: local('Arial Bold'), local('Arial-BoldMT');
+    font-family: 'Document Arial';
+    src: url('/document-fonts/bold') format('truetype');
     font-style: normal;
     font-weight: 700;
+    font-display: block;
 }
 @font-face {
-    font-family: Arial;
-    src: local('Arial Italic'), local('Arial-ItalicMT');
+    font-family: 'Document Arial';
+    src: url('/document-fonts/italic') format('truetype');
     font-style: italic;
     font-weight: 400;
+    font-display: block;
 }
 @font-face {
-    font-family: Arial;
-    src: local('Arial Bold Italic'), local('Arial-BoldItalicMT');
+    font-family: 'Document Arial';
+    src: url('/document-fonts/bold-italic') format('truetype');
     font-style: italic;
     font-weight: 700;
+    font-display: block;
 }

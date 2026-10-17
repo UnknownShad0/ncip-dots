@@ -13,9 +13,9 @@ export function plainTextDocument(text: string): JSONContent {
     return { type: 'doc', content: (text || '').split('\n').map(line => ({ type: 'paragraph', ...(line ? { content: [{ type: 'text', text: line }] } : {}) })) };
 }
 
-export default function RichDocumentEditor({ value, plainText, onChange, disabled = false, toolbarTarget, onPageCount, placeholder }: {
+export default function RichDocumentEditor({ value, plainText, onChange, disabled = false, toolbarTarget, onPageCount, placeholder, hideToolbar = false }: {
     value?: JSONContent; plainText: string; disabled?: boolean; onChange: (document: JSONContent, text: string) => void;
-    toolbarTarget?: HTMLElement | null; onPageCount?: (pages: number) => void; placeholder?: string;
+    toolbarTarget?: HTMLElement | null; onPageCount?: (pages: number) => void; placeholder?: string; hideToolbar?: boolean;
 }) {
     const [rows, setRows] = useState(3);
     const [cols, setCols] = useState(3);
@@ -63,7 +63,7 @@ export default function RichDocumentEditor({ value, plainText, onChange, disable
         table.forEach(row => row.forEach((cell, _offset, index) => columns[index].push(cell.textBetween(0, cell.content.size, '\n'))));
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
-        if (context) context.font = `700 ${getComputedStyle(editor.view.dom).fontSize} Arial`;
+        if (context) context.font = `700 ${getComputedStyle(editor.view.dom).fontSize} "Document Arial"`;
         const widths = fit ? fitColumnWidths(columns, text => context?.measureText(text).width ?? text.length * 8) : normalizeColumnWidths(columns.map(() => 1));
         const transaction = editor.state.tr;
         const position = selection.before(depth);
@@ -114,13 +114,13 @@ export default function RichDocumentEditor({ value, plainText, onChange, disable
         </div>}
     </>;
     return <div className="rich-editor">
-        {toolbarTarget ? createPortal(toolbar, toolbarTarget) : toolbar}
+        {!hideToolbar && (toolbarTarget ? createPortal(toolbar, toolbarTarget) : toolbar)}
         <EditorContent editor={editor} className="document-body-editor" data-placeholder={placeholder} data-empty={editor.isEmpty && !disabled} />
         <style>{`
             .document-body-editor { position:relative; }
-            .document-body-editor[data-empty="true"]::before { content:attr(data-placeholder); position:absolute; top:0; left:0; color:#94a3b8; font:11pt/1.55 Arial,sans-serif; pointer-events:none; }
+            .document-body-editor[data-empty="true"]::before { content:attr(data-placeholder); position:absolute; top:0; left:0; color:#94a3b8; font:11pt/1.55 'Document Arial',sans-serif; pointer-events:none; }
             @media print { .document-body-editor::before { display:none; } }
-            .document-rich-text { min-height:23px; outline:none; font:11pt/1.55 Arial,sans-serif; overflow-wrap:anywhere; }
+            .document-rich-text { min-height:23px; outline:none; font:11pt/1.55 'Document Arial',sans-serif; overflow-wrap:anywhere; }
             .document-rich-text p { margin:0 0 12px; }
             .document-rich-text h2 { font-size:14pt; font-weight:700; margin:16px 0 10px; }
             .document-rich-text h3 { font-size:12pt; font-weight:700; margin:12px 0 8px; }
