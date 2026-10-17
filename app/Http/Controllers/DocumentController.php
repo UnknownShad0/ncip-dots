@@ -608,6 +608,7 @@ class DocumentController extends Controller
         if ($validated['approved_draft_id'] ?? null) {
             $approvedDraft = DocumentCreationDraft::query()
                 ->whereKey($validated['approved_draft_id'])
+                ->whereNull('archived_at')
                 ->whereIn('status', ['approved', 'awaiting_verification', 'verified', 'registered'])
                 ->where('created_by', auth()->id())
                 ->first();
@@ -666,7 +667,7 @@ class DocumentController extends Controller
             }
 
             if ($approvedDraft) {
-                $approvedDraft = DocumentCreationDraft::query()->lockForUpdate()->findOrFail($approvedDraft->id);
+                $approvedDraft = DocumentCreationDraft::query()->whereNull('archived_at')->lockForUpdate()->findOrFail($approvedDraft->id);
                 // Keep the first registration link; events link every subsequent submission.
                 $approvedDraft->update(['official_document_id' => $approvedDraft->official_document_id ?? $document->id, 'status' => 'registered']);
                 $approvedDraft->events()->create([
@@ -815,6 +816,7 @@ class DocumentController extends Controller
                     $approvedDraft = DocumentCreationDraft::query()
                         ->whereKey($validated['approved_draft_id'])
                         ->where('created_by', auth()->id())
+                        ->whereNull('archived_at')
                         ->whereIn('status', ['approved', 'awaiting_verification', 'verified', 'registered'])
                         ->lockForUpdate()
                         ->first();
@@ -974,7 +976,7 @@ class DocumentController extends Controller
                 'status' => 'terminal',
                 'action' => 'Tagged as Terminal',
             ]);
-            $document->update(['status' => 'terminal', 'is_archived' => true]);
+            $document->update(['status' => 'terminal', 'is_archived' => true, 'archived_at' => now()]);
             $writer = app(AuditTrailWriter::class);
             $writer->record('document.terminal_tagged', $document, [
                 'tracking_number' => $document->tracking_number,
@@ -1006,7 +1008,7 @@ class DocumentController extends Controller
     {
         $user = auth()->user();
         $admin = $user?->isAdministrator() ?? false;
-        $draft = ! $document->legacy_needs_review && ! $document->is_finalized && strtolower((string) $document->status) === 'draft';
+        $draft = ! $document->is_archived && ! $document->legacy_needs_review && ! $document->is_finalized && strtolower((string) $document->status) === 'draft';
         $officeId = $user ? app(DocumentAccess::class)->currentOfficeId($user) : null;
         $originOffice = $officeId && (int) $document->office_id === (int) $officeId;
 
@@ -1095,6 +1097,7 @@ class DocumentController extends Controller
             'maxUploadSizeKb' => self::MAX_DOCUMENT_UPLOAD_KB,
             'approvedDocuments' => DocumentCreationDraft::query()
                 ->with('documentType:id,name')
+                ->whereNull('archived_at')
                 ->whereIn('status', ['approved', 'awaiting_verification', 'verified', 'registered'])
                 ->where('created_by', auth()->id())
                 ->latest('decision_at')

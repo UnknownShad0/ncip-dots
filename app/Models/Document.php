@@ -34,6 +34,7 @@ class Document extends Model
         'is_finalized',
         'received_at',
         'is_archived',
+        'archived_at',
         'remarks',
     ];
 
@@ -41,6 +42,7 @@ class Document extends Model
         'legacy_needs_review' => 'boolean',
         'received_at' => 'datetime',
         'is_archived' => 'boolean',
+        'archived_at' => 'datetime',
         'urgent' => 'boolean',
         'notify_by_email' => 'boolean',
         'is_finalized' => 'boolean',

@@ -23,11 +23,11 @@ class ArchivePaginationTest extends TestCase
         }
         Document::create(['title' => 'Active', 'tracking_number' => 'ACTIVE', 'created_by' => $admin->id, 'office_id' => $office->id]);
         $first = $this->actingAs($admin)->get('/archives')->assertInertia(fn (Assert $page) => $page
-            ->component('Archives/Index')->has('documents.data', 25)->where('documents.total', 30)
-            ->where('documents.current_page', 1)->where('documents.last_page', 2)
-            ->missing('documents.data.0.creator')->missing('documents.data.0.remarks'));
+            ->component('Archives/Index')->has('documents.data', 10)->where('documents.total', 30)
+            ->where('documents.current_page', 1)->where('documents.last_page', 3)
+            ->missing('documents.data.0.creator')->missing('documents.data.0.transactions'));
         $second = $this->get('/archives?page=2')->assertInertia(fn (Assert $page) => $page
-            ->has('documents.data', 5)->where('documents.current_page', 2));
+            ->has('documents.data', 10)->where('documents.current_page', 2));
         $ids = fn ($response) => array_column($response->viewData('page')['props']['documents']['data'], 'id');
         $this->assertSame([], array_intersect($ids($first), $ids($second)));
     }
@@ -68,7 +68,7 @@ class ArchivePaginationTest extends TestCase
         $next = $response->viewData('page')['props']['documents']['next_page_url'];
         $this->assertStringContainsString('office_id='.$a->id, $next);
         $this->assertStringContainsString('sort=bureau_desc', $next);
-        $this->get($next)->assertInertia(fn (Assert $page) => $page->has('documents.data', 1));
+        $this->get($next)->assertInertia(fn (Assert $page) => $page->has('documents.data', 10));
         $this->getJson('/archives?sort=invalid')->assertUnprocessable();
         $this->getJson('/archives?office_id=999999')->assertUnprocessable();
         $staff = User::factory()->create(['role_id' => 3, 'office_id' => $a->id]);

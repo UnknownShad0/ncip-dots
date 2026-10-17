@@ -8,9 +8,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class DocumentCreationDraft extends Model
 {
-    protected $fillable = ['document_type_id', 'created_by', 'approver_id', 'approver_office_id', 'decided_by', 'official_document_id', 'title', 'content', 'status', 'version_number', 'verified_file_path', 'verified_file_name', 'verified_by', 'verified_at', 'verification_notes', 'verification_result', 'submitted_at', 'decision_at', 'decision_remarks'];
+    use \Illuminate\Database\Eloquent\SoftDeletes;
 
-    protected $casts = ['content' => 'array', 'verified_at' => 'datetime', 'submitted_at' => 'datetime', 'decision_at' => 'datetime'];
+    protected $fillable = ['archived_at', 'document_type_id', 'created_by', 'approver_id', 'approver_office_id', 'decided_by', 'official_document_id', 'title', 'content', 'status', 'version_number', 'verified_file_path', 'verified_file_name', 'verified_by', 'verified_at', 'verification_notes', 'verification_result', 'submitted_at', 'decision_at', 'decision_remarks'];
+
+    protected $casts = ['archived_at' => 'datetime', 'content' => 'array', 'verified_at' => 'datetime', 'submitted_at' => 'datetime', 'decision_at' => 'datetime'];
 
     public function creator(): BelongsTo { return $this->belongsTo(User::class, 'created_by'); }
     public function approver(): BelongsTo { return $this->belongsTo(User::class, 'approver_id'); }

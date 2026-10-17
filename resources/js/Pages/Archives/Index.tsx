@@ -1,3 +1,4 @@
+import DocumentLifecycleAction from "@/Components/DocumentLifecycleAction";
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import DocumentDispositionPrint from '@/Components/DocumentDispositionPrint';
 import WorkspaceDialog from '@/Components/WorkspaceDialog';
@@ -10,6 +11,9 @@ type ArchiveDocument = {
     id: number;
     title: string;
     tracking_number: string;
+    archived_at?: string | null;
+    preview_url?: string;
+    can_restore?: boolean;
     tracking_url?: string | null;
     office?: { name: string; short_name: string | null } | null;
     office_name?: string;
@@ -51,7 +55,8 @@ type ArchivePage = {
     next_page_url: string | null;
 };
 
-export default function ArchivesIndex({ documents, canFilterOffices = false, offices = [], filters = { office_id: null, year: null, search: '', sort: 'newest' } }: {
+export default function ArchivesIndex({ source = 'tracking', documents, canFilterOffices = false, offices = [], filters = { office_id: null, year: null, search: '', sort: 'newest' } }: {
+    source?: 'tracking' | 'generation';
     documents?: ArchivePage;
     canFilterOffices?: boolean;
     offices?: { id: number; name: string }[];
@@ -64,7 +69,7 @@ export default function ArchivesIndex({ documents, canFilterOffices = false, off
     const [printError, setPrintError] = useState('');
     const [searchTerm, setSearchTerm] = useState(filters.search ?? '');
     const updateFilters = (officeId: string, year: string, sort: string, search = searchTerm) => router.get(route('archives.index'), {
-        ...(officeId ? { office_id: officeId } : {}), ...(year ? { year } : {}), ...(search.trim() ? { search: search.trim() } : {}), sort,
+        source, ...(officeId ? { office_id: officeId } : {}), ...(year ? { year } : {}), ...(search.trim() ? { search: search.trim() } : {}), sort,
     }, { preserveScroll: true, preserveState: true, replace: true, onStart: () => setUpdating(true), onFinish: () => setUpdating(false) });
     const rows = documents?.data ?? [];
 
@@ -142,14 +147,22 @@ export default function ArchivesIndex({ documents, canFilterOffices = false, off
                 <p className="text-sm text-muted">Browse archived documents.</p>
 
                 <section aria-busy={updating} className="rounded-xl border border-border bg-surface p-5">
+                    <div className="mb-5 flex gap-2 border-b border-border" role="tablist" aria-label="Archive source">
+                        {(['tracking', 'generation'] as const).map(value => (
+                            <Link key={value} href={route('archives.index', { source: value })} role="tab" aria-selected={source === value}
+                                className={`rounded-t-lg border border-b-0 px-4 py-2.5 text-sm font-semibold ${source === value ? 'border-border bg-background text-primary' : 'border-transparent text-muted hover:bg-background'}`}>
+                                {value === 'tracking' ? 'Document Tracking' : 'Document Generation'}
+                            </Link>
+                        ))}
+                    </div>
                     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                         <h2 className="text-lg font-semibold text-foreground">
-                            Archived documents
+                            {source === 'generation' ? 'Archived generated documents' : 'Archived tracking documents'}
                             {documents && <span className="ml-1 text-sm font-normal text-muted">({documents.total})</span>}
                         </h2>
                         {documents && (
                             <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
-                                {canFilterOffices && (
+                                {source === 'tracking' && canFilterOffices && (
                                     <label>
                                         <span className="sr-only">Filter by originating bureau or office</span>
                                         <select
@@ -163,6 +176,7 @@ export default function ArchivesIndex({ documents, canFilterOffices = false, off
                                         </select>
                                     </label>
                                 )}
+                                {source === 'tracking' && <>
                                 <label>
                                     <span className="sr-only">Filter by year</span>
                                     <select
@@ -189,11 +203,12 @@ export default function ArchivesIndex({ documents, canFilterOffices = false, off
                                         <option value="bureau_desc">Bureau / office: Z–A</option>
                                     </select>
                                 </label>
+                                </>}
                                 <form onSubmit={event => { event.preventDefault(); updateFilters(String(filters.office_id ?? ''), String(filters.year ?? ''), filters.sort); }} className="flex min-w-0 gap-2">
                                     <label className="relative min-w-0 flex-1 sm:flex-none">
-                                        <span className="sr-only">Search title or tracking number by prefix</span>
+                                        <span className="sr-only">Search archived documents</span>
                                         <Search size={15} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-                                        <input type="search" aria-label="Search title or tracking number by prefix" value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Title or tracking no." maxLength={100} className="h-11 w-full rounded-lg border-border pl-9 text-sm sm:w-56" />
+                                        <input type="search" aria-label="Search archived documents" value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder={source === 'generation' ? "Title or document type" : "Title or tracking no."} maxLength={100} className="h-11 w-full rounded-lg border-border pl-9 text-sm sm:w-56" />
                                     </label>
                                     <button type="submit" className="inline-flex h-11 shrink-0 items-center justify-center rounded-lg border border-border bg-background px-3 text-sm font-medium text-foreground hover:bg-secondary">Search</button>
                                 </form>
@@ -215,14 +230,18 @@ export default function ArchivesIndex({ documents, canFilterOffices = false, off
                                             {document.title.length > 72 ? `${document.title.slice(0, 72)}…` : document.title}
                                         </h3>
                                         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
-                                            <span className="select-all font-mono text-xs">{document.tracking_number || 'No tracking number'}</span>
-                                            <span>{document.office?.name ?? 'Unassigned'}</span>
-                                            <span>{document.created_at || 'Date not recorded'}</span>
+                                            {source === 'tracking' ? <>
+                                                <span className="select-all font-mono text-xs">{document.tracking_number || 'No tracking number'}</span>
+                                                <span>{document.office?.name ?? 'Unassigned'}</span>
+                                            </> : <span>{document.document_type || 'Generated document'}</span>}
+                                            <span>{document.archived_at ? `Archived ${new Date(document.archived_at).toLocaleString()}` : 'Archive date not recorded'}</span>
                                         </div>
                                     </div>
                                     <div className="flex shrink-0 items-center gap-2">
                                         <span className="rounded-md bg-violet-100 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-violet-700">{(document.status || 'archived').replace(/[_-]+/g, ' ')}</span>
-                                        <button type="button" aria-label="View document" title="View document" onClick={() => openDocumentDetails(document)} className="rounded-md bg-slate-100 p-2 text-foreground hover:bg-slate-200"><Eye size={15} aria-hidden="true" /></button>
+                                        {document.can_restore && <DocumentLifecycleAction action="restore" iconOnly title={document.title}
+                                            url={route(source === 'generation' ? 'document-creation.restore' : 'archives.restore', document.id)} />}
+                                        {source === 'generation' ? <a href={document.preview_url} target="_blank" rel="noopener noreferrer" title="View / download PDF" aria-label={`View PDF: ${document.title}`} className="rounded-md bg-slate-100 p-2 text-foreground hover:bg-slate-200"><Eye size={15} aria-hidden="true" /></a> : <button type="button" aria-label="View document" title="View document" onClick={() => openDocumentDetails(document)} className="rounded-md bg-slate-100 p-2 text-foreground hover:bg-slate-200"><Eye size={15} aria-hidden="true" /></button>}
                                         {document.is_finalized && <button type="button" aria-label="Print disposition form" title="Print disposition form" disabled={printLoadingId === document.id} onClick={() => printDisposition(document)} className="rounded-md bg-indigo-50 p-2 text-indigo-700 hover:bg-indigo-100 disabled:cursor-wait disabled:opacity-60">{printLoadingId === document.id ? <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Printer size={15} aria-hidden="true" />}</button>}
                                     </div>
                                 </article>

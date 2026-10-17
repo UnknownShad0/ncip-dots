@@ -84,7 +84,7 @@ class DashboardController extends Controller
             'awaiting_my_approval' => $approvalCountQuery->count(),
             'my_submissions_awaiting_approval' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'pending_approval')->count(),
             'returned_for_revision' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'revision_requested')->count(),
-            'awaiting_verification' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'awaiting_verification')->count(),
+            'awaiting_verification' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'awaiting_verification')->whereNull('archived_at')->count(),
         ], $summaryStats);
 
         $analyticsOfficeId = $canFilterCharts ? $selectedChartOfficeId : $officeId;

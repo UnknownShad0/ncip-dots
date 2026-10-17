@@ -44,6 +44,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     })->name('approved-documents.index');
     Route::post('/document-creation', [DocumentCreationController::class, 'store'])->name('document-creation.store');
     Route::post('/document-creation/submit-current', [DocumentCreationController::class, 'submitCurrent'])->name('document-creation.submit-current');
+    Route::delete('/document-creation/{draft}', [DocumentCreationController::class, 'destroy'])->name('document-creation.destroy');
+    Route::post('/document-creation/{draft}/archive', [DocumentCreationController::class, 'archive'])->name('document-creation.archive');
+    Route::post('/document-creation/{draft}/restore', [DocumentCreationController::class, 'restore'])->name('document-creation.restore');
+    Route::post('/archives/{document}/restore', [ArchiveController::class, 'restore'])->name('archives.restore');
     Route::put('/document-creation/{draft}', [DocumentCreationController::class, 'update'])->name('document-creation.update');
     Route::post('/document-creation/{draft}/submit', [DocumentCreationController::class, 'submit'])->name('document-creation.submit');
     Route::post('/document-creation/{draft}/decision', [DocumentCreationController::class, 'decide'])->name('document-creation.decision');

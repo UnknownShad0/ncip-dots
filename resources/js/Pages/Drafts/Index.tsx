@@ -1,3 +1,4 @@
+import DocumentLifecycleAction from "@/Components/DocumentLifecycleAction";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import { Head, Link, router } from "@inertiajs/react";
 import { FileText, Pencil, Search } from "lucide-react";
@@ -142,26 +143,19 @@ export default function Index({
                                             Draft
                                         </span>
                                     </div>
-                                    {draft.source === "generation" ? (
+                                    <div className="flex items-center gap-2">
                                         <Link
-                                            href={route("document-creation.index", { edit_draft_id: draft.id })}
-                                            className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-primary hover:bg-secondary"
+                                            href={draft.source === "generation"
+                                                ? route("document-creation.index", { edit_draft_id: draft.id })
+                                                : route("documents.index", { status: "all", edit_draft_id: draft.id })}
+                                            title="Edit draft" aria-label={`Edit draft: ${draft.title}`}
+                                            className="inline-flex rounded-lg border border-border p-2.5 text-primary hover:bg-secondary"
                                         >
                                             <Pencil size={16} aria-hidden="true" />
-                                            Continue editing
                                         </Link>
-                                    ) : (
-                                        <Link
-                                            href={route("documents.index", {
-                                                status: "all",
-                                                edit_draft_id: draft.id,
-                                            })}
-                                            className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-primary hover:bg-secondary"
-                                        >
-                                            <Pencil size={16} aria-hidden="true" />
-                                            Continue editing
-                                        </Link>
-                                    )}
+                                        <DocumentLifecycleAction action="delete" iconOnly title={draft.title}
+                                            url={route(draft.source === "generation" ? "document-creation.destroy" : "documents.destroy", draft.id)} />
+                                    </div>
                                 </article>
                             ))}
                         </div>

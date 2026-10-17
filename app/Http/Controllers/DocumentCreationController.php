@@ -57,7 +57,8 @@ class DocumentCreationController extends Controller
         if ($approvedOnly) {
             $approvedQuery = DocumentCreationDraft::query()->with($relations)
                 ->where('created_by', $user->id)
-                ->whereIn('status', $approvedStatuses);
+                ->whereIn('status', $approvedStatuses)
+                ->whereNull('archived_at');
 
             if (in_array($approvedStatus, $approvedStatuses, true)) {
                 $approvedQuery->where('status', $approvedStatus);
@@ -396,8 +397,48 @@ class DocumentCreationController extends Controller
         return back()->with('success', 'Approval decision recorded.');
     }
 
+    public function destroy(Request $request, DocumentCreationDraft $draft)
+    {
+        DB::transaction(function () use ($request, $draft) {
+            $draft = DocumentCreationDraft::query()->lockForUpdate()->findOrFail($draft->id);
+            abort_unless((int) $draft->created_by === (int) $request->user()->id, 403);
+            abort_unless($draft->status === 'draft' && ! $draft->archived_at, 403);
+            $draft->delete();
+        });
+
+        return back()->with('success', 'Draft deleted successfully.');
+    }
+
+    public function archive(Request $request, DocumentCreationDraft $draft)
+    {
+        return $this->setArchived($request, $draft, true);
+    }
+
+    public function restore(Request $request, DocumentCreationDraft $draft)
+    {
+        return $this->setArchived($request, $draft, false);
+    }
+
+    private function setArchived(Request $request, DocumentCreationDraft $draft, bool $archived)
+    {
+        DB::transaction(function () use ($request, $draft, $archived) {
+            $draft = DocumentCreationDraft::query()->lockForUpdate()->findOrFail($draft->id);
+            abort_unless((int) $draft->created_by === (int) $request->user()->id, 403);
+            abort_unless(in_array($draft->status, ['approved', 'awaiting_verification', 'verified', 'registered'], true), 403);
+            abort_unless((bool) $draft->archived_at !== $archived, 409);
+            $draft->update(['archived_at' => $archived ? now() : null]);
+            $draft->events()->create([
+                'user_id' => $request->user()->id,
+                'event' => $archived ? 'Archived' : 'Restored from archive',
+            ]);
+        });
+
+        return back()->with('success', $archived ? 'Document archived.' : 'Document restored to approved documents.');
+    }
+
     public function register(Request $request, DocumentCreationDraft $draft)
     {
+        abort_if($draft->archived_at, 403);
         abort_unless((int) $draft->created_by === (int) $request->user()->id, 403, 'Only the document creator can register an approved document.');
         abort_unless(in_array($draft->status, ['approved', 'awaiting_verification', 'verified'], true) && ! $draft->official_document_id, 403);
         $officeId = $request->user()->office_id;

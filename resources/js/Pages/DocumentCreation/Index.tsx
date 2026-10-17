@@ -1,3 +1,4 @@
+import DocumentLifecycleAction from "@/Components/DocumentLifecycleAction";
 import WorkspaceDialog from "@/Components/WorkspaceDialog";
 import WorkspaceAlert from "@/Components/WorkspaceAlert";
 import InfoTip from "@/Components/InfoTip";
@@ -255,8 +256,11 @@ function DraftListSection({
                                 {mode === "approved" && draft.created_by === currentUserId && ["approved", "awaiting_verification", "verified"].includes(draft.status) && !draft.official_document_id && (
                                     <button type="button" disabled={saving} onClick={() => onRegister?.(draft)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm text-white"><FileCheck2 size={16} aria-hidden="true" />Register in DOTS</button>
                                 )}
+                                {mode === "approved" && draft.created_by === currentUserId && (
+                                    <DocumentLifecycleAction action="archive" iconOnly title={draft.title} url={route("document-creation.archive", draft.id)} />
+                                )}
                                 {draft.official_document_id && (
-                                    <span className="rounded-lg bg-success-soft px-3 py-2 text-sm text-success">Registered in Documents</span>
+                                    <span title="Registered in Documents" role="img" aria-label="Registered in Documents" className="inline-flex items-center rounded-lg bg-success-soft p-2.5 text-success"><FileCheck2 size={16} aria-hidden="true" /></span>
                                 )}
                             </div>
                         </div>
