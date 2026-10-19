@@ -26,7 +26,10 @@ class DocumentFile extends Model
 
     public function downloadUrl(): ?string
     {
-        return $this->is_available === false ? null : \Illuminate\Support\Facades\Storage::disk('public')->url($this->file_path);
+        return $this->is_available === false ? null : route('documents.files.download', [
+            'document' => $this->document_id,
+            'file' => $this->id,
+        ], false);
     }
 
     public function document(): BelongsTo

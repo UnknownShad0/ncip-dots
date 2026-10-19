@@ -38,6 +38,21 @@ return [
             'report' => false,
         ],
 
+        'document_private' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private'),
+            'throw' => true,
+            'report' => false,
+        ],
+
+        // Read-only compatibility for attachments saved before private storage.
+        'document_legacy_public' => [
+            'driver' => 'local',
+            'root' => storage_path('app/public'),
+            'throw' => false,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
@@ -73,8 +88,7 @@ return [
     |
     */
 
-    'links' => [
-        public_path('storage') => storage_path('app/public'),
-    ],
+    // Document files are served through an authorized controller, never a public symlink.
+    'links' => [],
 
 ];

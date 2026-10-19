@@ -12,7 +12,7 @@ class PublicDocumentTrackingController extends Controller
         $document = Document::query()
             ->where('tracking_number', $trackingNumber)
             ->where('is_finalized', true)
-            ->with(['office:id,name', 'documentType:id,name', 'purposeType:id,name', 'trails.fromOffice:id,name', 'trails.toOffice:id,name', 'files'])
+            ->with(['office:id,name', 'documentType:id,name', 'purposeType:id,name', 'trails.fromOffice:id,name', 'trails.toOffice:id,name'])
             ->first();
 
         if ($document) {
@@ -31,12 +31,6 @@ class PublicDocumentTrackingController extends Controller
                         'from_office' => $trail->fromOffice?->name,
                         'to_office' => $trail->toOffice?->name,
                         'created_at' => $trail->created_at?->format('F j, Y g:i A'),
-                    ]),
-                    'files' => $document->files->sortBy('id')->values()->map(fn ($file) => [
-                        'name' => $file->original_name ?: $file->file_name,
-                        'type' => $file->type ?: 'original',
-                        'mime_type' => $file->mime_type,
-                        'url' => $file->downloadUrl(),
                     ]),
                 ],
             ]);

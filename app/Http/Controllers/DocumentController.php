@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
@@ -87,6 +88,36 @@ class DocumentController extends Controller
                 'created_at' => $trail->created_at?->format('F j Y h:i:s A'),
             ]),
             'created_by_name' => $document->creator?->name ?? '',
+        ]);
+    }
+
+    public function downloadFile(int $document, int $file)
+    {
+        $record = app(DocumentAccess::class)->scope(Document::query(), auth()->user())
+            ->whereKey($document)
+            ->firstOrFail();
+        $attachment = $record->files()->whereKey($file)->firstOrFail();
+        abort_if($attachment->is_available === false, 404);
+
+        $relativePath = str_replace('\\', '/', (string) $attachment->file_path);
+        abort_unless($relativePath !== ''
+            && ! str_starts_with($relativePath, '/')
+            && ! preg_match('/^[a-zA-Z]:/', $relativePath)
+            && ! in_array('..', explode('/', $relativePath), true), 404);
+
+        $disk = Storage::disk('document_private');
+        if (! $disk->exists($relativePath)) {
+            $disk = Storage::disk('document_legacy_public');
+        }
+        abort_unless($disk->exists($relativePath), 404);
+
+        $filename = basename((string) ($attachment->original_name ?: $attachment->file_name));
+        $filename = preg_replace('/[\\x00-\\x1F\\x7F]/u', '', $filename) ?: 'document';
+
+        return response()->download($disk->path($relativePath), $filename, [
+            'Content-Type' => 'application/octet-stream',
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 
@@ -196,7 +227,7 @@ class DocumentController extends Controller
                 return [
                     'id' => $document->docId,
                     'tracking_number' => $document->trackingNo ?? '',
-                    'tracking_url' => $document->trackingNo ? route('documents.track', ['trackingNumber' => $document->trackingNo]) : null,
+                    'tracking_url' => $document->trackingNo ? URL::signedRoute('documents.track', ['trackingNumber' => $document->trackingNo]) : null,
                     'title' => $document->title ?? '',
                     'created_at' => $document->dateCreated?->format('F j Y h:i:s A'),
                     'created_at_timestamp' => $document->dateCreated?->timestamp,
@@ -265,7 +296,7 @@ class DocumentController extends Controller
                 return [
                     'id' => $document->id,
                     'tracking_number' => $document->tracking_number ?? '',
-                    'tracking_url' => $document->tracking_number ? route('documents.track', ['trackingNumber' => $document->tracking_number]) : null,
+                    'tracking_url' => $document->tracking_number ? URL::signedRoute('documents.track', ['trackingNumber' => $document->tracking_number]) : null,
                     'title' => $document->title ?? '',
                     'status' => $document->is_archived ? 'archived' : $this->workflowStatus($document->latestTrail?->status ?? $document->status),
                     'needs_review' => (bool) $document->legacy_needs_review,
@@ -484,7 +515,7 @@ class DocumentController extends Controller
                 return [
                     'id' => $document->id,
                     'tracking_number' => $document->tracking_number ?? '',
-                    'tracking_url' => $document->tracking_number ? route('documents.track', ['trackingNumber' => $document->tracking_number]) : null,
+                    'tracking_url' => $document->tracking_number ? URL::signedRoute('documents.track', ['trackingNumber' => $document->tracking_number]) : null,
                     'title' => $document->title ?? '',
                     'status' => $document->is_archived ? 'archived' : $this->workflowStatus($latest?->status ?? $document->status),
                     'needs_review' => (bool) $document->legacy_needs_review,
@@ -686,13 +717,13 @@ class DocumentController extends Controller
         } elseif ($approvedDraft) {
             $path = 'documents/'.$document->tracking_number.'.pdf';
             $pdf = $this->approvedDraftPdf($approvedDraft);
-            Storage::disk('public')->put($path, $pdf->output());
+            Storage::disk('document_private')->put($path, $pdf->output());
             $document->files()->create([
                 'file_name' => basename($path),
                 'original_name' => $document->title.'.pdf',
                 'file_path' => $path,
                 'mime_type' => 'application/pdf',
-                'size_bytes' => Storage::disk('public')->size($path),
+                'size_bytes' => Storage::disk('document_private')->size($path),
                 'uploaded_by' => auth()->id(),
                 'type' => 'original',
                 'document_trail_id' => $initialTrail?->id,
@@ -849,7 +880,7 @@ class DocumentController extends Controller
                 if ($approvedDraft) {
                     $pdf = $this->approvedDraftPdf($approvedDraft)->output();
                     $approvedPath = 'documents/versions/'.Str::uuid().'.pdf';
-                    if (! Storage::disk('public')->put($approvedPath, $pdf)) {
+                    if (! Storage::disk('document_private')->put($approvedPath, $pdf)) {
                         throw new \RuntimeException('Could not save the approved document version.');
                     }
                     $document->files()->create([
@@ -885,7 +916,7 @@ class DocumentController extends Controller
 
         } catch (\Throwable $exception) {
             if ($approvedPath) {
-                Storage::disk('public')->delete($approvedPath);
+                Storage::disk('document_private')->delete($approvedPath);
             }
             throw $exception;
         }
@@ -1243,7 +1274,7 @@ class DocumentController extends Controller
             Str::slug($username) ?: 'user',
             now()->format('Ymd_His'),
         ]);
-        $path = $file->store($directory, 'public');
+        $path = $file->store($directory, 'document_private');
 
         $storedFile = $document->files()->create([
             'document_trail_id' => $trail?->id,
