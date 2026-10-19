@@ -33,6 +33,7 @@ type Draft = {
     created_by: number;
     approver_id?: number;
     approver_office_id?: number;
+    notify_approvers_by_email?: boolean;
     approver_office?: { name: string; short_name?: string | null };
     decision_maker?: { name: string; short_name?: string };
     can_decide?: boolean;
@@ -325,6 +326,7 @@ export default function Index({
     const [content, setContent] = useState<Record<string, any>>({ ...blank, footer_office_name: footerOfficeName, ...(draftToEdit?.content ?? {}) });
     const [savedTemplate, setSavedTemplate] = useState<{ typeId: string; template?: DocumentTemplate } | null>(draftToEdit ? { typeId: String(draftToEdit.document_type_id), template: draftToEdit.content.template } : null);
     const [approverOfficeId, setApproverOfficeId] = useState(String(draftToEdit?.approver_office_id ?? ""));
+    const [notifyApproversByEmail, setNotifyApproversByEmail] = useState(Boolean(draftToEdit?.notify_approvers_by_email));
     const [previewOpen, setPreviewOpen] = useState(false);
     const [submissionTarget, setSubmissionTarget] = useState<{
         id: number | null;
@@ -370,6 +372,7 @@ export default function Index({
         setTypeId(String(draftToEdit.document_type_id));
         setContent({ ...blank, ...draftToEdit.content });
         setApproverOfficeId(String(draftToEdit.approver_office_id ?? ""));
+        setNotifyApproversByEmail(Boolean(draftToEdit.notify_approvers_by_email));
         setDirty(false);
         setErrors({});
         setPreviewOpen(false);
@@ -427,6 +430,7 @@ export default function Index({
         setTypeId("");
         setContent({ ...blank, footer_office_name: footerOfficeName });
         setApproverOfficeId("");
+        setNotifyApproversByEmail(false);
         setDirty(false);
         setErrors({});
     };
@@ -436,6 +440,7 @@ export default function Index({
         setTypeId(String(draft.document_type_id));
         setContent({ ...blank, ...draft.content });
         setApproverOfficeId(String(draft.approver_office_id ?? ""));
+        setNotifyApproversByEmail(Boolean(draft.notify_approvers_by_email));
         setDirty(false);
         setErrors({});
     };
@@ -480,6 +485,7 @@ export default function Index({
     const openSubmissionDialog = (
         target: { id: number | null; title: string; fromEditor: boolean },
         selectedOfficeId?: number | string | null,
+        notifyApprovers = false,
     ) => {
         if (!approverOffices.length) {
             setNotice("There are no available approval offices. Contact an administrator.");
@@ -488,6 +494,7 @@ export default function Index({
         setNotice("");
         setSubmissionTarget(target);
         setSubmissionOfficeId(String(selectedOfficeId ?? ""));
+        setNotifyApproversByEmail(Boolean(notifyApprovers));
     };
     const requestDraftSubmission = (draft: Draft) => {
         if (dirty) {
@@ -497,6 +504,7 @@ export default function Index({
         openSubmissionDialog(
             { id: draft.id, title: draft.title, fromEditor: false },
             draft.approver_office_id,
+            Boolean(draft.notify_approvers_by_email),
         );
     };
     const submitForApproval = () => {
@@ -511,7 +519,11 @@ export default function Index({
             return;
         }
         setErrors({});
-        openSubmissionDialog({ id: editing, title: content.subject || "New document", fromEditor: true }, approverOfficeId);
+        openSubmissionDialog(
+            { id: editing, title: content.subject || "New document", fromEditor: true },
+            approverOfficeId,
+            notifyApproversByEmail,
+        );
     };
     const submitToApprovalOffice = () => {
         if (!submissionTarget || !submissionOfficeId) return;
@@ -525,8 +537,12 @@ export default function Index({
                     document_type_id: typeId,
                     content,
                     approver_office_id: submissionOfficeId,
+                    notify_approvers_by_email: notifyApproversByEmail,
                 }
-                : { approver_office_id: submissionOfficeId },
+                : {
+                    approver_office_id: submissionOfficeId,
+                    notify_approvers_by_email: notifyApproversByEmail,
+                },
             () => {
                 if (target.fromEditor || editing === target.id) startNew();
                 setSuccessAlert({
@@ -932,6 +948,20 @@ export default function Index({
                                             </option>
                                         ))}
                                     </select>
+                                </label>
+                                <label className="flex items-start gap-2 text-sm text-foreground">
+                                    <input
+                                        type="checkbox"
+                                        checked={notifyApproversByEmail}
+                                        onChange={(event) => setNotifyApproversByEmail(event.target.checked)}
+                                        className="mt-0.5 rounded border-border"
+                                    />
+                                    <span>
+                                        Email the approvers
+                                        <span className="mt-0.5 block text-xs text-muted">
+                                            Send an approval notification to active admins in the selected office.
+                                        </span>
+                                    </span>
                                 </label>
                                 <p className="text-xs text-muted">
                                     {submissionTarget.fromEditor

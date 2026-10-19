@@ -4,13 +4,28 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureAdministrator
 {
     public function handle(Request $request, Closure $next): Response
     {
-        abort_unless($request->user()?->canManageLibraries(), 403);
+        $user = $request->user();
+
+        if (! $user?->canManageLibraries()) {
+            if (str_starts_with($request->path(), 'admin/gmail')) {
+                Log::warning('Gmail integration access was denied by administrator middleware.', [
+                    'path' => $request->path(),
+                    'route' => $request->route()?->getName(),
+                    'user_id' => $user?->id,
+                    'role_id' => $user?->role_id,
+                    'role' => $user?->role,
+                ]);
+            }
+
+            abort(403);
+        }
 
         return $next($request);
     }

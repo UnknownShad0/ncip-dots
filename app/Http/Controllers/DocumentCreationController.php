@@ -4,12 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Models\Document;
 use App\Models\DocumentCreationDraft;
+use App\Models\GmailConnection;
 use App\Models\DocumentCreationVersion;
 use App\Models\DocumentType;
 use App\Models\Office;
 use App\Models\User;
 use App\Services\AuditTrailWriter;
 use App\Services\DocumentTemplates;
+use App\Jobs\SendDocumentStatusEmail;
+use App\Jobs\SendDocumentApprovalRequestEmail;
 use App\Services\DocumentPdf;
 use App\Services\DocumentMetadata;
 use App\Services\RichDocumentContent;
@@ -18,6 +21,7 @@ use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Support\Arr;
 use Illuminate\Validation\ValidationException;
@@ -114,7 +118,7 @@ class DocumentCreationController extends Controller
                 ->first();
             abort_unless($draftToEdit, 404);
             $draftToEdit = $draftToEdit->only([
-                'id', 'title', 'content', 'document_type_id', 'version_number', 'created_by', 'approver_office_id', 'status',
+                'id', 'title', 'content', 'document_type_id', 'version_number', 'created_by', 'approver_office_id', 'notify_approvers_by_email', 'status',
             ]);
             $draftToEdit['content'] = app(DocumentTemplates::class)->presentContent(DocumentMetadata::present($draftToEdit['content'], $user));
         }
@@ -290,6 +294,7 @@ class DocumentCreationController extends Controller
         $validated = $request->validate([
             'draft_id' => ['nullable', 'integer'],
             'approver_office_id' => ['required', 'integer', 'exists:offices,id'],
+            'notify_approvers_by_email' => ['required', 'boolean'],
         ]);
         $approverOffice = $this->approverOffices()->first(
             fn (Office $office) => (int) $office->id === (int) $validated['approver_office_id'],
@@ -304,7 +309,11 @@ class DocumentCreationController extends Controller
                     ->whereIn('status', ['draft', 'revision_requested'])
                     ->lockForUpdate()
                     ->firstOrFail();
-                $draft->update([...$data, 'status' => 'draft']);
+                $draft->update([
+                    ...$data,
+                    'notify_approvers_by_email' => $validated['notify_approvers_by_email'],
+                    'status' => 'draft',
+                ]);
                 $draft->events()->create([
                     'user_id' => $request->user()->id,
                     'event' => 'Draft updated',
@@ -316,6 +325,7 @@ class DocumentCreationController extends Controller
                 $draft = DocumentCreationDraft::create([
                     ...$data,
                     'created_by' => $request->user()->id,
+                    'notify_approvers_by_email' => $validated['notify_approvers_by_email'],
                     'status' => 'draft',
                 ]);
                 $draft->events()->create([
@@ -339,9 +349,13 @@ class DocumentCreationController extends Controller
     public function submit(Request $request, DocumentCreationDraft $draft)
     {
         abort_unless((int) $draft->created_by === (int) $request->user()->id && in_array($draft->status, ['draft', 'revision_requested'], true), 403);
-        $data = $request->validate(['approver_office_id' => ['required', 'integer', 'exists:offices,id']]);
+        $data = $request->validate([
+            'approver_office_id' => ['required', 'integer', 'exists:offices,id'],
+            'notify_approvers_by_email' => ['required', 'boolean'],
+        ]);
         $approverOffice = $this->approverOffices()->first(fn (Office $office) => (int) $office->id === (int) $data['approver_office_id']);
         abort_unless($approverOffice, 422, 'Choose an office with an active admin.');
+        $draft->update(['notify_approvers_by_email' => $data['notify_approvers_by_email']]);
         $this->submitDraftVersion($request, $draft, $approverOffice);
 
         return back()->with('success', 'Document version submitted for approval.');
@@ -372,6 +386,7 @@ class DocumentCreationController extends Controller
             'approver_office_id' => $approverOffice->id,
             'approver_office_name' => $approverOffice->name,
         ]);
+        $this->queueApprovalRequestEmails($draft, $approverOffice, $request->user());
     }
 
     public function decide(Request $request, DocumentCreationDraft $draft)
@@ -393,6 +408,7 @@ class DocumentCreationController extends Controller
             'version' => $draft->version_number,
             'remarks' => $data['remarks'] ?? null,
         ]);
+        $this->queueStatusEmail($draft, $nextStatus, $data['remarks'] ?? null);
 
         return back()->with('success', 'Approval decision recorded.');
     }
@@ -465,8 +481,106 @@ class DocumentCreationController extends Controller
             'title' => $document->title,
             'draft_id' => $draft->id,
         ]);
+        $this->queueStatusEmail($draft, 'registered', null, $document->tracking_number);
 
         return back()->with('success', 'Registered as '.$document->tracking_number.'.');
+    }
+
+    private function queueStatusEmail(DocumentCreationDraft $draft, string $status, ?string $remarks, ?string $trackingNumber = null): void
+    {
+        $creator = $draft->creator;
+        $reason = match (true) {
+            ! $creator => 'creator_missing',
+            ! filter_var($creator->email, FILTER_VALIDATE_EMAIL) => 'creator_email_invalid',
+            ! GmailConnection::query()->exists() => 'sender_not_connected',
+            default => null,
+        };
+
+        if ($reason !== null) {
+            Log::notice('Document status email was not queued.', [
+                'draft_id' => $draft->id,
+                'status' => $status,
+                'reason' => $reason,
+            ]);
+
+            return;
+        }
+
+        SendDocumentStatusEmail::dispatch(
+            recipientEmail: $creator->email,
+            recipientName: $creator->name,
+            documentTitle: $draft->title,
+            status: $status,
+            versionNumber: (int) $draft->version_number,
+            remarks: $remarks,
+            trackingNumber: $trackingNumber,
+        )->afterCommit();
+
+        Log::info('Document status email was queued.', [
+            'draft_id' => $draft->id,
+            'status' => $status,
+            'creator_id' => $creator->id,
+        ]);
+    }
+
+    private function queueApprovalRequestEmails(DocumentCreationDraft $draft, Office $approverOffice, User $submitter): void
+    {
+        if (! $draft->notify_approvers_by_email) {
+            Log::info('Document approval request emails were not queued.', [
+                'draft_id' => $draft->id,
+                'approver_office_id' => $approverOffice->id,
+                'reason' => 'disabled_by_submitter',
+            ]);
+
+            return;
+        }
+
+        if (! GmailConnection::query()->exists()) {
+            Log::notice('Document approval request emails were not queued.', [
+                'draft_id' => $draft->id,
+                'approver_office_id' => $approverOffice->id,
+                'reason' => 'sender_not_connected',
+            ]);
+
+            return;
+        }
+
+        $approvers = User::query()
+            ->with(['office', 'officeByCode'])
+            ->where('is_active', true)
+            ->get()
+            ->filter(fn (User $approver) => (int) $approver->id !== (int) $submitter->id
+                && $approver->isAdministrator()
+                && (int) ($this->userOffice($approver)?->id ?? 0) === (int) $approverOffice->id)
+            ->values();
+        $recipients = $approvers->filter(fn (User $approver) => filter_var($approver->email, FILTER_VALIDATE_EMAIL))->values();
+
+        if ($recipients->isEmpty()) {
+            Log::notice('Document approval request emails were not queued.', [
+                'draft_id' => $draft->id,
+                'approver_office_id' => $approverOffice->id,
+                'matching_approvers' => $approvers->count(),
+                'reason' => 'no_valid_approver_email',
+            ]);
+
+            return;
+        }
+
+        $recipients->each(function (User $approver) use ($draft, $submitter): void {
+            SendDocumentApprovalRequestEmail::dispatch(
+                recipientEmail: $approver->email,
+                recipientName: $approver->name,
+                submitterName: $submitter->name,
+                documentTitle: $draft->title,
+                versionNumber: (int) $draft->version_number,
+            )->afterCommit();
+        });
+
+        Log::info('Document approval request emails were queued.', [
+            'draft_id' => $draft->id,
+            'approver_office_id' => $approverOffice->id,
+            'recipient_count' => $recipients->count(),
+        ]);
     }
 
     public function preview(Request $request)

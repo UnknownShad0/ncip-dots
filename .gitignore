@@ -12,6 +12,7 @@
 /.vscode
 /.zed
 /auth.json
+client_secret_*.json
 /bootstrap/ssr
 /node_modules
 /public/build

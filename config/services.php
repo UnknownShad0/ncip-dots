@@ -74,4 +74,10 @@ return [
         'score_threshold' => (float) env('RECAPTCHA_SCORE_THRESHOLD', 0.5),
     ],
 
+    'gmail' => [
+        'client_id' => env('GMAIL_CLIENT_ID'),
+        'client_secret' => env('GMAIL_CLIENT_SECRET'),
+        'redirect_uri' => env('GMAIL_REDIRECT_URI'),
+    ],
+
 ];

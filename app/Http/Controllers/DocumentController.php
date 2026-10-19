@@ -7,9 +7,11 @@ use App\Models\Document;
 use App\Models\DocumentCreationDraft;
 use App\Models\DocumentTrail;
 use App\Models\DocumentType;
+use App\Models\GmailConnection;
 use App\Models\Office;
 use App\Models\PurposeType;
 use App\Models\User;
+use App\Jobs\SendDocumentTrackingReceivedEmail;
 use App\Services\AuditTrailWriter;
 use App\Services\DocumentAccess;
 use App\Services\DocumentPdf;
@@ -17,7 +19,7 @@ use App\Services\RenderedDocumentPdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -949,14 +951,34 @@ class DocumentController extends Controller
             return $document;
         });
 
-        if ($document->notify_by_email && filled($document->creator?->email)) {
-            try {
-                Mail::raw(
-                    sprintf('Your document %s (%s) was received by %s.', $document->title, $document->tracking_number, $user->office?->name ?? 'its destination office'),
-                    fn ($message) => $message->to($document->creator->email)->subject('Document received: '.$document->tracking_number)
-                );
-            } catch (\Throwable $exception) {
-                report($exception);
+        if ($document->notify_by_email) {
+            $creator = $document->creator;
+            $reason = match (true) {
+                ! $creator => 'creator_missing',
+                ! filter_var($creator->email, FILTER_VALIDATE_EMAIL) => 'creator_email_invalid',
+                ! GmailConnection::query()->exists() => 'sender_not_connected',
+                default => null,
+            };
+
+            if ($reason !== null) {
+                Log::notice('Document tracking email was not queued.', [
+                    'document_id' => $document->id,
+                    'reason' => $reason,
+                ]);
+            } else {
+                SendDocumentTrackingReceivedEmail::dispatch(
+                    recipientEmail: $creator->email,
+                    recipientName: $creator->name,
+                    documentTitle: $document->title,
+                    trackingNumber: $document->tracking_number,
+                    receivingOfficeName: $user->office?->name ?? 'its destination office',
+                )->afterCommit();
+
+                Log::info('Document tracking email was queued.', [
+                    'document_id' => $document->id,
+                    'tracking_number' => $document->tracking_number,
+                    'creator_id' => $creator->id,
+                ]);
             }
         }
 

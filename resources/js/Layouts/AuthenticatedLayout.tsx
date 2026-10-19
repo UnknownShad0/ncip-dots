@@ -2,7 +2,7 @@ import { connectedSystems } from '@/Components/ConnectedSystemNavigation';
 import { libraryLinks } from '@/Components/LibraryNavigation';
 import { Head, Link, usePage } from '@inertiajs/react';
 import { Dialog, DialogPanel, DialogTitle, Menu as DropdownMenu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
-import { Archive, Bell, Building2, ChevronDown, ClipboardCheck, Clock3, Database, FileCheck2, FileClock, FilePlus2, FileText, Folder, History, Inbox, LayoutGrid, LogOut, Menu, UserRound, X, BookOpen, PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
+import { Archive, Bell, Building2, ChevronDown, ClipboardCheck, Clock3, Database, FileCheck2, FileClock, FilePlus2, FileText, Folder, History, Inbox, LayoutGrid, LogOut, Mail, Menu, UserRound, X, BookOpen, PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
 import { PropsWithChildren, ReactNode, useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import PrivacyNoticeModal from '@/Components/PrivacyNoticeModal';
@@ -24,6 +24,7 @@ const groups = [
     { label: 'Administration', items: [
         { name: 'User accounts', href: 'user-accounts.index', icon: UserRound },
         { name: 'Libraries', href: 'libraries.index', icon: BookOpen },
+        { name: 'Gmail notifications', href: 'gmail-integration.index', icon: Mail },
         { name: 'Audit trails', href: 'audit-trail.index', icon: History },
     ] },
 ];
@@ -57,7 +58,7 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
         <nav aria-label="Main navigation" className="flex-1 space-y-5 overflow-y-auto px-3 py-5">
             {groups.map((group, index) => <section key={index}>
                 {group.label && (compact ? <div className="mx-3 mb-3 border-t border-border" /> : <h2 className="mb-2 px-3 text-[14px] font-semibold uppercase tracking-wider text-muted">{group.label === 'Other information systems' ? 'Connected systems' : group.label}</h2>)}
-                <div className="space-y-1.5">{group.items.filter((item) => !['libraries.index', 'user-accounts.index'].includes(item.href) || canManageLibraries === true).map(({name, href, countKey, icon: Icon}) => {
+                <div className="space-y-1.5">{group.items.filter((item) => !['libraries.index', 'user-accounts.index', 'gmail-integration.index'].includes(item.href) || canManageLibraries === true).map(({name, href, countKey, icon: Icon}) => {
                     const active = href === 'libraries.index'
                         ? route().current('libraries.*') || route().current('setup.index') || libraryLinks.some((item) => route().current(item.href))
                         : href === 'connected-systems.index' ? route().current(href) || connectedSystems.some((item) => route().current(item.href)) : route().current(href);

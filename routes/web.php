@@ -10,6 +10,7 @@ use App\Http\Controllers\DocumentFontController;
 use App\Http\Controllers\DocumentTypeController;
 use App\Http\Controllers\DraftsController;
 use App\Http\Controllers\IntegrationController;
+use App\Http\Controllers\GmailIntegrationController;
 use App\Http\Controllers\IplumaController;
 use App\Http\Controllers\OfficeController;
 use App\Http\Controllers\ProfileController;
@@ -65,6 +66,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/audit-trail', [AuditTrailController::class, 'index'])->name('audit-trail.index');
 
     Route::middleware('administrator')->group(function () {
+        Route::get('/admin/gmail', [GmailIntegrationController::class, 'index'])->name('gmail-integration.index');
+        Route::get('/admin/gmail/connect', [GmailIntegrationController::class, 'connect'])->name('gmail-integration.connect');
+        Route::get('/admin/gmail/callback', [GmailIntegrationController::class, 'callback'])->name('gmail-integration.callback');
+        Route::post('/admin/gmail/disconnect', [GmailIntegrationController::class, 'disconnect'])->name('gmail-integration.disconnect');
+
         Route::get('/setup', [SetupController::class, 'index'])->name('setup.index');
         Route::get('/libraries', [SetupController::class, 'libraries'])->name('libraries.index');
         Route::get('/libraries/agencies', [SetupController::class, 'agencies'])->name('libraries.agencies');
