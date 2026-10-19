@@ -5,25 +5,203 @@ import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { Eye, EyeOff } from 'lucide-react';
-import { FormEventHandler, useState } from 'react';
+import { FormEventHandler, useEffect, useRef, useState } from 'react';
+
+type RecaptchaApi = {
+    ready: (callback: () => void) => void;
+    execute: (siteKey: string, options: { action: string }) => Promise<string>;
+    render: (
+        container: HTMLElement,
+        options: {
+            sitekey: string;
+            size?: 'invisible' | 'normal' | 'compact';
+            callback?: (token: string) => void;
+            'expired-callback'?: () => void;
+            'error-callback'?: () => void;
+        },
+    ) => number;
+    reset: (widgetId?: number) => void;
+};
+
+type LoginValidationErrors = Partial<Record<'recaptcha' | 'recaptcha_v2', string>>;
+
+declare global {
+    interface Window {
+        grecaptcha?: RecaptchaApi;
+    }
+}
+
+let recaptchaApiPromise: Promise<RecaptchaApi> | null = null;
+
+function loadRecaptchaApi(siteKey: string): Promise<RecaptchaApi> {
+    const waitUntilReady = (api: RecaptchaApi) =>
+        new Promise<RecaptchaApi>((resolve) => api.ready(() => resolve(api)));
+
+    if (window.grecaptcha) {
+        return waitUntilReady(window.grecaptcha);
+    }
+
+    if (!recaptchaApiPromise) {
+        recaptchaApiPromise = new Promise<RecaptchaApi>((resolve, reject) => {
+            let script = document.querySelector<HTMLScriptElement>('script[data-recaptcha-v3]');
+
+            const handleLoad = () => {
+                if (script) script.dataset.loaded = 'true';
+                if (window.grecaptcha) {
+                    resolve(window.grecaptcha);
+                } else {
+                    reject(new Error('Google reCAPTCHA did not initialize.'));
+                }
+            };
+            const handleError = () => {
+                script?.remove();
+                reject(new Error('Google reCAPTCHA could not be loaded.'));
+            };
+
+            if (script?.dataset.loaded === 'true' && window.grecaptcha) {
+                resolve(window.grecaptcha);
+                return;
+            }
+
+            if (!script) {
+                script = document.createElement('script');
+                script.dataset.recaptchaV3 = 'true';
+                script.async = true;
+                script.defer = true;
+                script.src = `https://www.google.com/recaptcha/api.js?render=${encodeURIComponent(siteKey)}`;
+            }
+
+            script.addEventListener('load', handleLoad, { once: true });
+            script.addEventListener('error', handleError, { once: true });
+            if (!script.isConnected) document.head.appendChild(script);
+        })
+            .then(waitUntilReady)
+            .catch((error: unknown) => {
+                recaptchaApiPromise = null;
+                throw error;
+            });
+    }
+
+    return recaptchaApiPromise;
+}
 
 export default function Login({
     status,
     canResetPassword,
+    recaptcha,
 }: {
     status?: string;
     canResetPassword: boolean;
+    recaptcha: {
+        enabled: boolean;
+        v3SiteKey: string;
+        v2SiteKey: string;
+    };
 }) {
     const [showPassword, setShowPassword] = useState(false);
-    const { data, setData, post, processing, errors, reset } = useForm({
+    const [challengeToken, setChallengeToken] = useState<string | null>(null);
+    const [recaptchaLoadError, setRecaptchaLoadError] = useState('');
+    const challengeContainer = useRef<HTMLDivElement>(null);
+    const challengeWidgetId = useRef<number | null>(null);
+    const challengeRequested = useRef(false);
+    const { data, setData, post, transform, processing, errors, reset } = useForm({
         username: '',
         password: '',
         remember: false as boolean,
+        recaptcha_v3_token: '',
+        recaptcha_v2_token: '',
     });
+    const recaptchaErrors = errors as typeof errors & LoginValidationErrors;
 
-    const submit: FormEventHandler = (event) => {
+    useEffect(() => {
+        if (!recaptcha.enabled || !recaptcha.v3SiteKey) return;
+
+        let active = true;
+        loadRecaptchaApi(recaptcha.v3SiteKey).catch(() => {
+            if (active) setRecaptchaLoadError('Security verification could not load. Check your connection and try again.');
+        });
+
+        return () => {
+            active = false;
+        };
+    }, [recaptcha.enabled, recaptcha.v3SiteKey]);
+
+    useEffect(() => {
+        if (!recaptcha.enabled || !recaptchaErrors.recaptcha_v2 || !recaptcha.v2SiteKey || !recaptcha.v3SiteKey) return;
+
+        let active = true;
+        loadRecaptchaApi(recaptcha.v3SiteKey)
+            .then((api) => {
+                if (!active || !challengeContainer.current || challengeWidgetId.current !== null) return;
+
+                challengeWidgetId.current = api.render(challengeContainer.current, {
+                    sitekey: recaptcha.v2SiteKey,
+                    callback: (token) => {
+                        setChallengeToken(token);
+                        setRecaptchaLoadError('');
+                    },
+                    'expired-callback': () => setChallengeToken(null),
+                    'error-callback': () => setChallengeToken(null),
+                });
+            })
+            .catch(() => {
+                if (active) setRecaptchaLoadError('The checkbox could not load. Check your connection and try again.');
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [recaptchaErrors.recaptcha_v2, recaptcha.enabled, recaptcha.v2SiteKey, recaptcha.v3SiteKey]);
+
+    const submit: FormEventHandler = async (event) => {
         event.preventDefault();
-        post(route('login'), { onFinish: () => reset('password') });
+
+        if (recaptcha.enabled && (!recaptcha.v3SiteKey || (recaptchaErrors.recaptcha_v2 && !challengeToken))) {
+            setRecaptchaLoadError(
+                recaptchaErrors.recaptcha_v2
+                    ? 'Complete the checkbox before signing in.'
+                    : 'Security verification is not configured. Contact your administrator.',
+            );
+            return;
+        }
+
+        setRecaptchaLoadError('');
+
+        try {
+            const usingV2 = recaptcha.enabled && Boolean(challengeToken);
+            let v3Token = '';
+
+            if (recaptcha.enabled && !usingV2) {
+                const api = await loadRecaptchaApi(recaptcha.v3SiteKey);
+                v3Token = await api.execute(recaptcha.v3SiteKey, { action: 'login' });
+            }
+
+            challengeRequested.current = false;
+            transform((form) => ({
+                ...form,
+                recaptcha_v3_token: v3Token,
+                recaptcha_v2_token: usingV2 ? challengeToken : '',
+            }));
+            post(route('login'), {
+                onError: (responseErrors) => {
+                    challengeRequested.current = Boolean((responseErrors as typeof errors & LoginValidationErrors).recaptcha_v2);
+                },
+                onFinish: () => {
+                    const keepPassword = challengeRequested.current;
+                    challengeRequested.current = false;
+                    if (!keepPassword) reset('password');
+
+                    if (usingV2) {
+                        setChallengeToken(null);
+                        if (challengeWidgetId.current !== null) {
+                            window.grecaptcha?.reset(challengeWidgetId.current);
+                        }
+                    }
+                },
+            });
+        } catch {
+            setRecaptchaLoadError('Security verification could not run. Check your connection and try again.');
+        }
     };
 
     return (
@@ -73,6 +251,20 @@ export default function Login({
                     </div>
                     <InputError message={errors.password} className="mt-2" />
                 </div>
+
+                {recaptcha.enabled && (
+                    <div className="space-y-2" aria-live="polite">
+                        <InputError message={recaptchaErrors.recaptcha} />
+                        <div
+                            className={recaptchaErrors.recaptcha_v2 ? 'rounded-lg border border-slate-200 bg-slate-50 p-4' : 'hidden'}
+                            aria-hidden={!recaptchaErrors.recaptcha_v2}
+                        >
+                            {recaptchaErrors.recaptcha_v2 && <p className="mb-3 text-sm text-slate-700">{recaptchaErrors.recaptcha_v2}</p>}
+                            <div ref={challengeContainer} />
+                        </div>
+                        {recaptchaLoadError && <p role="alert" className="text-sm text-red-700">{recaptchaLoadError}</p>}
+                    </div>
+                )}
 
                 <label className="flex items-center gap-2 text-sm text-slate-600">
                     <input type="checkbox" checked={data.remember} onChange={(event) => setData('remember', event.target.checked)} className="rounded border-slate-300 text-teal-700 shadow-sm focus:ring-teal-700" />

@@ -36,6 +36,8 @@ class LoginRequest extends FormRequest
         return [
             'username' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string'],
+            'recaptcha_v3_token' => ['nullable', 'string', 'max:8192'],
+            'recaptcha_v2_token' => ['nullable', 'string', 'max:8192'],
         ];
     }
 
@@ -47,6 +49,7 @@ class LoginRequest extends FormRequest
     public function authenticate(): ?RedirectResponse
     {
         $this->ensureIsNotRateLimited();
+        app(\App\Services\RecaptchaVerifier::class)->verifyLogin($this);
 
         $identifier = $this->string('username')->toString();
         $loginField = 'username';

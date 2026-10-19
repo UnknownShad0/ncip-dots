@@ -65,4 +65,13 @@ return [
         'auth_header' => 'x-api-key',
     ],
 
+    'recaptcha' => [
+        'enabled' => env('RECAPTCHA_ENABLED', false),
+        'v3_site_key' => env('RECAPTCHA_V3_SITE_KEY'),
+        'v3_secret_key' => env('RECAPTCHA_V3_SECRET_KEY'),
+        'v2_site_key' => env('RECAPTCHA_V2_SITE_KEY'),
+        'v2_secret_key' => env('RECAPTCHA_V2_SECRET_KEY'),
+        'score_threshold' => (float) env('RECAPTCHA_SCORE_THRESHOLD', 0.5),
+    ],
+
 ];

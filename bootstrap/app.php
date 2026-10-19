@@ -25,5 +25,8 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->dontFlash([
+            'recaptcha_v3_token',
+            'recaptcha_v2_token',
+        ]);
     })->create();
