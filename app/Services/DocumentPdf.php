@@ -50,7 +50,17 @@ class DocumentPdf
             ];
             $job = $directory.'/job.json';
             File::put($job, json_encode($options, JSON_THROW_ON_ERROR));
-            $process = new Process([$node, base_path('scripts/render-document-pdf.mjs'), $job], base_path());
+            $processEnv = [];
+            if (DIRECTORY_SEPARATOR === '\\') {
+                // Symfony filters inherited environment variables for web SAPIs.
+                // Node on Windows needs SystemRoot during startup, even when the
+                // parent PHP process can still read it with getenv().
+                $systemRoot = getenv('SystemRoot') ?: getenv('WINDIR') ?: ($_SERVER['SystemRoot'] ?? $_SERVER['WINDIR'] ?? null);
+                if (is_string($systemRoot) && $systemRoot !== '') {
+                    $processEnv['SystemRoot'] = $systemRoot;
+                }
+            }
+            $process = new Process([$node, base_path('scripts/render-document-pdf.mjs'), $job], base_path(), $processEnv);
             $process->setTimeout($options['timeout'] + 10)->run();
             if (! $process->isSuccessful()) {
                 throw new \RuntimeException('Document PDF rendering failed: '.trim($process->getErrorOutput()));

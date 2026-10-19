@@ -4,6 +4,11 @@ import react from '@vitejs/plugin-react';
 import { buildDocumentRenderer } from './scripts/build-document-renderer.mjs';
 
 export default defineConfig({
+    server: {
+        watch: {
+            ignored: ['**/storage/app/private/**'],
+        },
+    },
     plugins: [
         laravel({
             input: 'resources/js/app.tsx',

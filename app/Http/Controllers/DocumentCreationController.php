@@ -514,6 +514,11 @@ class DocumentCreationController extends Controller
             'content.body' => ['required_without:content.body_document', 'nullable', 'string', 'max:50000'],
             'content.body_document' => ['nullable', 'array'],
             'content.cc' => ['nullable', 'array', 'max:100'], 'content.cc.*' => ['nullable', 'string', 'max:255'],
+        ], [
+            'document_type_id.required' => 'Choose a document type.',
+            'content.from.required' => 'Enter the sender name.',
+            'content.subject.required' => 'Enter a subject.',
+            'content.body.required_without' => 'Enter the document body.',
         ]);
         $type = DocumentType::query()->whereKey($data['document_type_id'])->where('is_active', true)->first();
         abort_unless($type, 422, 'Choose an active document type.');

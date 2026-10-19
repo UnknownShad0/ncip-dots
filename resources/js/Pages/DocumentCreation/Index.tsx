@@ -416,7 +416,7 @@ export default function Index({
             preserveScroll: true,
             onFinish: () => setSaving(false),
             onError: (errors) =>
-                setActionError(Object.values(errors).join(" ")),
+                setActionError(Object.values(errors).join("\n")),
             onSuccess,
         });
     };
@@ -442,6 +442,15 @@ export default function Index({
     const change = (key: string, value: any) => {
         setDirty(true);
         setContent((current) => ({ ...current, [key]: value }));
+        setErrors((current) => {
+            const next = { ...current };
+            delete next[`content.${key}`];
+            if (key === "body" || key === "body_document") {
+                delete next["content.body"];
+                delete next["content.body_document"];
+            }
+            return next;
+        });
     };
     const saveDraft = (event: FormEvent) => {
         event.preventDefault();
@@ -491,6 +500,17 @@ export default function Index({
         );
     };
     const submitForApproval = () => {
+        const nextErrors: Record<string, string> = {};
+        if (!typeId) nextErrors.document_type_id = "Choose a document type.";
+        if (!String(content.from ?? "").trim()) nextErrors["content.from"] = "Enter the sender name.";
+        if (!String(content.subject ?? "").trim()) nextErrors["content.subject"] = "Enter a subject.";
+        if (!String(content.body ?? "").trim()) nextErrors["content.body"] = "Enter the document body.";
+        if (Object.keys(nextErrors).length > 0) {
+            setErrors(nextErrors);
+            window.setTimeout(() => document.getElementById("document-editor-errors")?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
+            return;
+        }
+        setErrors({});
         openSubmissionDialog({ id: editing, title: content.subject || "New document", fromEditor: true }, approverOfficeId);
     };
     const submitToApprovalOffice = () => {
@@ -595,7 +615,7 @@ export default function Index({
                 {actionError && !pendingDecision && (
                     <p
                         role="alert"
-                        className="rounded-lg bg-danger-soft p-3 text-sm text-danger"
+                        className="whitespace-pre-line rounded-lg bg-danger-soft p-3 text-sm text-danger"
                     >
                         {actionError}
                     </p>
@@ -694,6 +714,11 @@ export default function Index({
                                             onChange={(e) => {
                                                 const next = e.target.value;
                                                 setTypeId(next);
+                                                setErrors(current => {
+                                                    const remaining = { ...current };
+                                                    delete remaining.document_type_id;
+                                                    return remaining;
+                                                });
                                                 setContent(current => ({ ...current, template: savedTemplate?.typeId === next ? savedTemplate.template : documentTypes.find(type => String(type.id) === next)?.template }));
                                                 setDirty(true);
                                             }}
@@ -724,14 +749,15 @@ export default function Index({
                                 </div>
                                 {Object.keys(errors).length > 0 && (
                                     <div
+                                        id="document-editor-errors"
                                         role="alert"
                                         className="m-4 rounded-lg border border-danger/20 bg-danger-soft p-3 text-sm text-danger"
                                     >
-                                        {Object.entries(errors).map(
-                                            ([key, message]) => (
-                                                <p key={key}>{message}</p>
-                                            ),
-                                        )}
+                                        <ul className="list-inside list-disc space-y-1">
+                                            {Object.entries(errors).map(([key, message]) => (
+                                                <li key={key}>{message}</li>
+                                            ))}
+                                        </ul>
                                     </div>
                                 )}
                                 <div className="overflow-x-auto px-3 py-8 sm:px-8 sm:py-10">
@@ -1086,7 +1112,7 @@ export default function Index({
                                 {actionError && (
                                     <p
                                         role="alert"
-                                        className="rounded-lg bg-danger-soft p-3 text-sm text-danger"
+                                        className="whitespace-pre-line rounded-lg bg-danger-soft p-3 text-sm text-danger"
                                     >
                                         {actionError}
                                     </p>
