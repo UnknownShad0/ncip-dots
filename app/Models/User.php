@@ -46,6 +46,9 @@ class User extends Authenticatable
         'is_active',
         'is_locked',
         'last_login_at',
+        'failed_login_attempts',
+        'last_failed_login_at',
+        'login_locked_until',
     ];
 
     /**
@@ -69,6 +72,9 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'last_login_at' => 'datetime',
+            'last_failed_login_at' => 'datetime',
+            'login_locked_until' => 'datetime',
+            'failed_login_attempts' => 'integer',
             'is_active' => 'boolean',
             'is_locked' => 'boolean',
             'role_id' => 'integer',

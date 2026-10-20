@@ -18,7 +18,8 @@ type UserRow = {
     office_id: number | null;
     office_name: string;
     is_active: boolean;
-    account_status: 'Active' | 'Inactive' | 'Pending';
+    account_status: 'Active' | 'Inactive' | 'Locked';
+    password_setup_pending: boolean;
     is_locked: boolean;
     logged_in_status: string;
     last_login_at: string | null;
@@ -35,8 +36,7 @@ type FormState = {
     email: string;
     role_id: string;
     officeId: string;
-    status: string;
-    isLocked: string;
+    account_status: 'Active' | 'Inactive' | 'Locked';
     password: string;
     password_confirmation: string;
 };
@@ -48,7 +48,7 @@ type SortKey = 'name' | 'username' | 'email' | 'role' | 'office_name' | 'account
 
 const emptyForm: FormState = {
     employee_role: '', firstname: '', lastname: '', username: '', email: '', role_id: '', officeId: '',
-    status: '1', isLocked: 'N', password: '', password_confirmation: '',
+    account_status: 'Active', password: '', password_confirmation: '',
 };
 
 export default function UserAccountsIndex({
@@ -134,7 +134,7 @@ export default function UserAccountsIndex({
             firstname: user.firstname ?? '', lastname: user.lastname ?? '',
             username: user.username ?? '', email: user.email ?? '', role_id: user.role_id ?? '',
             officeId: user.office_id == null ? '' : String(user.office_id),
-            status: user.is_active ? '1' : '0', isLocked: user.is_locked ? 'Y' : 'N',
+            account_status: user.account_status,
             password: '', password_confirmation: '',
         });
         setIsCreateOpen(false);
@@ -150,8 +150,6 @@ export default function UserAccountsIndex({
             employee_code: lookup?.employee.employee_code,
             office_table_id: officeTableId,
             operation: editingRow ? 'update' : 'create',
-            status: editingRow ? form.status : undefined,
-            isLocked: editingRow ? form.isLocked : undefined,
         };
         const options = {
             onSuccess: () => {
@@ -227,8 +225,8 @@ export default function UserAccountsIndex({
                                     <td className="px-4 py-3 text-muted">{user.role || '—'}</td>
                                     <td className="px-4 py-3 text-muted">{user.office_name || 'No office'}</td>
                                     <td className="px-4 py-3">
-                                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${user.account_status === 'Active' ? 'bg-success-soft text-success' : user.account_status === 'Pending' ? 'bg-warning-soft text-warning' : 'bg-secondary text-muted'}`}>
-                                            {user.account_status}
+                                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${user.password_setup_pending && user.account_status === 'Active' ? 'bg-warning-soft text-warning' : user.account_status === 'Active' ? 'bg-success-soft text-success' : user.account_status === 'Locked' ? 'bg-danger-soft text-danger' : 'bg-secondary text-muted'}`}>
+                                            {user.password_setup_pending && user.account_status === 'Active' ? 'Pending' : user.account_status}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 print:hidden">
@@ -295,12 +293,11 @@ export default function UserAccountsIndex({
                         {editingRow?.employee_code ? <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-lg border-border bg-surface"><option value="">Select role</option><option value="Super Admin">Super Admin</option><option value="Executive">Executive</option><option value="Admin Staff">Admin Staff</option></select></Field> : <Field label="Role" error={errors.role_id}><select required value={form.role_id} onChange={(e) => setForm({ ...form, role_id: e.target.value })} className="w-full rounded-lg border-border bg-surface"><option value="">Select role</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></Field>}
                         <Field label="Office" error={errors.officeId}>{editingRow?.employee_code && !editingRow.office_id ? <p className="rounded-lg border border-border bg-background p-2">{editingRow.office_name}</p> : <select required value={form.officeId} onChange={(e) => { setErrors({}); setForm({ ...form, officeId: e.target.value, email: accountType === 'dots' ? offices.find((office) => String(office.id) === e.target.value)?.email ?? '' : form.email }); }} className="w-full rounded-lg border-border bg-surface"><option value="">Select office</option>{officeOptions.map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}</select>}</Field>
                         {!editingRow && accountType === 'dots' && form.officeId && <p className="text-sm text-muted sm:col-span-2">{form.email ? <>Login details will be sent to <span className="font-medium text-foreground">{form.email}</span>.</> : <span className="text-danger">The selected office has no email address. Update the office email before creating an account.</span>}</p>}
-                        {editingRow && <Field label="Account Status" error={errors.status}><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full rounded-lg border-border bg-surface"><option value="1">Active</option><option value="0">Inactive</option></select></Field>}
-                        {editingRow && <Field label="Login Status" error={errors.isLocked}><select value={form.isLocked} onChange={(e) => setForm({ ...form, isLocked: e.target.value })} className="w-full rounded-lg border-border bg-surface"><option value="N">Unlocked</option><option value="Y">Locked</option></select></Field>}
+                        {editingRow && <Field label="Account Status" error={errors.account_status}><select value={form.account_status} onChange={(e) => setForm({ ...form, account_status: e.target.value as FormState['account_status'] })} className="w-full rounded-lg border-border bg-surface"><option value="Active">Active</option><option value="Inactive">Inactive</option><option value="Locked">Locked</option></select></Field>}
                         {editingRow && <><Field label="New password (optional)" error={errors.password}><input type="password" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full rounded-lg border-border bg-surface" /></Field>
                         <Field label="Confirm password" error={errors.password_confirmation}><input type="password" value={form.password_confirmation} onChange={(e) => setForm({ ...form, password_confirmation: e.target.value })} className="w-full rounded-lg border-border bg-surface" /></Field></>}
                     </div>}
-                    {Object.entries(errors).filter(([key]) => !['firstname', 'lastname', 'role_id', 'officeId', 'office_table_id', 'password', 'password_confirmation', 'status', 'isLocked', 'user'].includes(key)).map(([key, message]) => <p key={key} className="text-sm text-danger">{message}</p>)}
+                    {Object.entries(errors).filter(([key]) => !['firstname', 'lastname', 'role_id', 'officeId', 'office_table_id', 'password', 'password_confirmation', 'account_status', 'user'].includes(key)).map(([key, message]) => <p key={key} className="text-sm text-danger">{message}</p>)}
                     {errors.user && <p className="text-sm text-danger">{errors.user}</p>}
                     <div className="flex justify-end gap-2 border-t border-border pt-4"><button type="button" onClick={closeModal} className="dots-button-secondary">Cancel</button><button disabled={processing || (!editingRow && (!accountType || (accountType === 'dots' && !form.email) || (accountType === 'employee' && (!lookup || lookupOpen || lookupBusy || !selectedOffice?.range_name || !officeTableId || !form.employee_role || !form.email))))} className="dots-button-primary disabled:opacity-50">{processing ? 'Saving...' : 'Save account'}</button></div>
                 </form>

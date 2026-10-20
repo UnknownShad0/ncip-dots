@@ -101,10 +101,11 @@ export default function Login({
     const [showPassword, setShowPassword] = useState(false);
     const [challengeToken, setChallengeToken] = useState<string | null>(null);
     const [recaptchaLoadError, setRecaptchaLoadError] = useState('');
+    const [cooldownSeconds, setCooldownSeconds] = useState<number | null>(null);
     const challengeContainer = useRef<HTMLDivElement>(null);
     const challengeWidgetId = useRef<number | null>(null);
     const challengeRequested = useRef(false);
-    const { data, setData, post, transform, processing, errors, reset } = useForm({
+    const { data, setData, post, transform, processing, errors, reset, clearErrors } = useForm({
         username: '',
         password: '',
         remember: false as boolean,
@@ -112,6 +113,35 @@ export default function Login({
         recaptcha_v2_token: '',
     });
     const recaptchaErrors = errors as typeof errors & LoginValidationErrors;
+    const cooldownError = errors.username?.match(/^Too many failed login attempts\. Try again in (\d+) seconds\.$/);
+    const cooldownDuration = cooldownError ? Number(cooldownError[1]) : null;
+    const cooldownActive = Boolean(cooldownError) && (cooldownSeconds === null || cooldownSeconds > 0);
+    const usernameError = cooldownError
+        ? cooldownSeconds === 0
+            ? 'Cooldown ended. You can try signing in again.'
+            : `Too many failed login attempts. Try again in ${cooldownSeconds ?? cooldownError[1]} seconds.`
+        : errors.username;
+
+    useEffect(() => {
+        if (cooldownDuration === null) {
+            setCooldownSeconds(null);
+            return;
+        }
+
+        const deadline = Date.now() + cooldownDuration * 1000;
+        const updateCountdown = () => {
+            const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+            setCooldownSeconds(remaining);
+            if (remaining === 0 && timer !== undefined) window.clearInterval(timer);
+        };
+        let timer: number | undefined;
+        updateCountdown();
+        timer = window.setInterval(updateCountdown, 1000);
+
+        return () => {
+            if (timer !== undefined) window.clearInterval(timer);
+        };
+    }, [cooldownDuration]);
 
     useEffect(() => {
         if (!recaptcha.enabled || !recaptcha.v3SiteKey) return;
@@ -224,9 +254,13 @@ export default function Login({
                         autoCapitalize="none"
                         isFocused
                         required
-                        onChange={(event) => setData('username', event.target.value)}
+                        onChange={(event) => {
+                            clearErrors('username');
+                            setCooldownSeconds(null);
+                            setData('username', event.target.value);
+                        }}
                     />
-                    <InputError message={errors.username} className="mt-2" />
+                    <InputError message={usernameError} className="mt-2" />
                 </div>
 
                 <div>
@@ -271,7 +305,7 @@ export default function Login({
                     Remember me
                 </label>
 
-                <PrimaryButton type="submit" disabled={processing} className="!mt-2 flex w-full justify-center rounded-lg bg-sky-600 py-3 text-sm tracking-normal hover:bg-sky-700 focus:bg-sky-700 active:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60">
+                <PrimaryButton type="submit" disabled={processing || cooldownActive} className="!mt-2 flex w-full justify-center rounded-lg bg-sky-600 py-3 text-sm tracking-normal hover:bg-sky-700 focus:bg-sky-700 active:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60">
                     {processing && <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />}
                     {processing ? 'Signing in…' : 'Sign in'}
                 </PrimaryButton>

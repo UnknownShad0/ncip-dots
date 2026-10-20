@@ -73,7 +73,7 @@ class UserAccountController extends Controller
             ->map(function (User $user) use ($roleOptions) {
                 $roleId = (int) ($user->role_id ?? 0);
                 $roleName = $roleOptions->firstWhere('id', $roleId)['name'] ?? ($user->role ?: 'User');
-                $isActive = (bool) $user->is_active;
+                $accountStatus = $user->is_locked ? 'Locked' : ((bool) $user->is_active ? 'Active' : 'Inactive');
 
                 return [
                     'id' => (string) $user->id,
@@ -87,8 +87,9 @@ class UserAccountController extends Controller
                     'employee_code' => $user->employee_code,
                     'office_id' => $user->office_id,
                     'office_name' => $user->office?->name ?? $user->officeByCode?->name ?? '',
-                    'is_active' => $isActive,
-                    'account_status' => ! $isActive ? 'Inactive' : ($user->password === null ? 'Pending' : 'Active'),
+                    'is_active' => (bool) $user->is_active,
+                    'account_status' => $accountStatus,
+                    'password_setup_pending' => $user->password === null,
                     'is_locked' => (bool) $user->is_locked,
                     'logged_in_status' => 'N',
                     'last_login_at' => $user->last_login_at?->toDateTimeString(),
@@ -219,8 +220,7 @@ class UserAccountController extends Controller
             'role_id' => [Rule::requiredIf(! $user->employee_code), 'nullable', 'integer', Rule::in($this->roleIds())],
             'employee_role' => [Rule::requiredIf((bool) $user->employee_code), 'nullable', Rule::in(['Super Admin', 'Executive', 'Admin Staff'])],
             'officeId' => [Rule::requiredIf(! $user->employee_code), 'nullable', 'integer', 'exists:offices,id'],
-            'status' => ['required', Rule::in(['1', '0'])],
-            'isLocked' => ['required', Rule::in(['Y', 'N'])],
+            'account_status' => ['required', Rule::in(['Active', 'Inactive', 'Locked'])],
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
         ]);
 
@@ -235,7 +235,13 @@ class UserAccountController extends Controller
             'office_name' => $user->office?->name,
             'is_active' => (bool) $user->is_active,
             'is_locked' => (bool) $user->is_locked,
+            'account_status' => $user->is_locked ? 'Locked' : ((bool) $user->is_active ? 'Active' : 'Inactive'),
         ];
+        [$isActive, $isLocked] = match ($validated['account_status']) {
+            'Active' => [true, false],
+            'Inactive' => [false, false],
+            'Locked' => [true, true],
+        };
         $user->fill([
             'name' => trim($validated['firstname'].' '.$validated['lastname']),
             'firstname' => $validated['firstname'],
@@ -244,9 +250,15 @@ class UserAccountController extends Controller
             'role_id' => $roleId,
             'office_id' => $office?->id,
             'office_code' => $office?->code ?? $user->office_code,
-            'is_active' => $validated['status'] === '1',
-            'is_locked' => $validated['isLocked'] === 'Y',
+            'is_active' => $isActive,
+            'is_locked' => $isLocked,
         ]);
+
+        if ($before['is_locked'] && $validated['account_status'] !== 'Locked') {
+            $user->failed_login_attempts = 0;
+            $user->last_failed_login_at = null;
+            $user->login_locked_until = null;
+        }
 
         if (filled($validated['password'] ?? null)) {
             $user->password = Hash::make($validated['password']);
@@ -263,6 +275,7 @@ class UserAccountController extends Controller
             'office_name' => $office?->name,
             'is_active' => (bool) $user->is_active,
             'is_locked' => (bool) $user->is_locked,
+            'account_status' => $user->is_locked ? 'Locked' : ((bool) $user->is_active ? 'Active' : 'Inactive'),
             'credentials_changed' => filled($validated['password'] ?? null),
         ];
         foreach ($after as $key => $value) {

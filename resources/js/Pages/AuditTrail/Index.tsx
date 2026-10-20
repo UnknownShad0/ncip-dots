@@ -43,6 +43,7 @@ const actionLabels: Record<string, string> = {
     'user.bureau_transferred': 'User moved to another bureau',
     'login.succeeded': 'Signed in',
     'login.failed': 'Sign in failed',
+    'login.locked': 'Account locked after repeated sign in failures',
     'logout.succeeded': 'Signed out',
 };
 
@@ -194,7 +195,7 @@ export default function AuditTrailIndex({ trail = [], pagination, canFilterBurea
                                             </div>
                                             {entry.legacy_module && <div className="mt-1 text-xs text-slate-500">{entry.legacy_module}</div>}
                                             <div className="text-sm text-slate-500">
-                                                {entry.actor_name || (entry.user ? (entry.user.short_name || entry.user.name) : entry.action === 'login.failed' || entry.action === 'login.rate_limited' || entry.action === 'password.reset_requested' ? 'Unauthenticated request' : entry.record_source === 'legacy_import' ? 'User not recorded or unavailable' : 'System')}
+                                                {entry.actor_name || (entry.user ? (entry.user.short_name || entry.user.name) : entry.action === 'login.failed' || entry.action === 'login.rate_limited' || entry.action === 'login.locked' || entry.action === 'password.reset_requested' ? 'Unauthenticated request' : entry.record_source === 'legacy_import' ? 'User not recorded or unavailable' : 'System')}
                                                 {entry.actor_office_name && <span className="block text-xs">{entry.actor_office_name}</span>}
                                                 {entry.bureau_filter_uses_current_assignment && <span className="block text-xs">Historical bureau unavailable; matched by current assignment</span>}
                                             </div>

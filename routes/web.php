@@ -26,7 +26,7 @@ Route::get('/track/{trackingNumber}', [PublicDocumentTrackingController::class, 
     ->where('trackingNumber', '[^/]+')
     ->name('documents.track');
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware(['auth', 'active.user', 'verified'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::get('/documents', [DocumentController::class, 'index'])->name('documents.index');
