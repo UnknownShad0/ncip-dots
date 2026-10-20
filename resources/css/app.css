@@ -53,6 +53,7 @@
 
 @layer components {
     .dots-workspace, .dots-dialog { font-family: 'Source Sans 3', system-ui, sans-serif; }
+    :is(.dots-button, .dots-button-primary, .dots-button-secondary, .dots-button-accent):focus-visible,
     .dots-workspace :is(button, a, input, select, textarea):focus-visible,
     .dots-dialog :is(button, a, input, select, textarea):focus-visible {
         outline: 2px solid rgb(var(--color-primary));

@@ -56,22 +56,22 @@ export default function PrivacyNoticeModal({ open, onClose, onAcknowledge }: { o
     }, [open]);
 
     return <Dialog open={open} onClose={onClose} className="relative z-[100]">
-        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm" aria-hidden="true" />
+        <div className="fixed inset-0 bg-foreground/40" aria-hidden="true" />
         <div className="fixed inset-0 flex items-center justify-center p-3 sm:p-6">
-            <DialogPanel className="dots-workspace flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl">
-                <header className="flex items-center justify-between gap-4 bg-primary px-5 py-4 text-primary-foreground sm:px-7">
+            <DialogPanel className="dots-workspace flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden bg-surface shadow-xl">
+                <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-5 py-4 text-foreground sm:px-7">
                     <div className="flex min-w-0 items-center gap-3">
-                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/10 text-amber-300"><ShieldCheck size={23} aria-hidden="true" /></span>
-                        <div className="min-w-0"><DialogTitle className="text-lg font-semibold">NCIP Privacy Notice</DialogTitle><p className="mt-1 text-xs text-primary-foreground/70">How we collect and protect personal data</p></div>
+                        <span className="text-primary"><ShieldCheck size={23} aria-hidden="true" /></span>
+                        <div className="min-w-0"><DialogTitle className="text-lg font-semibold">NCIP Privacy Notice</DialogTitle><p className="mt-1 text-xs text-muted">How we collect and protect personal data</p></div>
                     </div>
-                    <button type="button" onClick={onClose} aria-label="Close privacy notice" className="rounded-lg p-2 text-primary-foreground/80 transition hover:bg-white/10 hover:text-white"><X size={20} /></button>
+                    <button type="button" onClick={onClose} aria-label="Close privacy notice" className="rounded-lg p-2 text-muted transition hover:bg-secondary hover:text-foreground"><X size={20} /></button>
                 </header>
-                <div className="min-h-0 flex-1 overflow-y-auto bg-background p-4 sm:p-6">
-                    <p className="mb-4 rounded-xl border border-border border-l-4 border-l-primary bg-surface p-4 text-sm leading-6 text-muted">The National Commission on Indigenous Peoples (NCIP) is dedicated to protecting the privacy and personal data of all stakeholders, including Indigenous Peoples, employees, and clients, in compliance with the Data Privacy Act of 2012 (Republic Act No. 10173). This Privacy Notice details the procedures by which the NCIP collects, processes, stores, shares, and disposes of personal data, ensuring adherence to legal and ethical standards.</p>
-                    <div className="space-y-2 rounded-xl border border-border bg-surface p-3 sm:p-4">
-                        {sections.map((section, index) => <section key={section.title} className="overflow-hidden rounded-lg border border-border">
-                            <button type="button" aria-expanded={expanded === index} onClick={() => setExpanded(expanded === index ? null : index)} className="flex w-full items-center justify-between gap-4 bg-surface px-4 py-3 text-left text-sm font-semibold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"><span>{index + 1}. {section.title}</span><ChevronDown size={16} aria-hidden="true" className={`shrink-0 text-primary transition-transform ${expanded === index ? 'rotate-180' : ''}`} /></button>
-                            {expanded === index && <div className="border-t border-border bg-background px-4 py-4 text-sm leading-6 text-muted">{section.content}</div>}
+                <div className="min-h-0 flex-1 overflow-y-auto bg-surface p-4 sm:p-6">
+                    <p className="mb-5 text-sm leading-relaxed text-muted">The National Commission on Indigenous Peoples (NCIP) is dedicated to protecting the privacy and personal data of all stakeholders, including Indigenous Peoples, employees, and clients, in compliance with the Data Privacy Act of 2012 (Republic Act No. 10173). This Privacy Notice details the procedures by which the NCIP collects, processes, stores, shares, and disposes of personal data, ensuring adherence to legal and ethical standards.</p>
+                    <div className="divide-y divide-border border-y border-border">
+                        {sections.map((section, index) => <section key={section.title} className="overflow-hidden">
+                            <button type="button" aria-expanded={expanded === index} onClick={() => setExpanded(expanded === index ? null : index)} className="flex w-full items-center justify-between gap-4 bg-surface px-1 py-3 text-left text-sm font-semibold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"><span>{index + 1}. {section.title}</span><ChevronDown size={16} aria-hidden="true" className={`shrink-0 text-primary transition-transform ${expanded === index ? 'rotate-180' : ''}`} /></button>
+                            {expanded === index && <div className="px-1 pb-4 text-sm leading-6 text-muted">{section.content}</div>}
                         </section>)}
                     </div>
                 </div>

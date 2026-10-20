@@ -2,10 +2,11 @@ import WorkspaceDialog from '@/Components/WorkspaceDialog';
 import DocumentDispositionPrint from '@/Components/DocumentDispositionPrint';
 import InfoTip from '@/Components/InfoTip';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import CrudAlertModal from '@/Components/WorkspaceAlert';
+import CrudAlertModal, { type WorkspaceAlertVariant } from '@/Components/WorkspaceAlert';
+import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
-import { Archive, ArrowDownUp, ChevronLeft, ChevronRight, Eye, FilePlus2, Inbox, LoaderCircle, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
+import { Archive, ArrowDownUp, ChevronDown, ChevronLeft, ChevronRight, Eye, FilePlus2, Inbox, LoaderCircle, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 
@@ -82,7 +83,7 @@ type DocumentItem = {
 
 type LibraryOption = { id: number | string; name: string; source?: string; disabled?: boolean };
 type ApprovedDocument = { id: number; title: string; document_type_id: number; document_type?: string; status?: string; disabled?: boolean };
-type CrudAlert = { title: string; message: string; onConfirm?: () => void; confirmLabel?: string; isDestructive?: boolean };
+type CrudAlert = { variant?: WorkspaceAlertVariant; title: string; message: string; onConfirm?: () => void; confirmLabel?: string; isDestructive?: boolean };
 
 type SortKey = 'tracking_number' | 'title' | 'document_type' | 'origin_type' | 'status' | 'office_name' | 'last_transaction';
 
@@ -133,16 +134,6 @@ const getStatusClasses = (status?: string) => {
             return 'bg-slate-100 text-foreground';
     }
 };
-
-const getTransactionClasses = (action?: string | null, status?: string | null) => {
-    const label = (action || status || '').toLowerCase();
-
-    if (label.includes('terminal')) return 'bg-sidebar/10 text-sidebar';
-    if (label.includes('receiv')) return 'bg-emerald-100 text-emerald-800';
-    if (label.includes('finaliz')) return 'bg-primary/10 text-primary';
-    return 'bg-secondary text-primary';
-};
-
 export default function DocumentsIndex({
     documents = [],
     title = 'All Documents',
@@ -420,7 +411,7 @@ export default function DocumentsIndex({
         try {
             setPrintDocument(await fetchDocumentDetails(document));
         } catch {
-            setCrudAlert({ title: 'Could not load document', message: 'The disposition history could not be loaded. Please try again.' });
+            setCrudAlert({ variant: 'error', title: 'Could not load document', message: 'The disposition history could not be loaded. Please try again.' });
         }
     };
 
@@ -433,7 +424,7 @@ export default function DocumentsIndex({
             setReleasingRow((current) => current?.id === document.id ? details : current);
         } catch {
             setReleasingRow(null);
-            setCrudAlert({ title: 'Could not load document', message: 'Document versions could not be loaded. Please try again.' });
+            setCrudAlert({ variant: 'error', title: 'Could not load document', message: 'Document versions could not be loaded. Please try again.' });
         }
     };
     const handleUpdate = (e: React.FormEvent, finalize: boolean) => {
@@ -642,56 +633,57 @@ export default function DocumentsIndex({
                     </div>
                 </div>
 
-                <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
-                    <div className="dots-blue-banner flex flex-col gap-1 border-b border-primary-hover bg-primary px-5 py-4 text-primary-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                        <h3 className="font-semibold text-primary-foreground">Documents</h3>
+                <div className="overflow-hidden rounded-lg border border-border bg-surface">
+                    <div className="flex flex-col gap-1 border-b border-border px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <h3 className="font-semibold text-foreground">Documents</h3>
                         <div className="flex items-center gap-3">
                             {showListUpdating && <p role="status" className="inline-flex items-center gap-1.5 text-xs text-muted"><LoaderCircle size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Updating results…</p>}
                             <p className="text-sm text-muted">{totalDocuments === 0 ? 'No results' : `Showing ${pagination?.from ?? 0}–${pagination?.to ?? 0} of ${totalDocuments} documents`}</p>
                         </div>
                     </div>
                 <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Documents table; scroll horizontally for more columns">
-                    <table aria-busy={showListUpdating} className="dots-document-table min-w-full text-left text-sm">
-                    <thead className="bg-primary/10 text-primary">
+                    <table aria-busy={showListUpdating} className="dots-document-table w-full min-w-[880px] table-fixed text-left text-sm">
+                    <colgroup><col className="w-[17%]" /><col /><col className="w-[12%]" /><col className="w-[9%]" /><col className="w-[12%]" /><col className="w-[19%]" /><col className="w-36" /></colgroup>
+                    <thead className="bg-background text-muted">
                             <tr>
-                                <th className="whitespace-nowrap px-4 py-3.5 font-semibold">
+                                <th className="px-3 py-3.5 font-semibold">
                                     <button type="button" onClick={() => handleSort('tracking_number')} className="flex items-center gap-1.5 hover:text-primary">
                                         Tracking No. <ArrowDownUp size={14} />
                                     </button>
                                 </th>
-                                <th className="px-4 py-3.5 font-semibold">
+                                <th className="px-3 py-3.5 font-semibold">
                                     <button type="button" onClick={() => handleSort('title')} className="flex items-center gap-1.5 hover:text-primary">
                                         Title <ArrowDownUp size={14} />
                                     </button>
                                 </th>
-                                <th className="whitespace-nowrap px-4 py-3.5 font-semibold">
+                                <th className="px-3 py-3.5 font-semibold">
                                     <button type="button" onClick={() => handleSort('document_type')} className="flex items-center gap-1.5 hover:text-primary">
-                                        Document Type <ArrowDownUp size={14} />
+                                        Document type <ArrowDownUp size={14} />
                                     </button>
                                 </th>
-                                <th className="whitespace-nowrap px-4 py-3.5 font-semibold">
+                                <th className="px-3 py-3.5 font-semibold">
                                     <button type="button" onClick={() => handleSort('origin_type')} className="flex items-center gap-1.5 hover:text-primary">
-                                        Origin Type <ArrowDownUp size={14} />
+                                        Origin <ArrowDownUp size={14} />
                                     </button>
                                 </th>
-                                <th className="px-4 py-3.5 font-semibold">
+                                <th className="px-3 py-3.5 font-semibold">
                                     <button type="button" onClick={() => handleSort('status')} className="flex items-center gap-1.5 hover:text-primary">
                                         Status <ArrowDownUp size={14} />
                                     </button>
                                 </th>
-                                <th className="whitespace-nowrap px-4 py-3.5 font-semibold">
+                                <th className="px-3 py-3.5 font-semibold">
                                     <button type="button" onClick={() => handleSort('last_transaction')} className="flex items-center gap-1.5 hover:text-primary">
-                                        Last Transaction <ArrowDownUp size={14} />
+                                        Last activity <ArrowDownUp size={14} />
                                     </button>
                                 </th>
-                                <th className="px-4 py-3 font-semibold no-print">Actions</th>
+                                <th className="sticky right-0 z-10 border-l border-border bg-background px-3 py-3 font-semibold no-print">Actions</th>
                             </tr>
                         </thead>
 
                         <tbody>
                             {paginatedDocuments.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-4 py-12 text-center text-muted">
+                                    <td colSpan={7} className="px-3 py-12 text-center text-muted">
                                         {search || statusFilter !== 'all' ? 'No matching documents. Try another search or status.' : 'No documents yet. Select New document to register one.'}
                                     </td>
                                 </tr>
@@ -705,47 +697,52 @@ export default function DocumentsIndex({
                                             key={document.id ?? `${document.tracking_number ?? 'doc'}-${index}`}
                                             className={`${isUrgent ? 'urgent-document-row' : ''} border-t border-border transition-colors hover:bg-background`}
                                         >
-                                            <td className="whitespace-nowrap px-4 py-4 text-xs font-semibold text-primary">
-                                                <span className="font-mono">{document.tracking_number || 'N/A'}</span>
-                                                {document.needs_review && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[13px] font-medium text-amber-800">Needs review</span>}
-                                                {isUrgent && <span className="ml-2 inline-flex rounded-full bg-rose-100 px-2 py-0.5 font-sans text-[13px] font-bold uppercase text-rose-800">Urgent</span>}
-                                                {isLegacy && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 font-sans text-[13px] font-medium text-muted">Legacy</span>}
+                                            <td className="break-words px-3 py-4 text-xs font-semibold text-primary">
+                                                <span className="break-all font-mono">{document.tracking_number || 'N/A'}</span>
+                                                {document.needs_review && <span className="mt-2 block text-xs font-semibold text-warning">Needs review</span>}
+                                                {isUrgent && <span className="mt-2 inline-flex rounded bg-danger-soft px-2 py-0.5 font-sans text-xs font-semibold text-danger">Urgent</span>}
+                                                {isLegacy && <span className="mt-1 block font-sans text-xs font-normal text-muted">Legacy</span>}
                                             </td>
-                                            <td className="min-w-[190px] px-4 py-4 font-medium text-foreground">
-                                                <button type="button" onClick={() => openDocumentDetails(document)} className="text-left font-semibold hover:text-primary hover:underline">{document.title || 'Untitled'}</button>
+                                            <td className="break-words px-3 py-4 font-medium text-foreground">
+                                                <button type="button" onClick={() => openDocumentDetails(document)} className="max-w-full break-words text-left font-semibold hover:text-primary hover:underline">{document.title || 'Untitled'}</button>
                                             </td>
-                                            <td className="whitespace-nowrap px-4 py-4 text-muted">
+                                            <td className="break-words px-3 py-4 text-muted">
                                                 {getDocumentTypeName(document) || '—'}
                                             </td>
-                                            <td className="px-4 py-4 text-muted">
+                                            <td className="break-words px-3 py-4 text-muted">
                                                 {document.origin_type || '—'}
                                             </td>
-                                            <td className="whitespace-nowrap px-4 py-4">
+                                            <td className="px-3 py-4">
                                                 <span
-                                                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${getStatusClasses(
+                                                    className={`inline-block max-w-full break-words rounded-md px-2 py-1 text-xs font-semibold capitalize ${getStatusClasses(
                                                         document.status
                                                     )}`}
                                                 >
-                                                    {(document.status || 'draft').toUpperCase()}
+                                                    {document.status || 'draft'}
                                                 </span>
                                             </td>
-                                            <td className="min-w-[240px] px-4 py-3">
+                                            <td className="break-words px-3 py-3">
                                                 {document.last_transaction_summary ? <div className="flex flex-col gap-1.5">
-                                                    <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${getTransactionClasses(document.last_transaction_summary.action, document.last_transaction_summary.status)}`}>{document.last_transaction_summary.action || document.last_transaction_summary.status || 'Transaction'}</span>
+                                                    <span className="text-xs font-medium text-foreground">{document.last_transaction_summary.action || document.last_transaction_summary.status || 'Transaction'}</span>
                                                     <span className="text-xs text-muted">{[document.last_transaction_summary.from_office_short_name || document.last_transaction_summary.from_office, document.last_transaction_summary.to_office_short_name || document.last_transaction_summary.to_office].filter(Boolean).join(' → ') || document.last_transaction_summary.holder_short_name || document.last_transaction_summary.holder || 'Office not recorded'}</span>
-                                                    <span className="text-[14px] text-slate-400">{document.last_transaction_summary.created_at || document.last_transaction_summary.created_by || '—'}</span>
-                                                </div> : <span className="text-sm text-slate-400">No transactions</span>}
+                                                    <span className="text-xs text-muted">{document.last_transaction_summary.created_at || document.last_transaction_summary.created_by || '—'}</span>
+                                                </div> : <span className="text-sm text-muted">No transactions</span>}
                                             </td>
-                                            <td className="whitespace-nowrap px-4 py-4 no-print">
-                                                <fieldset disabled={processing} className="flex min-w-[180px] flex-wrap items-center gap-1.5">
-                                                    <button type="button" aria-label="View document" title="View document" onClick={() => openDocumentDetails(document)} className="rounded-md bg-slate-100 p-2 text-foreground hover:bg-slate-200"><Eye size={15} /></button>
-                                                    {document.is_finalized && <button type="button" aria-label="Print disposition form" title="Print disposition form" onClick={() => printDisposition(document)} className="rounded-md bg-secondary p-2 text-primary hover:bg-primary/10"><Printer size={15} /></button>}
-                                                    {document.can_update && <button type="button" aria-label="Update draft" title="Update draft" onClick={() => openEdit(document)} className="rounded-md bg-secondary p-2 text-primary hover:bg-primary/10"><Pencil size={15} /></button>}
-                                                    {document.can_release && <button type="button" aria-label="Forward document" title="Forward document" onClick={() => openRelease(document)} className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-3 py-2  hover:bg-slate-200"><Send size={15} /></button>}
-                                                    {document.can_terminal && <button type="button" aria-label="Tag as terminal" title="Tag as terminal" onClick={() => requestDocumentAction('Tag document as terminal?', `Mark ${document.tracking_number || 'this document'} as terminal?`, 'Tag as terminal', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/terminal`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document updated', message: 'Document tagged as terminal.' }) }); })} className="rounded-md bg-sidebar/10 p-2 text-sidebar hover:bg-sidebar/15"><Archive size={15} /></button>}
-                                                    {document.can_receive && <button type="button" aria-label="Receive document" title="Receive document" onClick={() => requestDocumentAction('Receive document?', `Confirm receipt of ${document.tracking_number || 'this document'}?`, 'Receive', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/receive`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document received', message: 'Document received successfully.' }) }); })} className="inline-flex items-center gap-1.5 rounded-md bg-success-soft px-3 py-2 text-success hover:bg-success/20"><Inbox size={15} /></button>}
-                                                    {document.can_delete && <button type="button" aria-label="Delete draft" title="Delete draft" onClick={() => requestDocumentAction('Delete draft?', `Remove ${document.tracking_number || 'this draft'} from the active list?`, 'Delete draft', () => { setCrudAlert(null); setProcessing(true); router.delete(`/documents/${document.id}`, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Draft deleted', message: 'Document draft deleted successfully.' }) }); }, true)} className="rounded-md bg-danger-soft p-2 text-danger hover:bg-rose-100"><Trash2 size={15} /></button>}
-                                                </fieldset>
+                                            <td className="sticky right-0 z-10 border-l border-border bg-surface px-3 py-3 no-print">
+                                                <div className="flex flex-col gap-2">
+                                                    {document.can_receive && <button type="button" disabled={processing} aria-label="Receive document" title="Receive document" onClick={() => requestDocumentAction('Receive document?', `Confirm receipt of ${document.tracking_number || 'this document'}?`, 'Receive', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/receive`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ variant: 'error', title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document received', message: 'Document received successfully.' }) }); })} className="dots-button-secondary w-full px-2 text-primary"><Inbox size={15} /> Receive</button>}
+                                                    {document.can_release && <button type="button" disabled={processing} aria-label="Forward document" title="Forward document" onClick={() => openRelease(document)} className="dots-button-secondary w-full px-2 text-primary"><Send size={15} /> Forward</button>}
+                                                    <Menu as="div" className="relative">
+                                                        <MenuButton disabled={processing} className="dots-button-secondary w-full gap-1 px-2" aria-label={`More actions for ${document.tracking_number || document.title || 'document'}`}>More <ChevronDown size={14} aria-hidden="true" /></MenuButton>
+                                                        <MenuItems anchor="bottom end" className="dots-workspace z-50 w-60 rounded-lg border border-border bg-surface p-1 text-foreground shadow-lg">
+                                                            <MenuItem><button type="button" disabled={processing} aria-label="View document" title="View document" onClick={() => openDocumentDetails(document)} className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm data-[focus]:bg-secondary"><Eye size={15} /> View details</button></MenuItem>
+                                                            {document.is_finalized && <MenuItem><button type="button" disabled={processing} aria-label="Print disposition form" title="Print disposition form" onClick={() => printDisposition(document)} className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm data-[focus]:bg-secondary"><Printer size={15} /> Print disposition</button></MenuItem>}
+                                                            {document.can_update && <MenuItem><button type="button" disabled={processing} aria-label="Update draft" title="Update draft" onClick={() => openEdit(document)} className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm data-[focus]:bg-secondary"><Pencil size={15} /> Update draft</button></MenuItem>}
+                                                            {document.can_terminal && <MenuItem><button type="button" disabled={processing} aria-label="Tag as terminal" title="Tag as terminal" onClick={() => requestDocumentAction('Tag document as terminal?', `Mark ${document.tracking_number || 'this document'} as terminal?`, 'Tag as terminal', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/terminal`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ variant: 'error', title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document updated', message: 'Document tagged as terminal.' }) }); })} className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm data-[focus]:bg-secondary"><Archive size={15} /> Tag as terminal</button></MenuItem>}
+                                                            {document.can_delete && <MenuItem><button type="button" disabled={processing} aria-label="Delete draft" title="Delete draft" onClick={() => requestDocumentAction('Delete draft?', `Remove ${document.tracking_number || 'this draft'} from the active list?`, 'Delete draft', () => { setCrudAlert(null); setProcessing(true); router.delete(`/documents/${document.id}`, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ variant: 'error', title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Draft deleted', message: 'Document draft deleted successfully.' }) }); }, true)} className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm data-[focus]:bg-secondary text-danger"><Trash2 size={15} /> Delete draft</button></MenuItem>}
+                                                        </MenuItems>
+                                                    </Menu>
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -804,8 +801,8 @@ export default function DocumentsIndex({
                     <section>
                         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
                             <div>
-                                <h2 id="document-details-title" className="text-lg font-semibold text-foreground">Document details</h2>
-                                <p className="mt-1 break-words text-sm text-muted">Review document information and transaction history.</p>
+                                <h2 id="document-details-title" className="break-words text-lg font-semibold text-foreground">{viewingRow.title || 'Document details'}</h2>
+                                <p className="mt-1 break-words text-sm text-muted">{viewingRow.tracking_number || 'Tracking number unavailable'}</p>
                             </div>
                             <button type="button" onClick={() => setViewingRow(null)} aria-label="Close document details" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
                                 <X size={19} aria-hidden="true" />
@@ -819,10 +816,10 @@ export default function DocumentsIndex({
 
                             <section aria-labelledby="transaction-history-title">
                                 <div className="mb-3 flex items-center justify-between gap-3">
-                                    <div><h3 id="transaction-history-title" className="font-semibold text-foreground">Transaction history</h3><p className="mt-1 text-sm text-muted">Document activity in workflow order.</p></div>
-                                    <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold text-muted">{viewingRow.transactions?.length ?? 0} transactions</span>
+                                    <div><h3 id="transaction-history-title" className="font-semibold text-foreground">Transaction history</h3></div>
+                                    <span className="text-xs text-muted">{viewingRow.transactions?.length ?? 0} transactions</span>
                                 </div>
-                                {viewingRow.transactions?.length ? <ol className="space-y-3 border-l-2 border-border pl-4">{viewingRow.transactions.map((transaction, index) => <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="relative rounded-xl border border-border bg-background p-3 before:absolute before:-left-[22px] before:top-4 before:h-2.5 before:w-2.5 before:rounded-full before:bg-primary"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-foreground">{transaction.action || transaction.status || 'Transaction'}</span><span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium uppercase text-muted">{transaction.status || '—'}</span></div><p className="mt-1 text-sm text-muted">{[transaction.from_office_short_name || transaction.from_office, transaction.to_office_short_name || transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder_short_name || transaction.holder ? `Held by ${transaction.holder_short_name || transaction.holder}` : 'Office details unavailable')}</p><p className="mt-1 text-xs text-muted">{[transaction.created_by_short_name || transaction.created_by, transaction.created_at].filter(Boolean).join(' · ') || 'Date and user unavailable'}</p></li>)}</ol> : viewingRow.details_loading ? null : <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">No transactions recorded.</p>}
+                                {viewingRow.transactions?.length ? <ol className="divide-y divide-border">{viewingRow.transactions.map((transaction, index) => <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="py-4"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-foreground">{transaction.action || transaction.status || 'Transaction'}</span><span className="text-xs font-medium capitalize text-muted">{transaction.status || '—'}</span></div><p className="mt-1 text-sm text-muted">{[transaction.from_office_short_name || transaction.from_office, transaction.to_office_short_name || transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder_short_name || transaction.holder ? `Held by ${transaction.holder_short_name || transaction.holder}` : 'Office details unavailable')}</p><p className="mt-1 text-xs text-muted">{[transaction.created_by_short_name || transaction.created_by, transaction.created_at].filter(Boolean).join(' · ') || 'Date and user unavailable'}</p></li>)}</ol> : viewingRow.details_loading ? null : <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">No transactions recorded.</p>}
                         </section>
                         </div>
                         <div className="sticky bottom-0 flex justify-end border-t border-border bg-surface px-5 py-4 sm:px-6">

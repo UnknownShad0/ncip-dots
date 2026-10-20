@@ -12,12 +12,12 @@ const groups = [
         { label: 'Documents', items: [
         { name: 'Latest documents', href: 'documents.latest', icon: Clock3 },
         { name: 'All documents', href: 'documents.index', countKey: 'pending', icon: Folder },
-        { name: 'Generate Document', href: 'document-creation.index', countKey: 'approvals', icon: FileText },
-        { name: 'Approved Documents', href: 'approved-documents.index', countKey: 'approved', icon: FileClock },
+        { name: 'Document creation', href: 'document-creation.index', countKey: 'approvals', icon: FileText },
+        { name: 'Approved documents', href: 'approved-documents.index', countKey: 'approved', icon: FileClock },
         { name: 'Drafts', href: 'drafts.index', countKey: 'drafts', icon: FilePlus2 },
 
     ] },
-    { label: 'External API', items: [{ name: 'Connected systems', href: 'connected-systems.index', icon: Database }] },
+    { label: 'Connected systems', items: [{ name: 'Connected systems', href: 'connected-systems.index', icon: Database }] },
     { label: 'Archives', items: [
         { name: 'Archived documents', href: 'archives.index', icon: Archive },
     ] },
@@ -122,7 +122,7 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
                         </MenuItems>
                     </DropdownMenu>
                 </header>
-                <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+                <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-6">{children}</main>
             </div>
         </div>
         <PrivacyNoticeModal

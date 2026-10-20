@@ -643,7 +643,7 @@ export default function Index({
                 )}
                 {!approvedOnly && (
                     <section
-                        className="overflow-hidden rounded-xl border border-t-4 border-border border-t-primary bg-background shadow-sm print:hidden"
+                        className="overflow-hidden rounded-lg border border-border bg-background print:hidden"
                         aria-label="Document editor"
                     >
                         <form onSubmit={saveDraft} aria-busy={saving}>
@@ -754,10 +754,7 @@ export default function Index({
                                     {/* <button type="button" onClick={loadSample} disabled={!selectedType?.sample_content || saving} className="dots-button-secondary disabled:opacity-40">Load sample content</button> */}
                                     <p className="text-xs text-muted">
                                         {content.template?.name || "NCIP Standard"} · Letter · Portrait{" "}
-                                        <span className="mx-2 text-slate-300">
-                                            |
-                                        </span>{" "}
-                                        Edit and preview use the same page layout
+
                                     </p>
                                 </div>
                                 {Object.keys(errors).length > 0 && (
@@ -773,7 +770,7 @@ export default function Index({
                                         </ul>
                                     </div>
                                 )}
-                                <div className="overflow-x-auto px-3 py-8 sm:px-8 sm:py-10">
+                                <div className="overflow-x-auto px-3 py-4 sm:px-5 sm:py-5">
                                     <DocumentPaper
                                         content={content}
                                         onChange={change}

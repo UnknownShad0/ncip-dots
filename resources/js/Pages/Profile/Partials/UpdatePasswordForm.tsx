@@ -2,9 +2,8 @@ import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
-import WorkspaceAlert from '@/Components/WorkspaceAlert';
 import { useForm } from '@inertiajs/react';
-import { FormEventHandler, useRef, useState } from 'react';
+import { FormEventHandler, useRef } from 'react';
 
 export default function UpdatePasswordForm({
     className = '',
@@ -13,7 +12,6 @@ export default function UpdatePasswordForm({
 }) {
     const passwordInput = useRef<HTMLInputElement>(null);
     const currentPasswordInput = useRef<HTMLInputElement>(null);
-    const [saved, setSaved] = useState(false);
 
     const {
         data,
@@ -22,6 +20,7 @@ export default function UpdatePasswordForm({
         put,
         reset,
         processing,
+        recentlySuccessful,
     } = useForm({
         current_password: '',
         password: '',
@@ -35,7 +34,6 @@ export default function UpdatePasswordForm({
             preserveScroll: true,
             onSuccess: () => {
                 reset();
-                setSaved(true);
             },
             onError: (errors) => {
                 if (errors.password) {
@@ -54,21 +52,21 @@ export default function UpdatePasswordForm({
     return (
         <section className={className}>
             <header>
-                <h2 className="text-lg font-medium text-gray-900">
-                    Update Password
+                <h2 className="text-lg font-semibold text-foreground">
+                    Password
                 </h2>
 
-                <p className="mt-1 text-sm text-gray-600">
+                <p className="mt-1 text-sm text-muted">
                     Use at least 8 characters, including uppercase and lowercase
                     letters, a number, and a symbol.
                 </p>
             </header>
 
-            <form onSubmit={updatePassword} className="mt-6 space-y-6">
+            <form onSubmit={updatePassword} className="mt-5 space-y-4">
                 <div>
                     <InputLabel
                         htmlFor="current_password"
-                        value="Current Password"
+                        value="Current password"
                     />
 
                     <TextInput
@@ -90,7 +88,7 @@ export default function UpdatePasswordForm({
                 </div>
 
                 <div>
-                    <InputLabel htmlFor="password" value="New Password" />
+                    <InputLabel htmlFor="password" value="New password" />
 
                     <TextInput
                         id="password"
@@ -108,7 +106,7 @@ export default function UpdatePasswordForm({
                 <div>
                     <InputLabel
                         htmlFor="password_confirmation"
-                        value="Confirm Password"
+                        value="Confirm password"
                     />
 
                     <TextInput
@@ -129,10 +127,10 @@ export default function UpdatePasswordForm({
                 </div>
 
                 <div className="flex items-center gap-4">
-                    <PrimaryButton disabled={processing}>Save</PrimaryButton>
+                    <PrimaryButton disabled={processing}>{processing ? 'Saving…' : 'Save changes'}</PrimaryButton>
+                    <span role="status" className="text-sm text-success">{recentlySuccessful ? 'Changes saved.' : ''}</span>
                 </div>
             </form>
-            {saved && <WorkspaceAlert title="Password updated" message="Your password was changed successfully." onClose={() => setSaved(false)} />}
         </section>
     );
 }

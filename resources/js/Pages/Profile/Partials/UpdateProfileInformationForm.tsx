@@ -2,9 +2,8 @@ import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
-import WorkspaceAlert from '@/Components/WorkspaceAlert';
 import { Link, useForm, usePage } from '@inertiajs/react';
-import { FormEventHandler, useState } from 'react';
+import { FormEventHandler } from 'react';
 
 export default function UpdateProfileInformation({
     mustVerifyEmail,
@@ -16,9 +15,8 @@ export default function UpdateProfileInformation({
     className?: string;
 }) {
     const user = usePage().props.auth.user;
-    const [saved, setSaved] = useState(false);
 
-    const { data, setData, patch, errors, processing } =
+    const { data, setData, patch, errors, processing, recentlySuccessful } =
         useForm({
             name: user.name,
             email: user.email,
@@ -28,23 +26,23 @@ export default function UpdateProfileInformation({
         e.preventDefault();
 
         patch(route('profile.update'), {
-            onSuccess: () => setSaved(true),
+            preserveScroll: true,
         });
     };
 
     return (
         <section className={className}>
             <header>
-                <h2 className="text-lg font-medium text-gray-900">
-                    Profile Information
+                <h2 className="text-lg font-semibold text-foreground">
+                    Profile information
                 </h2>
 
-                <p className="mt-1 text-sm text-gray-600">
+                <p className="mt-1 text-sm text-muted">
                     Update your account's profile information and email address.
                 </p>
             </header>
 
-            <form onSubmit={submit} className="mt-6 space-y-6">
+            <form onSubmit={submit} className="mt-5 space-y-4">
                 <div>
                     <InputLabel htmlFor="name" value="Name" />
 
@@ -79,7 +77,7 @@ export default function UpdateProfileInformation({
 
                 {mustVerifyEmail && user.email_verified_at === null && (
                     <div>
-                        <p className="mt-2 text-sm text-gray-800">
+                        <p className="mt-2 text-sm text-foreground">
                             Your email address is unverified.
                             <Link
                                 href={route('verification.send')}
@@ -92,7 +90,7 @@ export default function UpdateProfileInformation({
                         </p>
 
                         {status === 'verification-link-sent' && (
-                            <div className="mt-2 text-sm font-medium text-green-600">
+                            <div className="mt-2 text-sm font-medium text-success">
                                 A new verification link has been sent to your
                                 email address.
                             </div>
@@ -101,10 +99,10 @@ export default function UpdateProfileInformation({
                 )}
 
                 <div className="flex items-center gap-4">
-                    <PrimaryButton disabled={processing}>Save</PrimaryButton>
+                    <PrimaryButton disabled={processing}>{processing ? 'Saving…' : 'Save changes'}</PrimaryButton>
+                    <span role="status" className="text-sm text-success">{recentlySuccessful ? 'Changes saved.' : ''}</span>
                 </div>
             </form>
-            {saved && <WorkspaceAlert title="Profile updated" message="Your profile information was saved successfully." onClose={() => setSaved(false)} />}
         </section>
     );
 }
