@@ -39,6 +39,8 @@ export default {
             },
             colors: Object.fromEntries([
                 'primary', 'primary-hover', 'primary-foreground', 'secondary', 'tertiary',
+                'accent', 'accent-hover', 'accent-foreground',
+                'sidebar', 'sidebar-foreground', 'sidebar-muted', 'sidebar-border',
                 'background', 'surface', 'foreground', 'muted', 'border',
                 'success', 'success-soft', 'warning', 'warning-soft', 'danger', 'danger-soft',
             ].map((name) => [name, `rgb(var(--color-${name}) / <alpha-value>)`])),

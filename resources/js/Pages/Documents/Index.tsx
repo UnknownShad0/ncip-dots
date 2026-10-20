@@ -128,7 +128,7 @@ const getStatusClasses = (status?: string) => {
             return 'bg-danger-soft text-danger';
         case 'archived':
         case 'terminal':
-            return 'bg-violet-100 text-violet-700';
+            return 'bg-sidebar/10 text-sidebar';
         default:
             return 'bg-slate-100 text-foreground';
     }
@@ -137,10 +137,10 @@ const getStatusClasses = (status?: string) => {
 const getTransactionClasses = (action?: string | null, status?: string | null) => {
     const label = (action || status || '').toLowerCase();
 
-    if (label.includes('terminal')) return 'bg-violet-100 text-violet-800';
+    if (label.includes('terminal')) return 'bg-sidebar/10 text-sidebar';
     if (label.includes('receiv')) return 'bg-emerald-100 text-emerald-800';
-    if (label.includes('finaliz')) return 'bg-blue-100 text-primary';
-    return 'bg-secondary text-sky-800';
+    if (label.includes('finaliz')) return 'bg-primary/10 text-primary';
+    return 'bg-secondary text-primary';
 };
 
 export default function DocumentsIndex({
@@ -634,7 +634,7 @@ export default function DocumentsIndex({
                         <button
                             type="button"
                             onClick={openCreate}
-                            className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-primary px-3 text-sm font-semibold text-white transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 sm:px-4"
+                            className="dots-button-accent inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm sm:px-4"
                         >
                             <FilePlus2 size={17} />
                             New document
@@ -643,8 +643,8 @@ export default function DocumentsIndex({
                 </div>
 
                 <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
-                    <div className="flex flex-col gap-1 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                        <h3 className="font-semibold text-foreground">Documents</h3>
+                    <div className="dots-blue-banner flex flex-col gap-1 border-b border-primary-hover bg-primary px-5 py-4 text-primary-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                        <h3 className="font-semibold text-primary-foreground">Documents</h3>
                         <div className="flex items-center gap-3">
                             {showListUpdating && <p role="status" className="inline-flex items-center gap-1.5 text-xs text-muted"><LoaderCircle size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Updating results…</p>}
                             <p className="text-sm text-muted">{totalDocuments === 0 ? 'No results' : `Showing ${pagination?.from ?? 0}–${pagination?.to ?? 0} of ${totalDocuments} documents`}</p>
@@ -652,7 +652,7 @@ export default function DocumentsIndex({
                     </div>
                 <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Documents table; scroll horizontally for more columns">
                     <table aria-busy={showListUpdating} className="dots-document-table min-w-full text-left text-sm">
-                        <thead className="bg-background text-muted">
+                    <thead className="bg-primary/10 text-primary">
                             <tr>
                                 <th className="whitespace-nowrap px-4 py-3.5 font-semibold">
                                     <button type="button" onClick={() => handleSort('tracking_number')} className="flex items-center gap-1.5 hover:text-primary">
@@ -739,10 +739,10 @@ export default function DocumentsIndex({
                                             <td className="whitespace-nowrap px-4 py-4 no-print">
                                                 <fieldset disabled={processing} className="flex min-w-[180px] flex-wrap items-center gap-1.5">
                                                     <button type="button" aria-label="View document" title="View document" onClick={() => openDocumentDetails(document)} className="rounded-md bg-slate-100 p-2 text-foreground hover:bg-slate-200"><Eye size={15} /></button>
-                                                    {document.is_finalized && <button type="button" aria-label="Print disposition form" title="Print disposition form" onClick={() => printDisposition(document)} className="rounded-md bg-indigo-50 p-2 text-indigo-700 hover:bg-indigo-100"><Printer size={15} /></button>}
-                                                    {document.can_update && <button type="button" aria-label="Update draft" title="Update draft" onClick={() => openEdit(document)} className="rounded-md bg-secondary p-2 text-primary hover:bg-blue-100"><Pencil size={15} /></button>}
+                                                    {document.is_finalized && <button type="button" aria-label="Print disposition form" title="Print disposition form" onClick={() => printDisposition(document)} className="rounded-md bg-secondary p-2 text-primary hover:bg-primary/10"><Printer size={15} /></button>}
+                                                    {document.can_update && <button type="button" aria-label="Update draft" title="Update draft" onClick={() => openEdit(document)} className="rounded-md bg-secondary p-2 text-primary hover:bg-primary/10"><Pencil size={15} /></button>}
                                                     {document.can_release && <button type="button" aria-label="Forward document" title="Forward document" onClick={() => openRelease(document)} className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-3 py-2  hover:bg-slate-200"><Send size={15} /></button>}
-                                                    {document.can_terminal && <button type="button" aria-label="Tag as terminal" title="Tag as terminal" onClick={() => requestDocumentAction('Tag document as terminal?', `Mark ${document.tracking_number || 'this document'} as terminal?`, 'Tag as terminal', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/terminal`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document updated', message: 'Document tagged as terminal.' }) }); })} className="rounded-md bg-violet-50 p-2 text-violet-700 hover:bg-violet-100"><Archive size={15} /></button>}
+                                                    {document.can_terminal && <button type="button" aria-label="Tag as terminal" title="Tag as terminal" onClick={() => requestDocumentAction('Tag document as terminal?', `Mark ${document.tracking_number || 'this document'} as terminal?`, 'Tag as terminal', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/terminal`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document updated', message: 'Document tagged as terminal.' }) }); })} className="rounded-md bg-sidebar/10 p-2 text-sidebar hover:bg-sidebar/15"><Archive size={15} /></button>}
                                                     {document.can_receive && <button type="button" aria-label="Receive document" title="Receive document" onClick={() => requestDocumentAction('Receive document?', `Confirm receipt of ${document.tracking_number || 'this document'}?`, 'Receive', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/receive`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document received', message: 'Document received successfully.' }) }); })} className="inline-flex items-center gap-1.5 rounded-md bg-success-soft px-3 py-2 text-success hover:bg-success/20"><Inbox size={15} /></button>}
                                                     {document.can_delete && <button type="button" aria-label="Delete draft" title="Delete draft" onClick={() => requestDocumentAction('Delete draft?', `Remove ${document.tracking_number || 'this draft'} from the active list?`, 'Delete draft', () => { setCrudAlert(null); setProcessing(true); router.delete(`/documents/${document.id}`, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Draft deleted', message: 'Document draft deleted successfully.' }) }); }, true)} className="rounded-md bg-danger-soft p-2 text-danger hover:bg-rose-100"><Trash2 size={15} /></button>}
                                                 </fieldset>

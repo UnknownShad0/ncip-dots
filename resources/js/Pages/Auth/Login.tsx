@@ -235,7 +235,7 @@ export default function Login({
     return (
         <GuestLayout>
             <Head title="Login" />
-            <h1 className="text-center text-2xl font-semibold tracking-tight text-slate-900">Good day. Please sign in.</h1>
+            <h1 className="text-center text-2xl font-semibold tracking-tight text-foreground">Good day. Please sign in.</h1>
 
             {status && <div role="status" className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{status}</div>}
 
@@ -247,7 +247,7 @@ export default function Login({
                         type="text"
                         name="username"
                         value={data.username}
-                        className="mt-1.5 block w-full rounded-lg border-slate-300 py-3 focus:border-teal-700 focus:ring-teal-700"
+                        className="mt-1.5 block w-full rounded-lg border-border py-3 focus:border-primary focus:ring-primary"
                         autoComplete="username"
                         autoCapitalize="none"
                         isFocused
@@ -272,12 +272,12 @@ export default function Login({
                             type={showPassword ? 'text' : 'password'}
                             name="password"
                             value={data.password}
-                            className="block w-full rounded-lg border-slate-300 py-3 pr-12 focus:border-teal-700 focus:ring-teal-700"
+                            className="block w-full rounded-lg border-border py-3 pr-12 focus:border-primary focus:ring-primary"
                             autoComplete="current-password"
                             required
                             onChange={(event) => setData('password', event.target.value)}
                         />
-                        <button type="button" onClick={() => setShowPassword((shown) => !shown)} aria-label={showPassword ? 'Hide password' : 'Show password'} className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-500 hover:text-slate-800 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700">
+                        <button type="button" onClick={() => setShowPassword((shown) => !shown)} aria-label={showPassword ? 'Hide password' : 'Show password'} className="absolute inset-y-0 right-0 flex items-center px-3 text-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary">
                             {showPassword ? <EyeOff size={19} aria-hidden="true" /> : <Eye size={19} aria-hidden="true" />}
                         </button>
                     </div>
@@ -299,11 +299,11 @@ export default function Login({
                 )}
 
                 <label className="flex items-center gap-2 text-sm text-slate-600">
-                    <input type="checkbox" checked={data.remember} onChange={(event) => setData('remember', event.target.checked)} className="rounded border-slate-300 text-teal-700 shadow-sm focus:ring-teal-700" />
+                    <input type="checkbox" checked={data.remember} onChange={(event) => setData('remember', event.target.checked)} className="rounded border-border text-primary shadow-sm focus:ring-primary" />
                     Remember me
                 </label>
 
-                <PrimaryButton type="submit" disabled={processing || cooldownActive} className="!mt-2 flex w-full justify-center rounded-lg bg-sky-600 py-3 text-sm tracking-normal hover:bg-sky-700 focus:bg-sky-700 active:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60">
+                <PrimaryButton type="submit" disabled={processing || cooldownActive} className="!mt-2 flex w-full justify-center rounded-lg py-3 text-sm tracking-normal !bg-accent !text-accent-foreground hover:!bg-accent-hover focus:!bg-accent-hover active:!bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60">
                     {processing && <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />}
                     {processing ? 'Signing in…' : 'Sign in'}
                 </PrimaryButton>

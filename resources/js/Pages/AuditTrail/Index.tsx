@@ -157,7 +157,7 @@ export default function AuditTrailIndex({ trail = [], pagination, canFilterBurea
 
     return (
         <AuthenticatedLayout
-            header={<div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">System activity</p><h1 className="text-2xl font-bold tracking-tight text-[#171717] sm:text-3xl">Audit Trail</h1></div>}
+            header={<div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">System activity</p><h1 className="text-2xl font-bold tracking-tight text-[#171717] sm:text-3xl">Audit Trail</h1></div>}
         >
             <Head title="Audit Trail" />
 

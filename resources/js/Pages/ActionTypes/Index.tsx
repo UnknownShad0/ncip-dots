@@ -200,7 +200,7 @@ export default function ActionTypesIndex({
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             placeholder="Search by name, code, or description"
-                            className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                            className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                         />
                         </label>
 
@@ -389,7 +389,7 @@ export default function ActionTypesIndex({
                                     type="checkbox"
                                     checked={form.is_active}
                                     onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
-                                    className="h-4 w-4 rounded border-border text-sky-600"
+                                    className="h-4 w-4 rounded border-border text-primary"
                                 />
                                 <label htmlFor="is_active" className="text-sm text-foreground">Active</label>
                             </div>

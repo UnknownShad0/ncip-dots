@@ -51,13 +51,13 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
         return !value;
     });
     const navigation = (compact = false) => <>
-        <Link href={route('dashboard')} className="flex h-20 shrink-0 items-center gap-3 border-b border-border px-5" aria-label="DOTS home">
+        <Link href={route('dashboard')} className="flex h-20 shrink-0 items-center gap-3 border-b border-sidebar-border px-5" aria-label="DOTS home">
             <img src="/images/logo/ncip-logo.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
-            {!compact && <span><span className="block text-xl font-bold tracking-tight text-primary">DOTS</span><span className="block text-xs text-muted"><span className="font-bold">DO</span>cument <span className="font-bold">T</span>racking <span className="font-bold">S</span>ystem</span></span>}
+            {!compact && <span><span className="block text-xl font-bold tracking-tight text-sidebar-foreground">DOTS</span><span className="block text-xs text-sidebar-muted"><span className="font-bold">DO</span>cument <span className="font-bold">T</span>racking <span className="font-bold">S</span>ystem</span></span>}
         </Link>
         <nav aria-label="Main navigation" className="flex-1 space-y-5 overflow-y-auto px-3 py-5">
             {groups.map((group, index) => <section key={index}>
-                {group.label && (compact ? <div className="mx-3 mb-3 border-t border-border" /> : <h2 className="mb-2 px-3 text-[14px] font-semibold uppercase tracking-wider text-muted">{group.label === 'Other information systems' ? 'Connected systems' : group.label}</h2>)}
+                {group.label && (compact ? <div className="mx-3 mb-3 border-t border-sidebar-border" /> : <h2 className="mb-2 px-3 text-[14px] font-semibold uppercase tracking-wider text-sidebar-muted">{group.label === 'Other information systems' ? 'Connected systems' : group.label}</h2>)}
                 <div className="space-y-1.5">{group.items.filter((item) => !['libraries.index', 'user-accounts.index', 'gmail-integration.index'].includes(item.href) || canManageLibraries === true).map(({name, href, countKey, icon: Icon}) => {
                     const active = href === 'libraries.index'
                         ? route().current('libraries.*') || route().current('setup.index') || libraryLinks.some((item) => route().current(item.href))
@@ -65,36 +65,36 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
                     const count = countKey ? notificationCounts?.[countKey] : null;
                     const target = route(href);
                     return <Link key={name} href={target} onClick={() => setMobileOpen(false)} aria-current={active ? 'page' : undefined} aria-label={count ? `${name}: ${count}` : name} title={compact ? `${name}${count > 0 ? `: ${count > 99 ? '99+' : count}` : ''}` : undefined}
-                        className={`relative flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm transition-colors ${compact ? 'justify-center' : ''} ${active ? 'bg-primary font-semibold text-primary-foreground' : 'text-muted hover:bg-secondary hover:text-foreground'}`}>
-                        <Icon size={18} className="shrink-0" aria-hidden="true" />{!compact && <span className="min-w-0 flex-1">{name}</span>}{count > 0 && !compact && <span className="min-w-5 rounded-md bg-secondary px-1.5 py-0.5 text-center text-[14px] font-semibold tabular-nums text-primary">{count > 99 ? '99+' : count}</span>}{count > 0 && compact && <span aria-hidden="true" className={`absolute right-2 top-2 h-2 w-2 rounded-full ${active ? 'bg-primary-foreground' : 'bg-primary'}`} />}
+                        className={`relative flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm transition-colors ${compact ? 'justify-center' : ''} ${active ? 'bg-primary font-semibold text-primary-foreground' : 'text-sidebar-muted hover:bg-white/10 hover:text-sidebar-foreground'}`}>
+                        <Icon size={18} className="shrink-0" aria-hidden="true" />{!compact && <span className="min-w-0 flex-1">{name}</span>}{count > 0 && !compact && <span className="min-w-5 rounded-md bg-white/15 px-1.5 py-0.5 text-center text-[14px] font-semibold tabular-nums text-sidebar-foreground">{count > 99 ? '99+' : count}</span>}{count > 0 && compact && <span aria-hidden="true" className={`absolute right-2 top-2 h-2 w-2 rounded-full ${active ? 'bg-primary-foreground' : 'bg-accent'}`} />}
                     </Link>;
                 })}</div>
             </section>)}
         </nav>
-        <div className="border-t border-border p-3">
-            <button type="button" onClick={() => { setMobileOpen(false); setPrivacyNoticeOpen(true); }} title={compact ? 'Privacy notice' : undefined} aria-label="Privacy notice" className={`mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted hover:bg-secondary ${compact ? 'justify-center' : ''}`}><ShieldCheck size={18} />{!compact && 'Privacy notice'}</button>
-            <Link href={route('logout')} method="post" as="button" title={compact ? 'Sign out' : undefined} aria-label="Sign out" className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted hover:bg-secondary ${compact ? 'justify-center' : ''}`}><LogOut size={18} />{!compact && 'Sign out'}</Link>
+        <div className="border-t border-sidebar-border p-3">
+            <button type="button" onClick={() => { setMobileOpen(false); setPrivacyNoticeOpen(true); }} title={compact ? 'Privacy notice' : undefined} aria-label="Privacy notice" className={`mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-sidebar-muted hover:bg-white/10 hover:text-sidebar-foreground ${compact ? 'justify-center' : ''}`}><ShieldCheck size={18} />{!compact && 'Privacy notice'}</button>
+            <Link href={route('logout')} method="post" as="button" title={compact ? 'Sign out' : undefined} aria-label="Sign out" className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-sidebar-muted hover:bg-white/10 hover:text-sidebar-foreground ${compact ? 'justify-center' : ''}`}><LogOut size={18} />{!compact && 'Sign out'}</Link>
         </div>
     </>;
     return <div className="dots-workspace min-h-screen bg-background text-sm text-foreground">
         <Head><link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" /><link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet" /></Head>
         <div className="flex min-h-screen">
-            <motion.aside initial={false} animate={{width: collapsed ? 80 : 300}} transition={{duration: reduceMotion ? 0 : .2}} className="sticky top-0 hidden h-screen shrink-0 flex-col overflow-hidden border-r border-border bg-surface lg:flex">{navigation(collapsed)}</motion.aside>
+            <motion.aside initial={false} animate={{width: collapsed ? 80 : 300}} transition={{duration: reduceMotion ? 0 : .2}} className="sticky top-0 hidden h-screen shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar lg:flex">{navigation(collapsed)}</motion.aside>
             <Dialog open={mobileOpen} onClose={setMobileOpen} className="relative z-50 lg:hidden">
                 <div className="fixed inset-0 bg-foreground/40" aria-hidden="true" />
-                <DialogPanel className="dots-workspace fixed inset-y-0 left-0 flex w-[280px] max-w-[85vw] flex-col bg-surface">
+                <DialogPanel className="dots-workspace fixed inset-y-0 left-0 flex w-[280px] max-w-[85vw] flex-col bg-sidebar">
                     <DialogTitle className="sr-only">Navigation</DialogTitle>
-                    <button onClick={() => setMobileOpen(false)} aria-label="Close navigation" className="absolute right-2 top-2 rounded-lg p-2 text-muted"><X size={18} /></button>{navigation()}
+                    <button onClick={() => setMobileOpen(false)} aria-label="Close navigation" className="absolute right-2 top-2 rounded-lg p-2 text-sidebar-muted hover:bg-white/10 hover:text-sidebar-foreground"><X size={18} /></button>{navigation()}
                 </DialogPanel>
             </Dialog>
             <div className="flex min-w-0 flex-1 flex-col">
-                <header className="flex min-h-20 items-center gap-3 border-b border-border bg-surface px-4 sm:px-6">
-                    <button type="button" onClick={toggleSidebar} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} className="hidden rounded-lg p-2 text-muted hover:bg-secondary lg:block">{collapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}</button>
-                    <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open navigation" className="rounded-lg p-2 text-muted hover:bg-secondary lg:hidden"><Menu size={20} /></button>
-                    <div className="min-w-0 flex-1 py-4">{header}</div>
-                    <div className="hidden min-w-0 max-w-56 items-center gap-2 border-r border-border pr-4 text-muted xl:flex"><Building2 size={16} className="shrink-0" /><span className="truncate" title={[user.office_display_name, user.range].filter(Boolean).join(' · ')}>{user.office_display_name || 'Office not assigned'}</span></div>
+                <header className="dots-topbar flex min-h-20 items-center gap-3 border-b border-primary-hover bg-primary px-4 text-primary-foreground sm:px-6">
+                    <button type="button" onClick={toggleSidebar} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} className="hidden rounded-lg p-2 text-primary-foreground/80 hover:bg-white/10 hover:text-white lg:block">{collapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}</button>
+                    <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open navigation" className="rounded-lg p-2 text-primary-foreground/80 hover:bg-white/10 hover:text-white lg:hidden"><Menu size={20} /></button>
+                    <div className="dots-topbar-title min-w-0 flex-1 py-4">{header}</div>
+                    <div className="dots-office-meta hidden min-w-0 max-w-56 items-center gap-2 border-r border-border pr-4 text-muted xl:flex"><Building2 size={16} className="shrink-0" /><span className="truncate" title={[user.office_display_name, user.range].filter(Boolean).join(' · ')}>{user.office_display_name || 'Office not assigned'}</span></div>
                     <DropdownMenu as="div" className="relative shrink-0">
-                        <MenuButton className="relative rounded-lg p-2 text-muted transition hover:bg-secondary hover:text-foreground" aria-label={`Notifications${notificationCounts?.total ? `, ${notificationCounts.total} items` : ''}`}>
+                        <MenuButton className="relative rounded-lg p-2 text-primary-foreground/80 transition hover:bg-white/10 hover:text-white" aria-label={`Notifications${notificationCounts?.total ? `, ${notificationCounts.total} items` : ''}`}>
                             <Bell size={19} aria-hidden="true" />
                             {notificationCounts?.total > 0 && <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-danger px-1 py-0.5 text-center text-[13px] font-bold leading-none text-white">{notificationCounts.total > 99 ? '99+' : notificationCounts.total}</span>}
                         </MenuButton>
@@ -111,9 +111,9 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
                         </MenuItems>
                     </DropdownMenu>
                     <DropdownMenu as="div" className="relative shrink-0">
-                        <MenuButton className="flex items-center gap-2 rounded-lg p-2 hover:bg-secondary" aria-label="Account menu">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary font-semibold text-primary">{String(displayName).charAt(0).toUpperCase()}</span>
-                            <span className="hidden text-left leading-tight md:block"><span className="block max-w-32 truncate font-semibold">{displayName}</span><span className="text-xs text-muted">{user.role || 'Account'}</span></span><ChevronDown size={14} className="text-muted" />
+                        <MenuButton className="flex items-center gap-2 rounded-lg p-2 text-primary-foreground hover:bg-white/10" aria-label="Account menu">
+                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 font-semibold text-white">{String(displayName).charAt(0).toUpperCase()}</span>
+                            <span className="hidden text-left leading-tight md:block"><span className="block max-w-32 truncate font-semibold">{displayName}</span><span className="text-xs text-primary-foreground/70">{user.role || 'Account'}</span></span><ChevronDown size={14} className="text-primary-foreground/70" />
                         </MenuButton>
                         <MenuItems anchor="bottom end" className="dots-workspace z-50 mt-2 w-64 rounded-xl border border-border bg-surface p-2 shadow-lg">
                             <div className="border-b border-border px-3 py-2"><p className="truncate font-semibold">{displayName}</p><p className="truncate text-xs text-muted">{user.email}</p><p className="mt-1 text-xs text-muted">{[user.office_display_name, user.range].filter(Boolean).join(' · ')}</p></div>

@@ -28,7 +28,7 @@ export default function Show({ document }: { document: TrackedDocument }) {
                 <div className="mx-auto max-w-3xl">
                     <header className="mb-6 text-center">
                         <img src="/images/logo/ncip-logo.png" alt="NCIP logo" className="mx-auto mb-3 h-16 w-16 object-contain" />
-                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-800">Document Tracking System</p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Document Tracking System</p>
                         <h1 className="mt-2 text-2xl font-bold sm:text-3xl">Public document tracking</h1>
                         <p className="mt-2 text-sm text-slate-600">Current routing information for this tracking number.</p>
                     </header>
@@ -39,7 +39,7 @@ export default function Show({ document }: { document: TrackedDocument }) {
                                 <h2 id="document-summary-title" className="break-words text-xl font-semibold">{document.title || 'Untitled document'}</h2>
                                 <p className="mt-1 break-all font-mono text-sm text-slate-600">{document.tracking_number}</p>
                             </div>
-                            <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-medium capitalize text-blue-800">{document.status || 'Status unavailable'}</span>
+                            <span className="rounded-full bg-secondary px-3 py-1 text-sm font-medium capitalize text-primary">{document.status || 'Status unavailable'}</span>
                         </div>
 
                         <dl className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -53,8 +53,8 @@ export default function Show({ document }: { document: TrackedDocument }) {
                     <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7" aria-labelledby="routing-history-title">
                         <h2 id="routing-history-title" className="text-lg font-semibold">Routing history</h2>
                         {document.trails.length ? <ol className="mt-5 space-y-4">
-                            {document.trails.map((trail, index) => <li key={`${trail.created_at ?? 'trail'}-${index}`} className="relative border-l-2 border-blue-200 pb-1 pl-5 last:border-transparent">
-                                <span className="absolute -left-[7px] top-1 h-3 w-3 rounded-full border-2 border-white bg-blue-600 ring-1 ring-blue-200" />
+                            {document.trails.map((trail, index) => <li key={`${trail.created_at ?? 'trail'}-${index}`} className="relative border-l-2 border-primary/20 pb-1 pl-5 last:border-transparent">
+                                <span className="absolute -left-[7px] top-1 h-3 w-3 rounded-full border-2 border-white bg-primary ring-1 ring-primary/20" />
                                 <p className="font-medium">{trail.action || trail.status || 'Document activity'}</p>
                                 {(trail.from_office || trail.to_office || trail.holder) && <p className="mt-1 text-sm text-slate-600">
                                     {trail.from_office && <>From {trail.from_office}</>}

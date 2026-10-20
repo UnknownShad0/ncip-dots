@@ -108,7 +108,7 @@ const statusPresentation: Record<
     string,
     { label: string; className: string; Icon: LucideIcon }
 > = {
-    draft: { label: "Draft", className: "bg-slate-100 text-slate-700", Icon: Pencil },
+    draft: { label: "Draft", className: "bg-secondary text-muted", Icon: Pencil },
     pending_approval: { label: "Awaiting approval", className: "bg-warning-soft text-warning", Icon: Clock3 },
     revision_requested: { label: "Returned for revision", className: "bg-warning-soft text-warning", Icon: CircleAlert },
     rejected: { label: "Rejected", className: "bg-danger-soft text-danger", Icon: CircleX },
@@ -121,7 +121,7 @@ const statusPresentation: Record<
 function DraftStatusBadge({ status }: { status: string }) {
     const presentation = statusPresentation[status] ?? {
         label: status.replaceAll("_", " "),
-        className: "bg-slate-100 text-slate-700",
+        className: "bg-secondary text-muted",
         Icon: CircleHelp,
     };
     const Icon = presentation.Icon;
@@ -242,7 +242,7 @@ function DraftListSection({
                                             <Pencil size={16} aria-hidden="true" />
                                             Continue editing
                                         </button>
-                                        <button type="button" disabled={saving} onClick={() => onSubmitApproval?.(draft)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-hover disabled:opacity-50">
+                                        <button type="button" disabled={saving} onClick={() => onSubmitApproval?.(draft)} className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent-hover disabled:opacity-50">
                                             <Send size={16} aria-hidden="true" />
                                             Submit for approval
                                         </button>
@@ -643,7 +643,7 @@ export default function Index({
                 )}
                 {!approvedOnly && (
                     <section
-                        className="overflow-hidden rounded-xl border border-border bg-background shadow-sm print:hidden"
+                        className="overflow-hidden rounded-xl border border-t-4 border-border border-t-primary bg-background shadow-sm print:hidden"
                         aria-label="Document editor"
                     >
                         <form onSubmit={saveDraft} aria-busy={saving}>
@@ -675,7 +675,7 @@ export default function Index({
                                             onClick={() =>
                                                 guardChanges(startNew)
                                             }
-                                            className="rounded-lg px-3 py-2 text-sm text-muted hover:bg-slate-100"
+                                            className="rounded-lg px-3 py-2 text-sm text-muted hover:bg-secondary"
                                         >
                                             <FilePlus2
                                                 size={16}
@@ -710,7 +710,7 @@ export default function Index({
                                             onClick={submitForApproval}
                                             disabled={saving}
                                             title="Choose an approval office; current edits will be saved and submitted"
-                                            className="inline-flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+                                            className="inline-flex items-center rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground shadow-sm hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
                                         >
                                             <Send size={16} className="mr-2" aria-hidden="true" />
                                             Submit for approval
@@ -976,7 +976,7 @@ export default function Index({
                                     <button
                                         type="submit"
                                         disabled={!submissionOfficeId || saving}
-                                        className="dots-button-primary inline-flex items-center gap-2"
+                                        className="dots-button-accent inline-flex items-center gap-2"
                                     >
                                         <Send size={16} aria-hidden="true" />
                                         Submit for approval
@@ -1157,7 +1157,7 @@ export default function Index({
                                         className={
                                             pendingDecision.value === "rejected"
                                                 ? "dots-button bg-danger text-white"
-                                                : "dots-button-primary"
+                                                : "dots-button-accent"
                                         }
                                     >
                                         {saving ? "Saving…" : decisionLabel}

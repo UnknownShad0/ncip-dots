@@ -238,11 +238,11 @@ export default function ArchivesIndex({ source = 'tracking', documents, canFilte
                                         </div>
                                     </div>
                                     <div className="flex shrink-0 items-center gap-2">
-                                        <span className="rounded-md bg-violet-100 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-violet-700">{(document.status || 'archived').replace(/[_-]+/g, ' ')}</span>
+                                        <span className="rounded-md bg-sidebar/10 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-sidebar">{(document.status || 'archived').replace(/[_-]+/g, ' ')}</span>
                                         {document.can_restore && <DocumentLifecycleAction action="restore" iconOnly title={document.title}
                                             url={route(source === 'generation' ? 'document-creation.restore' : 'archives.restore', document.id)} />}
                                         {source === 'generation' ? <a href={document.preview_url} target="_blank" rel="noopener noreferrer" title="View / download PDF" aria-label={`View PDF: ${document.title}`} className="rounded-md bg-slate-100 p-2 text-foreground hover:bg-slate-200"><Eye size={15} aria-hidden="true" /></a> : <button type="button" aria-label="View document" title="View document" onClick={() => openDocumentDetails(document)} className="rounded-md bg-slate-100 p-2 text-foreground hover:bg-slate-200"><Eye size={15} aria-hidden="true" /></button>}
-                                        {document.is_finalized && <button type="button" aria-label="Print disposition form" title="Print disposition form" disabled={printLoadingId === document.id} onClick={() => printDisposition(document)} className="rounded-md bg-indigo-50 p-2 text-indigo-700 hover:bg-indigo-100 disabled:cursor-wait disabled:opacity-60">{printLoadingId === document.id ? <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Printer size={15} aria-hidden="true" />}</button>}
+                                        {document.is_finalized && <button type="button" aria-label="Print disposition form" title="Print disposition form" disabled={printLoadingId === document.id} onClick={() => printDisposition(document)} className="rounded-md bg-secondary p-2 text-primary hover:bg-primary/10 disabled:cursor-wait disabled:opacity-60">{printLoadingId === document.id ? <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Printer size={15} aria-hidden="true" />}</button>}
                                     </div>
                                 </article>
                             ))
@@ -290,7 +290,7 @@ export default function ArchivesIndex({ source = 'tracking', documents, canFilte
                             <ArchiveDetail label="Document type" value={`${viewingDocument.document_type || '—'}${viewingDocument.other_document_type ? ` (${viewingDocument.other_document_type})` : ''}`} />
                             <ArchiveDetail label="Origin" value={viewingDocument.origin_type || '—'} />
                             <ArchiveDetail label="Office" value={viewingDocument.office_short_name || viewingDocument.office?.short_name || viewingDocument.office_name || viewingDocument.office?.name || '—'} />
-                            <div><p className="text-xs font-semibold uppercase text-muted">Status</p><span className="mt-1 inline-flex rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-700">{archiveStatusLabel(viewingDocument.status)}</span></div>
+                            <div><p className="text-xs font-semibold uppercase text-muted">Status</p><span className="mt-1 inline-flex rounded-full bg-sidebar/10 px-2.5 py-1 text-xs font-semibold text-sidebar">{archiveStatusLabel(viewingDocument.status)}</span></div>
                             <div className="sm:col-span-2 lg:col-span-3"><p className="text-xs font-semibold uppercase text-muted">Remarks</p><p className="mt-1 whitespace-pre-wrap break-words text-sm text-foreground">{viewingDocument.remarks || '—'}</p></div>
                         </section>
                         <section aria-labelledby="archive-transaction-history-title">

@@ -270,7 +270,7 @@ export default function OfficesIndex({
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 placeholder="Search by name, code, email, or location"
-                                className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                                className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                             />
                         </label>
 
@@ -484,7 +484,7 @@ export default function OfficesIndex({
                                                 </button>
                                             )}
                                             {filteredDivisionOptions.length ? filteredDivisionOptions.map((division) => (
-                                                <button key={division.id} type="button" role="option" aria-selected={form.division_code === division.code} onClick={() => { setForm({ ...form, division_code: division.code, name: division.name, short_name: division.short_name, code: division.code, email: division.email }); setEmailError(null); setCodeError(null); setDivisionPickerOpen(false); setDivisionSearch(''); }} className="block w-full px-3 py-2 text-left text-sm hover:bg-blue-50">
+                                                <button key={division.id} type="button" role="option" aria-selected={form.division_code === division.code} onClick={() => { setForm({ ...form, division_code: division.code, name: division.name, short_name: division.short_name, code: division.code, email: division.email }); setEmailError(null); setCodeError(null); setDivisionPickerOpen(false); setDivisionSearch(''); }} className="block w-full px-3 py-2 text-left text-sm hover:bg-primary/5">
                                                     {division.name} <span className="text-muted">({division.code})</span>
                                                 </button>
                                             )) : <p className="px-3 py-2 text-sm text-muted">No matching divisions.</p>}

@@ -22,20 +22,20 @@ function CountBars({ rows }: { rows: { name: string; count: number; color: strin
 export default function DashboardCharts({ stats, documentTypes, officeFiltered = false }: { officeFiltered?: boolean; stats: DocumentStats; documentTypes: { name: string; count: number }[] }) {
     const [showAll, setShowAll] = useState(false);
     const counts = [
-        { name: 'Incoming', count: stats.incoming_documents ?? 0, color: 'bg-blue-600' },
+        { name: 'Incoming', count: stats.incoming_documents ?? 0, color: 'bg-primary' },
         { name: 'Pending release', count: stats.pending_documents ?? 0, color: 'bg-warning' },
         { name: 'Released', count: stats.released_documents ?? 0, color: 'bg-success' },
-        { name: 'Archived', count: stats.archived_documents ?? 0, color: 'bg-violet-500' },
+        { name: 'Archived', count: stats.archived_documents ?? 0, color: 'bg-sidebar' },
     ];
     const rankedTypes = [...documentTypes].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
     const visibleTypes = showAll ? rankedTypes : rankedTypes.slice(0, 5);
     return <div className="grid gap-4 lg:grid-cols-2">
-        <section aria-labelledby="document-overview-title" className="min-w-0 rounded-xl border border-border bg-surface p-5 sm:p-6">
+        <section aria-labelledby="document-overview-title" className="min-w-0 rounded-xl border border-t-4 border-border border-t-primary bg-surface p-5 sm:p-6">
             <div className="mb-1 flex items-center justify-between gap-3"><h3 id="document-overview-title" className="text-lg font-semibold">Workflow overview</h3><InfoTip label="How workflow counts are counted">Counts for {officeFiltered ? 'the selected office' : 'the current chart scope'}. A document can appear in more than one category, so the bars are independent counts, not portions of a total.</InfoTip></div>
             <p className="mb-6 text-xs text-muted">Independent counts · categories may overlap</p>
             {counts.some((item) => item.count > 0) ? <CountBars rows={counts} /> : <p className="flex min-h-48 items-center justify-center text-sm text-muted">No documents in this chart scope.</p>}
         </section>
-        <section aria-labelledby="document-types-title" className="min-w-0 rounded-xl border border-border bg-surface p-5 sm:p-6">
+        <section aria-labelledby="document-types-title" className="min-w-0 rounded-xl border border-t-4 border-border border-t-accent bg-surface p-5 sm:p-6">
             <div className="mb-1 flex items-center justify-between gap-3"><h3 id="document-types-title" className="text-lg font-semibold">Documents by type</h3><InfoTip label="About document type counts">All-time document counts in {officeFiltered ? 'the selected office' : 'the current chart scope'}, including imported records. Personal-only access is excluded. Types are ranked from most to least documents.</InfoTip></div>
             <p className="mb-6 text-xs text-muted">All time · {showAll ? 'All types' : 'Top 5 types'}</p>
             {rankedTypes.some((item) => item.count > 0) ? <div id="document-type-bars" className="max-h-80 overflow-y-auto"><CountBars rows={visibleTypes.map((item) => ({...item, color: 'bg-primary'}))} /></div> : <p className="flex min-h-48 items-center justify-center text-sm text-muted">No document types in this chart scope.</p>}

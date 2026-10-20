@@ -127,10 +127,10 @@ export default function Dashboard({
     };
 
     const cards = [
-        { label: 'Incoming', value: stats.incoming_documents, detail: 'Documents awaiting receipt in your access scope.', icon: Files, statusClass: 'bg-blue-50 text-blue-600', iconClass: 'text-blue-600', borderColor: 'rgb(37 99 235)' },
+        { label: 'Incoming', value: stats.incoming_documents, detail: 'Documents awaiting receipt in your access scope.', icon: Files, statusClass: 'bg-primary/10 text-primary', iconClass: 'text-primary', borderColor: 'rgb(var(--color-primary))' },
         { label: 'Pending release', value: stats.pending_documents, detail: 'Documents with a pending latest transaction in your access scope.', icon: FileClock, statusClass: 'bg-warning-soft text-warning', iconClass: 'text-warning', borderColor: 'rgb(var(--color-warning))' },
         { label: 'Released', value: stats.released_documents, detail: 'Unique documents with a release transaction in your access scope; not a count of release events.', icon: Send, statusClass: 'bg-success-soft text-success', iconClass: 'text-success', borderColor: 'rgb(var(--color-success))' },
-        { label: 'Archived', value: stats.archived_documents, detail: 'Archived documents you have access to.', icon: Archive, statusClass: 'bg-violet-100 text-violet-700', iconClass: 'text-violet-700', borderColor: 'rgb(124 58 237)' },
+        { label: 'Archived', value: stats.archived_documents, detail: 'Archived documents you have access to.', icon: Archive, statusClass: 'bg-sidebar/10 text-sidebar', iconClass: 'text-sidebar', borderColor: 'rgb(var(--color-sidebar))' },
     ];
     const taskRows: [string, number | undefined, string][] = [
         ['Awaiting my approval', stats.awaiting_my_approval, 'approval'],
@@ -171,13 +171,13 @@ export default function Dashboard({
 </section>
 
                 <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-                    <section aria-labelledby="receive-document-title" className="min-w-0 rounded-xl border border-border bg-surface">
-                        <div className="border-b border-border p-5">
-                            <div className="mb-4 flex items-center gap-2"><ArrowDownToLine size={19} className="text-primary" /><h2 id="receive-document-title" className="text-lg font-semibold">Receive a document</h2><InfoTip label="How receiving works">Enter an incoming tracking number or choose Receive from the list. You will confirm before receipt is recorded. Only documents addressed to your office can be received here.</InfoTip></div>
+                    <section aria-labelledby="receive-document-title" className="min-w-0 rounded-xl border border-t-4 border-border border-t-primary bg-surface">
+                        <div className="border-b border-border bg-primary/5 p-5">
+                            <div className="mb-4 flex items-center gap-2"><ArrowDownToLine size={19} className="text-tertiary" /><h2 id="receive-document-title" className="text-lg font-semibold text-primary">Receive a document</h2><InfoTip label="How receiving works">Enter an incoming tracking number or choose Receive from the list. You will confirm before receipt is recorded. Only documents addressed to your office can be received here.</InfoTip></div>
                             {!canReceiveDocuments && <p className="mb-4 rounded-lg bg-background p-3 text-sm text-muted">View only. Your role or office assignment does not allow receiving documents.</p>}
                             <form onSubmit={(event) => { event.preventDefault(); receiveByTrackingNumber(); }} className="flex flex-col gap-2 sm:flex-row sm:items-end">
                                 <div className="min-w-0 flex-1"><label htmlFor="receive-tracking-number" className="mb-1 block text-sm font-medium">Tracking number</label><input id="receive-tracking-number" disabled={!canReceiveDocuments || receivingId !== null} value={trackingNumber} onChange={(event) => { setTrackingNumber(event.target.value); setReceiveError(''); }} placeholder="Enter tracking number" className="h-12 w-full rounded-lg border-border bg-surface text-base disabled:opacity-50" /></div>
-                                <button type="submit" disabled={!canReceiveDocuments || !trackingNumber.trim() || receivingId !== null} className="dots-button-primary min-h-12">Review receipt <ArrowUpRight size={16} /></button>
+                                <button type="submit" disabled={!canReceiveDocuments || !trackingNumber.trim() || receivingId !== null} className="dots-button-accent min-h-12">Review receipt <ArrowUpRight size={16} /></button>
                             </form>
                             {receiveError && <p role="alert" className="mt-3 rounded-lg bg-danger-soft p-3 text-sm text-danger">{receiveError}</p>}
                         </div>
@@ -194,12 +194,12 @@ export default function Dashboard({
                         </div>
                     </section>
                     <div className="min-w-0 space-y-6">
-                        <section aria-labelledby="creation-tasks-title" className="rounded-xl border border-border bg-surface p-5">
+                        <section aria-labelledby="creation-tasks-title" className="rounded-xl border border-t-4 border-border border-t-accent bg-surface p-5">
                             <div className="mb-3 flex items-center justify-between gap-2"><h2 id="creation-tasks-title" className="text-lg font-semibold">Approval tasks</h2><InfoTip label="About approval tasks">Your document creation approval, submission, revision, and verification queues. Select a queue to open its documents.</InfoTip></div>
                             {tasks.length ? <div className="divide-y divide-border">{tasks.map(([label, count, queue]) => <Link key={queue} href={`${route('document-creation.index')}?queue=${queue}`} className="flex items-center justify-between gap-3 rounded-md py-3 text-sm hover:text-primary"><span>{label}</span><span className="rounded-md bg-warning-soft px-2 py-1 font-semibold tabular-nums text-warning">{formatNumber(count)}</span></Link>)}</div> : <p className="py-3 text-sm text-muted">No approval tasks need attention.</p>}
                             <Link href={route('document-creation.index')} className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-primary">Open document creation <ArrowUpRight size={15} /></Link>
                         </section>
-                        <section aria-labelledby="recent-documents-title" className="rounded-xl border border-border bg-surface p-5">
+                        <section aria-labelledby="recent-documents-title" className="rounded-xl border border-t-4 border-border border-t-primary bg-surface p-5">
                             <div className="mb-3 flex items-center justify-between"><h2 id="recent-documents-title" className="text-lg font-semibold">Recent documents</h2><InfoTip label="About recent documents">The latest {recentDocuments.length} accessible documents, ordered by creation date. Dates use Manila time.</InfoTip></div>
                             <label className="sr-only" htmlFor="recent-document-search">Search recent documents</label><input id="recent-document-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search recent documents" className="mb-2 h-11 w-full rounded-lg border-border text-sm" />
                             {documents.length === 0 ? <p className="py-6 text-sm text-muted">{query ? 'No documents match your search.' : 'No recent documents available.'}</p> : <ul className="divide-y divide-border">{documents.map((document, index) => <li key={document.id ?? index} className="py-3">
