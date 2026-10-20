@@ -3,7 +3,7 @@ import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, useForm } from '@inertiajs/react';
 import { Eye, EyeOff } from 'lucide-react';
 import { FormEventHandler, useEffect, useRef, useState } from 'react';
 
@@ -87,11 +87,9 @@ function loadRecaptchaApi(siteKey: string): Promise<RecaptchaApi> {
 
 export default function Login({
     status,
-    canResetPassword,
     recaptcha,
 }: {
     status?: string;
-    canResetPassword: boolean;
     recaptcha: {
         enabled: boolean;
         v3SiteKey: string;
@@ -232,7 +230,7 @@ export default function Login({
                 <div>
                     <div className="flex items-center justify-between">
                         <InputLabel htmlFor="password" value="Password" />
-                        {canResetPassword && <Link href={route('password.request')} className="text-sm font-medium text-teal-800 underline-offset-4 hover:underline">Forgot password?</Link>}
+                        {/* Temporarily disabled: {canResetPassword && <Link href={route('password.request')} className="text-sm font-medium text-teal-800 underline-offset-4 hover:underline">Forgot password?</Link>} */}
                     </div>
                     <div className="relative mt-1.5">
                         <TextInput

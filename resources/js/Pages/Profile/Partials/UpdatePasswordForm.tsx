@@ -59,8 +59,8 @@ export default function UpdatePasswordForm({
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-600">
-                    Ensure your account is using a long, random password to stay
-                    secure.
+                    Use at least 8 characters, including uppercase and lowercase
+                    letters, a number, and a symbol.
                 </p>
             </header>
 

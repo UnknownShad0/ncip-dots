@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
@@ -221,7 +222,7 @@ class UserAccountController extends Controller
             'officeId' => [Rule::requiredIf(! $user->employee_code), 'nullable', 'integer', 'exists:offices,id'],
             'status' => ['required', Rule::in(['1', '0'])],
             'isLocked' => ['required', Rule::in(['Y', 'N'])],
-            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
+            'password' => ['nullable', 'confirmed', PasswordRule::defaults()],
         ]);
 
         $roleId = $user->employee_code ? $this->employeeRoleId($validated['employee_role']) : (int) $validated['role_id'];
