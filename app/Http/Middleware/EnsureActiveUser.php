@@ -13,7 +13,6 @@ class EnsureActiveUser
     {
         $user = $request->user();
 
-<<<<<<< HEAD
         if (! $user || ($user->is_active && ! $user->is_locked)) {
             return $next($request);
         }
@@ -27,16 +26,5 @@ class EnsureActiveUser
         $request->session()->regenerateToken();
 
         return redirect()->route('login')->withErrors(['username' => $message]);
-=======
-        if ($user && (! $user->is_active || $user->is_locked)) {
-            Auth::guard('web')->logout();
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
-
-            abort(403, 'Your account is inactive or locked.');
-        }
-
-        return $next($request);
->>>>>>> @{-1}
     }
 }

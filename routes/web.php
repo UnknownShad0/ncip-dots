@@ -27,11 +27,7 @@ Route::get('/track/{trackingNumber}', [PublicDocumentTrackingController::class, 
     ->middleware(['signed', 'throttle:30,1'])
     ->name('documents.track');
 
-<<<<<<< HEAD
 Route::middleware(['auth', 'active.user', 'verified'])->group(function () {
-=======
-Route::middleware(['auth', 'active', 'verified'])->group(function () {
->>>>>>> @{-1}
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::get('/documents', [DocumentController::class, 'index'])->name('documents.index');
