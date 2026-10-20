@@ -1,0 +1,249 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="2060" viewBox="0 0 2400 2060" role="img" aria-labelledby="title desc">
+  <title id="title">DOTS: four important legacy and current workflows</title>
+  <desc id="desc">A simplified workflow showing account access and dashboard, office document tracking and routing, and new document authoring and approval with two ways approved PDFs enter tracking.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M1,1 L11,6 L1,11 Z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M1,1 L11,6 L1,11 Z" fill="#15966a"/>
+    </marker>
+    <style>
+      text { font-family: Arial, Helvetica, sans-serif; fill: #14243a; }
+      .title { font-size: 52px; font-weight: 700; letter-spacing: -1px; }
+      .subtitle { font-size: 24px; fill: #526176; }
+      .section { font-size: 28px; font-weight: 700; }
+      .section-note { font-size: 18px; fill: #68778b; }
+      .card-title { font-size: 24px; font-weight: 700; }
+      .body { font-size: 18px; fill: #40516a; }
+      .small { font-size: 16px; fill: #596a80; }
+      .tag { font-size: 15px; font-weight: 700; letter-spacing: .5px; }
+      .step { font-size: 15px; font-weight: 700; fill: #ffffff; }
+    </style>
+  </defs>
+
+  <rect width="2400" height="2060" fill="#f4f7fb"/>
+  <rect x="0" y="0" width="2400" height="12" fill="#2768c5"/>
+
+  <text x="100" y="91" class="title">DOTS: the important workflows</text>
+  <text x="102" y="137" class="subtitle">Legacy business steps, current improvements, and the new document creation path</text>
+
+  <g transform="translate(100 177)">
+    <rect width="142" height="38" rx="19" fill="#fff0d6" stroke="#e5ad52"/>
+    <circle cx="20" cy="19" r="6" fill="#c77b14"/>
+    <text x="37" y="25" class="tag" fill="#80500c">LEGACY</text>
+    <rect x="158" width="154" height="38" rx="19" fill="#e3efff" stroke="#8bb7ee"/>
+    <circle cx="178" cy="19" r="6" fill="#2768c5"/>
+    <text x="195" y="25" class="tag" fill="#1d4f95">CURRENT</text>
+    <rect x="328" width="112" height="38" rx="19" fill="#def5e9" stroke="#75c59f"/>
+    <circle cx="348" cy="19" r="6" fill="#15966a"/>
+    <text x="365" y="25" class="tag" fill="#116c4c">NEW</text>
+  </g>
+
+  <!-- 1. Access and dashboard -->
+  <text x="100" y="286" class="section">1. ACCOUNT ACCESS AND DASHBOARD</text>
+  <text x="810" y="286" class="section-note">The user signs in, then sees work for their office.</text>
+
+  <g>
+    <rect x="92" y="319" width="700" height="280" rx="18" fill="#ffffff" stroke="#d7e0ec" stroke-width="2"/>
+    <path d="M110 319 H774 Q792 319 792 337 V328 H92 V337 Q92 319 110 319Z" fill="#64748b"/>
+    <circle cx="132" cy="361" r="19" fill="#64748b"/>
+    <text x="126" y="367" class="step">1</text>
+    <text x="164" y="369" class="card-title">Account setup</text>
+    <rect x="120" y="395" width="100" height="28" rx="14" fill="#fff0d6"/>
+    <text x="136" y="414" class="tag" fill="#80500c">LEGACY</text>
+    <text x="236" y="415" class="body">Admin creates account and emails login details.</text>
+    <rect x="120" y="441" width="104" height="28" rx="14" fill="#e3efff"/>
+    <text x="136" y="460" class="tag" fill="#1d4f95">CURRENT</text>
+    <text x="240" y="461" class="body">Admin assigns role and office; HRIS lookup helps.</text>
+    <text x="120" y="520" class="small">Both: an administrator prepares user access.</text>
+  </g>
+
+  <path d="M805 459 H840" fill="none" stroke="#64748b" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <g>
+    <rect x="854" y="319" width="700" height="280" rx="18" fill="#ffffff" stroke="#d7e0ec" stroke-width="2"/>
+    <path d="M872 319 H1536 Q1554 319 1554 337 V328 H854 V337 Q854 319 872 319Z" fill="#64748b"/>
+    <circle cx="894" cy="361" r="19" fill="#64748b"/>
+    <text x="888" y="367" class="step">2</text>
+    <text x="926" y="369" class="card-title">Sign in</text>
+    <rect x="882" y="395" width="100" height="28" rx="14" fill="#fff0d6"/>
+    <text x="898" y="414" class="tag" fill="#80500c">LEGACY</text>
+    <text x="998" y="415" class="body">CodeIgniter session with IP and browser checks.</text>
+    <rect x="882" y="441" width="104" height="28" rx="14" fill="#e3efff"/>
+    <text x="898" y="460" class="tag" fill="#1d4f95">CURRENT</text>
+    <text x="1002" y="461" class="body">Laravel login; active/verified checks and throttling.</text>
+    <text x="882" y="520" class="small">Current app can also challenge repeated failed logins.</text>
+  </g>
+
+  <path d="M1567 459 H1602" fill="none" stroke="#64748b" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <g>
+    <rect x="1616" y="319" width="692" height="280" rx="18" fill="#ffffff" stroke="#d7e0ec" stroke-width="2"/>
+    <path d="M1634 319 H2290 Q2308 319 2308 337 V328 H1616 V337 Q1616 319 1634 319Z" fill="#2768c5"/>
+    <circle cx="1656" cy="361" r="19" fill="#2768c5"/>
+    <text x="1650" y="367" class="step">3</text>
+    <text x="1688" y="369" class="card-title">Dashboard</text>
+    <rect x="1644" y="395" width="100" height="28" rx="14" fill="#fff0d6"/>
+    <text x="1660" y="414" class="tag" fill="#80500c">LEGACY</text>
+    <text x="1760" y="415" class="body">Document counts and incoming search.</text>
+    <rect x="1644" y="441" width="104" height="28" rx="14" fill="#e3efff"/>
+    <text x="1660" y="460" class="tag" fill="#1d4f95">CURRENT</text>
+    <text x="1764" y="461" class="body">Office counts, approval queues, and work charts.</text>
+    <text x="1644" y="520" class="small">Then choose a tracked document or create a new one below.</text>
+  </g>
+
+  <!-- 2. Tracking and routing -->
+  <text x="100" y="700" class="section">2. DOCUMENT TRACKING AND ROUTING</text>
+  <text x="790" y="700" class="section-note">The familiar office-to-office path, with current checks and online tracking.</text>
+
+  <g>
+    <rect x="92" y="734" width="418" height="354" rx="18" fill="#ffffff" stroke="#d7e0ec" stroke-width="2"/>
+    <rect x="92" y="734" width="418" height="8" rx="4" fill="#2768c5"/>
+    <circle cx="126" cy="779" r="19" fill="#2768c5"/><text x="120" y="785" class="step">1</text>
+    <text x="158" y="787" class="card-title">Register / finalize</text>
+    <rect x="120" y="812" width="100" height="28" rx="14" fill="#fff0d6"/><text x="136" y="831" class="tag" fill="#80500c">LEGACY</text>
+    <text x="120" y="871" class="body">Office records a document</text><text x="120" y="898" class="body">and its movement.</text>
+    <rect x="120" y="927" width="104" height="28" rx="14" fill="#e3efff"/><text x="136" y="946" class="tag" fill="#1d4f95">CURRENT</text>
+    <text x="120" y="986" class="body">Finalize to create its tracking</text><text x="120" y="1013" class="body">number and first pending step.</text>
+  </g>
+
+  <path d="M516 906 H542" fill="none" stroke="#64748b" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <g>
+    <rect x="550" y="734" width="418" height="354" rx="18" fill="#ffffff" stroke="#d7e0ec" stroke-width="2"/>
+    <rect x="550" y="734" width="418" height="8" rx="4" fill="#2768c5"/>
+    <circle cx="584" cy="779" r="19" fill="#2768c5"/><text x="578" y="785" class="step">2</text>
+    <text x="616" y="787" class="card-title">Release to an office</text>
+    <text x="578" y="847" class="body">Legacy and current: send the</text><text x="578" y="874" class="body">document to its next office.</text>
+    <rect x="578" y="907" width="104" height="28" rx="14" fill="#e3efff"/><text x="594" y="926" class="tag" fill="#1d4f95">CURRENT</text>
+    <text x="578" y="966" class="body">Checks destination office and</text><text x="578" y="993" class="body">active users before release.</text>
+    <text x="578" y="1036" class="small">An approved PDF can be attached here.</text>
+  </g>
+
+  <path d="M976 906 H1002" fill="none" stroke="#64748b" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <g>
+    <rect x="1010" y="734" width="418" height="354" rx="18" fill="#ffffff" stroke="#d7e0ec" stroke-width="2"/>
+    <rect x="1010" y="734" width="418" height="8" rx="4" fill="#64748b"/>
+    <circle cx="1044" cy="779" r="19" fill="#64748b"/><text x="1038" y="785" class="step">3</text>
+    <text x="1076" y="787" class="card-title">Receive at destination</text>
+    <text x="1038" y="847" class="body">The receiving office records</text><text x="1038" y="874" class="body">that the document arrived.</text>
+    <rect x="1038" y="907" width="104" height="28" rx="14" fill="#e3efff"/><text x="1054" y="926" class="tag" fill="#1d4f95">CURRENT</text>
+    <text x="1038" y="966" class="body">Receipt adds a new pending</text><text x="1038" y="993" class="body">step to its tracking history.</text>
+    <text x="1038" y="1036" class="small">The office can now act or forward it.</text>
+  </g>
+
+  <path d="M1436 906 H1462" fill="none" stroke="#64748b" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <g>
+    <rect x="1470" y="734" width="418" height="354" rx="18" fill="#ffffff" stroke="#d7e0ec" stroke-width="2"/>
+    <rect x="1470" y="734" width="418" height="8" rx="4" fill="#64748b"/>
+    <circle cx="1504" cy="779" r="19" fill="#64748b"/><text x="1498" y="785" class="step">4</text>
+    <text x="1536" y="787" class="card-title">Continue or finish</text>
+    <text x="1498" y="847" class="body">If more work is needed, route</text><text x="1498" y="874" class="body">it onward to another office.</text>
+    <path d="M1502 916 C1440 916 1440 1060 1502 1060" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-dasharray="7 6" marker-end="url(#arrow)"/>
+    <text x="1520" y="927" class="small">Repeat release and receipt.</text>
+    <text x="1498" y="979" class="body">When complete, mark it terminal</text><text x="1498" y="1006" class="body">to move it into the archive.</text>
+  </g>
+
+  <path d="M1896 906 H1922" fill="none" stroke="#64748b" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <g>
+    <rect x="1930" y="734" width="378" height="354" rx="18" fill="#ffffff" stroke="#d7e0ec" stroke-width="2"/>
+    <rect x="1930" y="734" width="378" height="8" rx="4" fill="#2768c5"/>
+    <circle cx="1964" cy="779" r="19" fill="#2768c5"/><text x="1958" y="785" class="step">5</text>
+    <text x="1996" y="787" class="card-title">Archive / track</text>
+    <rect x="1958" y="812" width="100" height="28" rx="14" fill="#fff0d6"/><text x="1974" y="831" class="tag" fill="#80500c">LEGACY</text>
+    <text x="1958" y="871" class="body">Annual archives; lookup by</text><text x="1958" y="898" class="body">tracking number.</text>
+    <rect x="1958" y="927" width="104" height="28" rx="14" fill="#e3efff"/><text x="1974" y="946" class="tag" fill="#1d4f95">CURRENT</text>
+    <text x="1958" y="986" class="body">Filtered archive, signed public</text><text x="1958" y="1013" class="body">tracking link, eligible restore.</text>
+  </g>
+
+  <!-- 3. New document creation and approval -->
+  <text x="100" y="1201" class="section">3. DOCUMENT GENERATION AND APPROVAL</text>
+  <rect x="783" y="1170" width="72" height="34" rx="17" fill="#def5e9" stroke="#75c59f"/>
+  <text x="800" y="1193" class="tag" fill="#116c4c">NEW</text>
+  <text x="874" y="1196" class="section-note">Create a document, get approval, then use its PDF in tracking.</text>
+
+  <g>
+    <rect x="92" y="1235" width="418" height="340" rx="18" fill="#ffffff" stroke="#cde8da" stroke-width="2"/>
+    <rect x="92" y="1235" width="418" height="8" rx="4" fill="#15966a"/>
+    <circle cx="126" cy="1280" r="19" fill="#15966a"/><text x="120" y="1286" class="step">1</text>
+    <text x="158" y="1288" class="card-title">Choose type / template</text>
+    <text x="120" y="1352" class="body">Start with the document type</text><text x="120" y="1379" class="body">and its available template.</text>
+    <text x="120" y="1430" class="small">New authoring capability in the</text><text x="120" y="1454" class="small">current Laravel application.</text>
+  </g>
+
+  <path d="M516 1405 H542" fill="none" stroke="#15966a" stroke-width="4" marker-end="url(#arrow-green)"/>
+
+  <g>
+    <rect x="550" y="1235" width="418" height="340" rx="18" fill="#ffffff" stroke="#cde8da" stroke-width="2"/>
+    <rect x="550" y="1235" width="418" height="8" rx="4" fill="#15966a"/>
+    <circle cx="584" cy="1280" r="19" fill="#15966a"/><text x="578" y="1286" class="step">2</text>
+    <text x="616" y="1288" class="card-title">Write a draft</text>
+    <text x="578" y="1352" class="body">Edit, save, and preview the</text><text x="578" y="1379" class="body">document as a PDF.</text>
+    <text x="578" y="1430" class="small">A saved draft can be updated</text><text x="578" y="1454" class="small">before it is submitted.</text>
+  </g>
+
+  <path d="M976 1405 H1002" fill="none" stroke="#15966a" stroke-width="4" marker-end="url(#arrow-green)"/>
+
+  <g>
+    <rect x="1010" y="1235" width="418" height="340" rx="18" fill="#ffffff" stroke="#cde8da" stroke-width="2"/>
+    <rect x="1010" y="1235" width="418" height="8" rx="4" fill="#15966a"/>
+    <circle cx="1044" cy="1280" r="19" fill="#15966a"/><text x="1038" y="1286" class="step">3</text>
+    <text x="1076" y="1288" class="card-title">Submit a version</text>
+    <text x="1038" y="1352" class="body">Choose an approver office.</text>
+    <text x="1038" y="1392" class="body">DOTS saves a snapshot of the</text><text x="1038" y="1419" class="body">submitted content and template.</text>
+    <text x="1038" y="1480" class="small">This preserves what was reviewed.</text>
+  </g>
+
+  <path d="M1436 1405 H1462" fill="none" stroke="#15966a" stroke-width="4" marker-end="url(#arrow-green)"/>
+
+  <g>
+    <rect x="1470" y="1235" width="418" height="340" rx="18" fill="#ffffff" stroke="#cde8da" stroke-width="2"/>
+    <rect x="1470" y="1235" width="418" height="8" rx="4" fill="#15966a"/>
+    <circle cx="1504" cy="1280" r="19" fill="#15966a"/><text x="1498" y="1286" class="step">4</text>
+    <text x="1536" y="1288" class="card-title">Approver decides</text>
+    <text x="1498" y="1352" class="body">Approve → make the PDF.</text>
+    <text x="1498" y="1392" class="body">Request revision → author edits</text><text x="1498" y="1419" class="body">and submits again.</text>
+    <text x="1498" y="1472" class="body">Reject → keep it in history.</text>
+  </g>
+
+  <path d="M1896 1405 H1922" fill="none" stroke="#15966a" stroke-width="4" marker-end="url(#arrow-green)"/>
+
+  <g>
+    <rect x="1930" y="1235" width="378" height="340" rx="18" fill="#e8f7ef" stroke="#75c59f" stroke-width="2"/>
+    <rect x="1930" y="1235" width="378" height="8" rx="4" fill="#15966a"/>
+    <circle cx="1964" cy="1280" r="19" fill="#15966a"/><text x="1958" y="1286" class="step">5</text>
+    <text x="1996" y="1288" class="card-title">Approved PDF</text>
+    <text x="1958" y="1352" class="body">Ready to enter the same</text><text x="1958" y="1379" class="body">tracking and routing flow.</text>
+    <text x="1958" y="1442" class="small">Choose either route below.</text>
+  </g>
+
+  <!-- Approved output joins the existing routing flow in two ways. -->
+  <path d="M2119 1577 V1681" fill="none" stroke="#15966a" stroke-width="4"/>
+  <path d="M626 1681 H1778" fill="none" stroke="#15966a" stroke-width="4"/>
+  <path d="M626 1681 V1725" fill="none" stroke="#15966a" stroke-width="4" marker-end="url(#arrow-green)"/>
+  <path d="M1778 1681 V1725" fill="none" stroke="#15966a" stroke-width="4" marker-end="url(#arrow-green)"/>
+
+  <g>
+    <rect x="92" y="1740" width="1068" height="226" rx="18" fill="#ffffff" stroke="#cde8da" stroke-width="2"/>
+    <rect x="92" y="1740" width="12" height="226" rx="6" fill="#15966a"/>
+    <text x="134" y="1795" class="card-title">A. Register it as a new tracked record</text>
+    <text x="134" y="1840" class="body">The approved PDF becomes the original file. It enters tracking at step 1 above.</text>
+    <rect x="134" y="1880" width="195" height="34" rx="17" fill="#e3efff"/>
+    <text x="154" y="1903" class="tag" fill="#1d4f95">JOINS STEP 1</text>
+  </g>
+
+  <g>
+    <rect x="1240" y="1740" width="1068" height="226" rx="18" fill="#ffffff" stroke="#cde8da" stroke-width="2"/>
+    <rect x="1240" y="1740" width="12" height="226" rx="6" fill="#15966a"/>
+    <text x="1282" y="1795" class="card-title">B. Attach it while forwarding an existing record</text>
+    <text x="1282" y="1840" class="body">The PDF is saved as a new version on that release. It joins tracking at step 2 above.</text>
+    <rect x="1282" y="1880" width="195" height="34" rx="17" fill="#e3efff"/>
+    <text x="1302" y="1903" class="tag" fill="#1d4f95">JOINS STEP 2</text>
+  </g>
+
+  <text x="100" y="2024" class="small">Two kinds of drafts stay separate: an unfinished tracking record, and an authored document waiting for approval.</text>
+</svg>

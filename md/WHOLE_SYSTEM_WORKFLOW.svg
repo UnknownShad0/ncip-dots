@@ -1,0 +1,233 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="3560" viewBox="0 0 2400 3560" role="img" aria-labelledby="title desc">
+  <title id="title">DOTS Whole-System Workflow</title>
+  <desc id="desc">A whole-system DOTS workflow showing staff sign-in, document tracking and routing, document authoring and approval, system support, audit, and historical data import.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M1,1 L11,6 L1,11 z" fill="#56657a"/></marker>
+    <marker id="arrowNew" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M1,1 L11,6 L1,11 z" fill="#38834a"/></marker>
+    <style>
+      text { font-family: Inter, "Segoe UI", Arial, sans-serif; fill: #172338; }
+      .title { font-size: 48px; font-weight: 750; letter-spacing: .2px; }
+      .subtitle { font-size: 22px; fill: #64738a; }
+      .section { font-size: 22px; font-weight: 750; letter-spacing: 1.2px; fill: #52627a; }
+      .panel { fill: #ffffff; stroke: #dbe3ee; stroke-width: 2; }
+      .node { fill: #ffffff; stroke: #a8b6c9; stroke-width: 2.5; }
+      .legacy, .current { fill: #eaf2ff; stroke: #6693df; }
+      .new { fill: #e9f8f1; stroke: #62aa83; }
+      .support { fill: #f3edff; stroke: #9a7ad6; }
+      .blocked { fill: #fff0ef; stroke: #d77971; }
+      .decision { fill: #fff9e9; stroke: #d3a13e; stroke-width: 2.5; }
+      .label { font-size: 22px; font-weight: 700; text-anchor: middle; }
+      .body { font-size: 18px; font-weight: 500; text-anchor: middle; fill: #46566e; }
+      .small { font-size: 16px; font-weight: 600; fill: #5b6b82; }
+      .legacyColor { fill: #2e5e9b; }
+      .currentColor { fill: #2e5e9b; }
+      .newColor { fill: #267143; }
+      .edge { fill: none; stroke: #56657a; stroke-width: 3; marker-end: url(#arrow); }
+      .dash { fill: none; stroke: #8c99aa; stroke-width: 2.5; stroke-dasharray: 9 8; marker-end: url(#arrow); }
+      .newEdge { fill: none; stroke: #38834a; stroke-width: 3; stroke-dasharray: 9 7; marker-end: url(#arrowNew); }
+      .edgeLabel { font-size: 16px; font-weight: 700; fill: #596981; }
+      .note { font-size: 17px; font-weight: 550; fill: #53647c; }
+      .legendText { font-size: 17px; font-weight: 700; }
+    </style>
+  </defs>
+  <rect width="2400" height="3560" fill="#f5f7fb"/>
+
+  <!-- Page title and legend -->
+  <text x="120" y="88" class="title">DOTS · WHOLE-SYSTEM WORKFLOW</text>
+  <text x="120" y="129" class="subtitle">How staff enter, register or create documents, route work between offices, and close the record</text>
+  <rect x="120" y="157" width="205" height="40" rx="20" class="current"/><text x="222" y="183" class="legendText currentColor" text-anchor="middle">TRACKING FLOW</text>
+  <rect x="345" y="157" width="215" height="40" rx="20" class="new"/><text x="452" y="183" class="legendText newColor" text-anchor="middle">AUTHORING FLOW</text>
+  <text x="595" y="183" class="note">Diamonds are decisions; dashed arrows show optional steps or returns.</text>
+
+  <!-- Panels -->
+  <rect x="80" y="225" width="2240" height="355" rx="26" class="panel"/>
+  <rect x="80" y="620" width="2240" height="850" rx="26" class="panel"/>
+  <rect x="80" y="1510" width="2240" height="850" rx="26" class="panel"/>
+  <rect x="80" y="2400" width="2240" height="610" rx="26" class="panel"/>
+  <rect x="80" y="3050" width="2240" height="390" rx="26" class="panel"/>
+
+  <text x="120" y="276" class="section">1 · ACCOUNTS AND ENTRY</text>
+  <text x="120" y="672" class="section">2 · DOCUMENT TRACKING AND ROUTING</text>
+  <text x="120" y="1562" class="section">3 · DOCUMENT GENERATION, APPROVAL, AND DRAFTS</text>
+  <text x="120" y="2452" class="section">4 · ADMINISTRATION AND SYSTEM SUPPORT</text>
+  <text x="120" y="3102" class="section">5 · HISTORICAL DATA IMPORT (ADMINISTRATIVE PROCESS)</text>
+
+  <!-- Workflow connectors: dashboard navigation -->
+  <path d="M650 397 H710" class="edge"/>
+  <path d="M1440 405 H1502" class="edge"/>
+  <path d="M1760 405 H1840" class="edge"/>
+  <text x="1800" y="390" class="edgeLabel" text-anchor="middle">Yes</text>
+  <path d="M1630 480 V500" class="edge"/>
+  <path d="M2055 480 V535 H2380 V700 H340 V730" class="edge"/>
+  <path d="M2380 700 V1595 H295 V1610" class="edge"/>
+  <path d="M2380 1595 V2480 H410 V2500" class="dash"/>
+
+  <!-- Workflow connectors: tracking -->
+  <path d="M560 806 H650" class="edge"/>
+  <path d="M1100 806 H1152" class="edge"/>
+  <path d="M1438 806 H1580" class="edge"/>
+  <path d="M1295 884 V905 H840 V930" class="edge"/>
+  <text x="1200" y="900" class="edgeLabel">Yes: save draft</text>
+  <text x="1500" y="785" class="edgeLabel" text-anchor="middle">No: finalize</text>
+  <path d="M700 990 H625 V900 H650 V806" class="dash"/>
+  <path d="M1845 885 V920 H770 V1008" class="edge"/>
+  <text x="2120" y="912" class="edgeLabel">Pending at current office</text>
+  <path d="M1590 1085 H1510" class="edge"/>
+  <path d="M1010 1085 H880" class="edge"/>
+  <path d="M880 1085 V1195 H1850 V1160" class="edge"/>
+  <text x="1120" y="1185" class="edgeLabel" text-anchor="middle">Yes: route onward</text>
+  <path d="M660 1085 H620 V1312 H600" class="edge"/>
+  <text x="580" y="1165" class="edgeLabel">No: finish</text>
+  <path d="M120 1312 H95 V900 H625 V806 H650" class="dash"/>
+  <path d="M600 1312 H850" class="dash"/>
+  <path d="M2110 805 H2295 V1400 H1110 V1380" class="dash"/>
+  <path d="M2110 850 H2170 V1312 H2110" class="dash"/>
+  <path d="M1280 2242 H60 V900 H620 V806 H650" class="newEdge"/>
+  <path d="M2290 2242 H2390 V1085 H2110" class="newEdge"/>
+
+  <!-- Workflow connectors: authoring -->
+  <path d="M470 1688 H550" class="newEdge"/>
+  <path d="M1030 1688 H1110" class="newEdge"/>
+  <path d="M1570 1688 H1620" class="newEdge"/>
+  <path d="M1950 1685 H2060 V1850" class="newEdge"/>
+  <path d="M1700 1736 V1820 H1405 V1850" class="newEdge"/>
+  <text x="1500" y="1808" class="edgeLabel" text-anchor="middle">request revision</text>
+  <path d="M1785 1785 V2000 H1405 V2010" class="newEdge"/>
+  <text x="1650" y="1985" class="edgeLabel">reject</text>
+  <path d="M2060 1990 V1995" class="newEdge"/>
+  <path d="M1405 1990 V2115 H1045 V1688 H1030" class="newEdge"/>
+  <text x="1200" y="2105" class="edgeLabel" text-anchor="middle">edit and resubmit</text>
+  <path d="M2060 2135 V2150 H1505 V2180" class="newEdge"/>
+  <path d="M2060 2150 H2040 V2180" class="newEdge"/>
+  <path d="M790 1765 V1840 H330 V1880" class="dash"/>
+  <path d="M120 1942 H95 V1800 H520 V1688 H550" class="dash"/>
+
+  <!-- Workflow connectors: administration and migration -->
+  <path d="M700 2582 H840" class="dash"/>
+  <path d="M410 2665 V2750" class="edge"/>
+
+  <!-- Migration connectors -->
+  <path d="M620 3260 H710" class="edge"/>
+  <path d="M1110 3260 H1180" class="edge"/>
+  <path d="M1450 3260 H1630" class="edge"/>
+  <text x="1540" y="3240" class="edgeLabel" text-anchor="middle">Yes</text>
+
+  <!-- Access nodes -->
+  <rect x="120" y="315" width="530" height="165" rx="18" class="node legacy"/>
+  <text x="385" y="352" class="label legacyColor">ACCOUNT SETUP</text>
+  <text x="385" y="390" class="body"><tspan x="385">Administrator maintains accounts</tspan><tspan x="385" dy="27">and assigns office access</tspan></text>
+  <rect x="710" y="315" width="730" height="165" rx="18" class="node current"/>
+  <text x="1075" y="352" class="label currentColor">SIGN IN</text>
+  <text x="1075" y="390" class="body"><tspan x="1075">Sign in or complete eligible account setup;</tspan><tspan x="1075" dy="27">login checks protect the account</tspan></text>
+  <polygon points="1630,315 1770,397 1630,480 1490,397" class="decision"/>
+  <text x="1630" y="390" class="label"><tspan x="1630">Active and</tspan><tspan x="1630" dy="27">verified?</tspan></text>
+  <rect x="1460" y="500" width="340" height="70" rx="14" class="node blocked"/>
+  <text x="1630" y="528" class="body"><tspan x="1630">No: complete account setup or</tspan><tspan x="1630" dy="23">contact an administrator</tspan></text>
+  <rect x="1840" y="315" width="430" height="165" rx="18" class="node current"/>
+  <text x="2055" y="352" class="label currentColor">DASHBOARD</text>
+  <text x="2055" y="390" class="body"><tspan x="2055">See office queues, approvals, and charts;</tspan><tspan x="2055" dy="27">choose a work area from the app navigation</tspan></text>
+
+  <!-- Tracking nodes -->
+  <rect x="120" y="730" width="440" height="155" rx="18" class="node current"/>
+  <text x="340" y="768" class="label currentColor">FIND A DOCUMENT</text>
+  <text x="340" y="808" class="body"><tspan x="340">Search office-scoped records and inspect</tspan><tspan x="340" dy="27">details, status, and routing history</tspan></text>
+  <rect x="650" y="730" width="450" height="155" rx="18" class="node current"/>
+  <text x="875" y="768" class="label currentColor">REGISTER OR OPEN</text>
+  <text x="875" y="808" class="body"><tspan x="875">Create/update a record, or inspect its</tspan><tspan x="875" dy="27">details, current status and routing history</tspan></text>
+  <polygon points="1295,728 1438,806 1295,884 1152,806" class="decision"/>
+  <text x="1295" y="798" class="label"><tspan x="1295">Keep as</tspan><tspan x="1295" dy="27">tracking draft?</tspan></text>
+  <rect x="700" y="930" width="280" height="120" rx="18" class="node current"/>
+  <text x="840" y="967" class="label currentColor">TRACKING DRAFT</text>
+  <text x="840" y="1005" class="body"><tspan x="840">Edit or finalize</tspan><tspan x="840" dy="24">later</tspan></text>
+  <rect x="1580" y="730" width="530" height="155" rx="18" class="node current"/>
+  <text x="1845" y="768" class="label currentColor">FINALIZE</text>
+  <text x="1845" y="808" class="body"><tspan x="1845">Assign a tracking number and create the</tspan><tspan x="1845" dy="27">first Pending trail; files stay private</tspan></text>
+  <rect x="1590" y="1010" width="520" height="150" rx="18" class="node current"/>
+  <text x="1850" y="1048" class="label currentColor">RELEASE</text>
+  <text x="1850" y="1087" class="body"><tspan x="1850">Send to an eligible destination office.</tspan><tspan x="1850" dy="25">Status becomes Available; an approved</tspan><tspan x="1850" dy="25">PDF may be attached while forwarding.</tspan></text>
+  <rect x="1010" y="1010" width="500" height="150" rx="18" class="node current"/>
+  <text x="1260" y="1048" class="label currentColor">RECEIVE</text>
+  <text x="1260" y="1087" class="body"><tspan x="1260">Destination staff records receipt.</tspan><tspan x="1260" dy="27">Status becomes Pending at that office.</tspan></text>
+  <polygon points="770,1008 880,1085 770,1162 660,1085" class="decision"/>
+  <text x="770" y="1077" class="label"><tspan x="770">Route</tspan><tspan x="770" dy="27">onward?</tspan></text>
+  <rect x="120" y="1245" width="480" height="135" rx="18" class="node current"/>
+  <text x="360" y="1283" class="label currentColor">TERMINAL AND ARCHIVE</text>
+  <text x="360" y="1321" class="body"><tspan x="360">Holding office completes the record;</tspan><tspan x="360" dy="25">eligible restore creates a Pending trail</tspan></text>
+  <rect x="850" y="1245" width="520" height="135" rx="18" class="node current"/>
+  <text x="1110" y="1283" class="label currentColor">PUBLIC TRACKING</text>
+  <text x="1110" y="1321" class="body"><tspan x="1110">Signed, rate-limited link shows status</tspan><tspan x="1110" dy="25">and route history for finalized records</tspan></text>
+  <rect x="1580" y="1245" width="530" height="135" rx="18" class="node current"/>
+  <text x="1845" y="1283" class="label currentColor">FILE ACCESS</text>
+  <text x="1845" y="1321" class="body"><tspan x="1845">Private storage; download checks office</tspan><tspan x="1845" dy="25">access before serving a document file</tspan></text>
+  <text x="110" y="1430" class="note">Tracking archives can be filtered; an eligible holding office may restore a record.</text>
+
+  <!-- Authoring nodes -->
+  <rect x="120" y="1610" width="350" height="155" rx="18" class="node new"/>
+  <text x="295" y="1648" class="label newColor">PREPARE</text>
+  <text x="295" y="1688" class="body"><tspan x="295">Choose document type</tspan><tspan x="295" dy="27">and template version</tspan></text>
+  <rect x="550" y="1610" width="480" height="155" rx="18" class="node new"/>
+  <text x="790" y="1648" class="label newColor">WRITE AND SAVE</text>
+  <text x="790" y="1688" class="body"><tspan x="790">Rich-text editor, saved draft,</tspan><tspan x="790" dy="27">and PDF preview</tspan></text>
+  <rect x="1110" y="1610" width="460" height="155" rx="18" class="node new"/>
+  <text x="1340" y="1648" class="label newColor">SUBMIT A VERSION</text>
+  <text x="1340" y="1688" class="body"><tspan x="1340">Select approver office; content and</tspan><tspan x="1340" dy="27">template are saved as a snapshot</tspan></text>
+  <polygon points="1785,1585 1950,1685 1785,1785 1620,1685" class="decision"/>
+  <text x="1785" y="1677" class="label"><tspan x="1785">Approver</tspan><tspan x="1785" dy="27">decision</tspan></text>
+  <rect x="1860" y="1850" width="400" height="140" rx="18" class="node new"/>
+  <text x="2060" y="1888" class="label newColor">APPROVED</text>
+  <text x="2060" y="1928" class="body"><tspan x="2060">Generated PDF is available</tspan><tspan x="2060" dy="26">for tracking workflow</tspan></text>
+  <polygon points="2060,1995 2190,2065 2060,2135 1930,2065" class="decision"/>
+  <text x="2060" y="2058" class="label"><tspan x="2060">Use output</tspan><tspan x="2060" dy="26">how?</tspan></text>
+  <rect x="1180" y="1850" width="450" height="140" rx="18" class="node new"/>
+  <text x="1405" y="1888" class="label newColor">REQUEST REVISION</text>
+  <text x="1405" y="1928" class="body"><tspan x="1405">Author edits and submits</tspan><tspan x="1405" dy="26">another version</tspan></text>
+  <rect x="1180" y="2010" width="450" height="125" rx="18" class="node new"/>
+  <text x="1405" y="2048" class="label newColor">REJECTED</text>
+  <text x="1405" y="2087" class="body">Submission remains in history</text>
+  <rect x="1280" y="2180" width="450" height="125" rx="18" class="node new"/>
+  <text x="1505" y="2218" class="label newColor">REGISTER AS A NEW RECORD</text>
+  <text x="1505" y="2256" class="body">Generated PDF becomes original file</text>
+  <rect x="1790" y="2180" width="500" height="125" rx="18" class="node new"/>
+  <text x="2040" y="2218" class="label newColor">ATTACH WHILE FORWARDING</text>
+  <text x="2040" y="2256" class="body">PDF is added as a version on the release</text>
+  <rect x="120" y="1880" width="420" height="125" rx="18" class="node new"/>
+  <text x="330" y="1918" class="label newColor">DRAFT ARCHIVE</text>
+  <text x="330" y="1956" class="body">Restore archived authoring drafts</text>
+  <text x="120" y="2325" class="note">Separate drafts, review and approved-work queues are available. Approved PDFs return to the tracking flow as new records or forwarding versions.</text>
+
+  <!-- System support nodes -->
+  <rect x="120" y="2500" width="580" height="165" rx="18" class="node support"/>
+  <text x="410" y="2538" class="label">ADMINISTRATION</text>
+  <text x="410" y="2578" class="body"><tspan x="410">Accounts, offices, routing ranges, document/action/</tspan><tspan x="410" dy="26">purpose types, templates and Gmail connection</tspan></text>
+  <rect x="840" y="2500" width="540" height="165" rx="18" class="node current"/>
+  <text x="1110" y="2538" class="label currentColor">HRIS</text>
+  <text x="1110" y="2578" class="body"><tspan x="1110">Employee and office lookup; eligible</tspan><tspan x="1110" dy="26">credential verification for account setup</tspan></text>
+  <rect x="1560" y="2500" width="650" height="165" rx="18" class="node current"/>
+  <text x="1885" y="2538" class="label currentColor">CONNECTED SYSTEMS</text>
+  <text x="1885" y="2578" class="body"><tspan x="1885">DRIP, iPluma, and PDMIS summary pages;</tspan><tspan x="1885" dy="26">availability depends on service setup</tspan></text>
+  <rect x="120" y="2750" width="580" height="165" rx="18" class="node current"/>
+  <text x="410" y="2788" class="label currentColor">GMAIL NOTIFICATIONS</text>
+  <text x="410" y="2828" class="body"><tspan x="410">Admin OAuth sender; optional approval and</tspan><tspan x="410" dy="26">document-receipt messages are queued</tspan></text>
+  <rect x="840" y="2750" width="540" height="165" rx="18" class="node current"/>
+  <text x="1110" y="2788" class="label currentColor">PROFILE</text>
+  <text x="1110" y="2828" class="body"><tspan x="1110">Edit profile or password;</tspan><tspan x="1110" dy="26">account deletion is available</tspan></text>
+  <rect x="1560" y="2750" width="650" height="165" rx="18" class="node current"/>
+  <text x="1885" y="2788" class="label currentColor">AUDIT TRAIL</text>
+  <text x="1885" y="2828" class="body"><tspan x="1885">Recorded actions with actor and office context;</tspan><tspan x="1885" dy="26">authorized users can filter by office</tspan></text>
+  <text x="120" y="2970" class="note">Account, route, approval, archive and administration actions are audited where recorded. Integration results depend on service configuration.</text>
+
+  <!-- Migration nodes -->
+  <rect x="120" y="3180" width="500" height="155" rx="18" class="node legacy"/>
+  <text x="370" y="3218" class="label legacyColor">HISTORICAL RECORDS</text>
+  <text x="370" y="3258" class="body"><tspan x="370">Directory, documents, trails,</tspan><tspan x="370" dy="26">attachment metadata, and audit</tspan></text>
+  <rect x="710" y="3180" width="400" height="155" rx="18" class="node current"/>
+  <text x="910" y="3218" class="label currentColor">PREVIEW</text>
+  <text x="910" y="3258" class="body"><tspan x="910">Review import</tspan><tspan x="910" dy="26">report first</tspan></text>
+  <polygon points="1315,3165 1450,3258 1315,3350 1180,3258" class="decision"/>
+  <text x="1315" y="3248" class="label"><tspan x="1315">Apply to exact</tspan><tspan x="1315" dy="26">target database?</tspan></text>
+  <rect x="1630" y="3180" width="580" height="155" rx="18" class="node current"/>
+  <text x="1920" y="3218" class="label currentColor">IMPORT AND REVIEW</text>
+  <text x="1920" y="3258" class="body"><tspan x="1920">Transactional import; retain source IDs,</tspan><tspan x="1920" dy="26">reports and exceptions for review</tspan></text>
+  <text x="1315" y="3384" class="small" text-anchor="middle">No: stop without applying</text>
+  <text x="120" y="3390" class="note">Imported attachment metadata is included; the original file binaries are not copied by this workflow.</text>
+</svg>
