@@ -153,7 +153,7 @@ function DraftListSection({
     onEdit,
     onSubmitApproval,
     onReview,
-    onRegister,
+    onView,
 }: {
     id: string;
     title: string;
@@ -173,7 +173,7 @@ function DraftListSection({
     onEdit?: (draft: Draft) => void;
     onSubmitApproval?: (draft: Draft) => void;
     onReview?: (draft: Draft) => void;
-    onRegister?: (draft: Draft) => void;
+    onView?: (draft: Draft) => void;
 }) {
     return (
         <section id={id} className="scroll-mt-6 rounded-xl border border-border bg-surface p-5">
@@ -254,8 +254,10 @@ function DraftListSection({
                                         Review version {draft.current_submission.version_number}
                                     </button>
                                 )}
-                                {mode === "approved" && draft.created_by === currentUserId && ["approved", "awaiting_verification", "verified"].includes(draft.status) && !draft.official_document_id && (
-                                    <button type="button" disabled={saving} onClick={() => onRegister?.(draft)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm text-white"><FileCheck2 size={16} aria-hidden="true" />Register in DOTS</button>
+                                {mode === "approved" && draft.current_submission && (
+                                    <button type="button" disabled={saving} onClick={() => onView?.(draft)} className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:bg-background disabled:opacity-50">
+                                        <Eye size={16} aria-hidden="true" />
+                                    </button>
                                 )}
                                 {mode === "approved" && draft.created_by === currentUserId && (
                                     <DocumentLifecycleAction action="archive" iconOnly title={draft.title} url={route("document-creation.archive", draft.id)} />
@@ -335,6 +337,7 @@ export default function Index({
     } | null>(null);
     const [submissionOfficeId, setSubmissionOfficeId] = useState("");
     const [reviewing, setReviewing] = useState<Draft | null>(null);
+    const [previewMode, setPreviewMode] = useState<"approval" | "approved" | null>(null);
     const [saving, setSaving] = useState(false);
     const [dirty, setDirty] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -559,22 +562,16 @@ export default function Index({
     };
     const openReview = (draft: Draft) => {
         setActionError("");
+        setPreviewMode("approval");
         setReviewing(draft);
     };
-    const registerDraft = (draft: Draft) => {
-        setConfirmation({
-            title: "Register in DOTS?",
-            label: "Register document",
-            message: `Create an official tracking record for ${draft.title}?`,
-            action: () => postAction(
-                `/document-creation/${draft.id}/register`,
-                {},
-                () => setSuccessAlert({
-                    title: "Document registered",
-                    message: "The document was registered in DOTS.",
-                }),
-            ),
-        });
+    const openApprovedPreview = (draft: Draft) => {
+        setPreviewMode("approved");
+        setReviewing(draft);
+    };
+    const closeDocumentPreview = () => {
+        setReviewing(null);
+        setPreviewMode(null);
     };
     const decisionLabel =
         pendingDecision?.value === "approved"
@@ -792,7 +789,7 @@ export default function Index({
                     <DraftListSection
                         id="approved-documents"
                         title="My approved documents"
-                        emptyMessage="No approved documents are ready for registration."
+                        emptyMessage="No approved documents are available."
                         mode="approved"
                         drafts={drafts}
                         pagination={draftsPagination}
@@ -813,7 +810,7 @@ export default function Index({
                             visitQuery({ status, page: 1 });
                         }}
                         onPageChange={(page) => visitQuery({ page })}
-                        onRegister={registerDraft}
+                        onView={openApprovedPreview}
                     />
                 ) : (
                     <div className={showApprovalTasks ? "grid items-start gap-6 xl:grid-cols-2" : "space-y-6"}>
@@ -991,7 +988,7 @@ export default function Index({
                 </WorkspaceDialog>
                 <WorkspaceDialog
                     open={Boolean(reviewing?.current_submission)}
-                    onClose={() => setReviewing(null)}
+                    onClose={closeDocumentPreview}
                     labelledBy="review-document-title"
                     width="max-w-5xl"
                     busy={saving}
@@ -1004,7 +1001,7 @@ export default function Index({
                                         id="review-document-title"
                                         className="text-lg font-semibold"
                                     >
-                                        Review: {reviewing.title}
+                                        {previewMode === "approved" ? "View" : "Review"}: {reviewing.title}
                                     </h2>
                                     <p className="text-sm text-muted">
                                         Version{" "}
@@ -1017,7 +1014,7 @@ export default function Index({
                                 </div>
                                 <button
                                     disabled={saving}
-                                    onClick={() => setReviewing(null)}
+                                    onClick={closeDocumentPreview}
                                     className="rounded-lg border bg-surface px-3 py-2 text-sm"
                                 >
                                     Close
@@ -1026,7 +1023,7 @@ export default function Index({
                             <div className="overflow-x-auto">
                                 <DocumentPdfPreview draftId={reviewing.id} />
                             </div>
-                            {reviewing.can_decide ? (
+                            {previewMode === "approved" ? null : reviewing.can_decide ? (
                                 <div className="mt-4 flex flex-wrap justify-end gap-2">
                                     <button
                                         onClick={() =>
@@ -1095,7 +1092,7 @@ export default function Index({
                                     },
                                     () => {
                                         setPendingDecision(null);
-                                        setReviewing(null);
+                                        closeDocumentPreview();
                                         setSuccessAlert({
                                             title: "Decision recorded",
                                             message: `The document was ${pendingDecision.value === "approved" ? "approved" : pendingDecision.value === "rejected" ? "rejected" : "returned for revision"}.`,
