@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
 class IplumaController extends Controller
@@ -27,10 +28,20 @@ class IplumaController extends Controller
 
         try {
             $verifySsl = filter_var(env('IPLUMA_VERIFY_SSL', true), FILTER_VALIDATE_BOOLEAN);
-
-            $response = Http::withOptions([
+            $httpOptions = [
                 'verify' => $verifySsl,
-            ])
+            ];
+
+            if ($verifySsl
+                && PHP_OS_FAMILY === 'Windows'
+                && defined('CURLOPT_SSL_OPTIONS')
+                && defined('CURLSSLOPT_NATIVE_CA')) {
+                $httpOptions['curl'] = [
+                    constant('CURLOPT_SSL_OPTIONS') => constant('CURLSSLOPT_NATIVE_CA'),
+                ];
+            }
+
+            $response = Http::withOptions($httpOptions)
                 ->withHeaders([
                     'x-api-key' => $apiKey,
                     'x-app-name' => $appName,
@@ -40,6 +51,10 @@ class IplumaController extends Controller
                 ->get($requestUrl);
 
             if (! $response->successful()) {
+                Log::warning('iPLuma API request returned an unsuccessful response.', [
+                    'status' => $response->status(),
+                ]);
+
                 return [];
             }
 
@@ -52,6 +67,11 @@ class IplumaController extends Controller
 
             return array_map(fn (array $item) => $this->normalizeDocument($item), array_values($items));
         } catch (\Throwable $e) {
+            Log::warning('iPLuma API request failed.', [
+                'exception' => get_class($e),
+                'message' => $e->getMessage(),
+            ]);
+
             return [];
         }
     }
