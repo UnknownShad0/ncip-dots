@@ -5,7 +5,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import CrudAlertModal from '@/Components/WorkspaceAlert';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
-import { Archive, ArrowDownUp, ChevronLeft, ChevronRight, Eye, FilePlus2, FileText, Inbox, LoaderCircle, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
+import { Archive, ArrowDownUp, ChevronLeft, ChevronRight, Eye, FilePlus2, Inbox, LoaderCircle, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 
@@ -799,16 +799,13 @@ export default function DocumentsIndex({
             </div>
             </div>
 
-            <WorkspaceDialog open={Boolean(viewingRow)} onClose={() => setViewingRow(null)} labelledBy="document-details-title" width="max-w-4xl">
+            <WorkspaceDialog open={Boolean(viewingRow)} onClose={() => setViewingRow(null)} labelledBy="document-details-title" width="max-w-3xl">
                 {viewingRow && (
                     <section>
                         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
-                            <div className="flex min-w-0 items-start gap-3">
-                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary"><FileText size={20} aria-hidden="true" /></span>
-                                <div className="min-w-0">
-                                    <h2 id="document-details-title" className="text-lg font-semibold text-foreground">Document details</h2>
-                                    <p className="mt-1 break-words text-sm text-muted">Review document information and transaction history.</p>
-                                </div>
+                            <div>
+                                <h2 id="document-details-title" className="text-lg font-semibold text-foreground">Document details</h2>
+                                <p className="mt-1 break-words text-sm text-muted">Review document information and transaction history.</p>
                             </div>
                             <button type="button" onClick={() => setViewingRow(null)} aria-label="Close document details" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
                                 <X size={19} aria-hidden="true" />
@@ -818,15 +815,7 @@ export default function DocumentsIndex({
                         <div className="space-y-6 p-5 sm:p-6" aria-busy={viewingRow.details_loading}>
                             {viewingRow.details_loading && <p role="status" className="inline-flex items-center gap-2 rounded-lg bg-background p-3 text-sm text-muted"><LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading transaction history and attachments…</p>}
                             {viewingRow.details_error && <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{viewingRow.details_error}</p>}
-                            <section aria-label="Document information" className="grid gap-4 rounded-xl border border-border bg-background p-4 sm:grid-cols-2 lg:grid-cols-3">
-                                <div><p className="text-xs font-semibold uppercase text-muted">Tracking number</p><p className="mt-1 break-words font-mono text-sm font-medium text-foreground">{viewingRow.tracking_number || '—'}</p></div>
-                                <div><p className="text-xs font-semibold uppercase text-muted">Title</p><p className="mt-1 break-words text-sm font-medium text-foreground">{viewingRow.title || 'Untitled'}</p></div>
-                                <div><p className="text-xs font-semibold uppercase text-muted">Document type</p><p className="mt-1 text-sm font-medium text-foreground">{getDocumentTypeName(viewingRow) || '—'}</p></div>
-                                <div><p className="text-xs font-semibold uppercase text-muted">Origin</p><p className="mt-1 text-sm text-foreground">{viewingRow.origin_type || '—'}</p></div>
-                                <div><p className="text-xs font-semibold uppercase text-muted">Office</p><p className="mt-1 text-sm text-foreground">{viewingRow.office_short_name || viewingRow.office?.short_name || viewingRow.office_name || viewingRow.office?.name || '—'}</p></div>
-                                <div><p className="text-xs font-semibold uppercase text-muted">Status</p><span className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(viewingRow.status)}`}>{(viewingRow.status || 'draft').toUpperCase()}</span></div>
-                                <div className="sm:col-span-2 lg:col-span-3"><p className="text-xs font-semibold uppercase text-muted">Remarks</p><p className="mt-1 whitespace-pre-wrap break-words text-sm text-foreground">{viewingRow.remarks || '—'}</p></div>
-                            </section>
+                            <DocumentReferenceDetails document={viewingRow} loading={viewingRow.details_loading} />
 
                             <section aria-labelledby="transaction-history-title">
                                 <div className="mb-3 flex items-center justify-between gap-3">
@@ -861,22 +850,7 @@ export default function DocumentsIndex({
 
                         <div className="space-y-6 p-5 sm:p-6">
                             {releasingRow.details_loading && <p role="status" className="inline-flex items-center gap-2 rounded-lg bg-background p-3 text-sm text-muted"><LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading attachments…</p>}
-                            <details className="rounded-lg border border-border p-3"><summary className="cursor-pointer text-sm font-medium text-muted">Document details and attachments</summary><section aria-label="Selected document details" className="grid gap-x-5 gap-y-4 rounded-xl border border-border bg-background p-4 sm:grid-cols-2">
-                                <ReadOnlyDetail label="Tracking number" value={releasingRow.tracking_number} />
-                                <ReadOnlyDetail label="Title" value={releasingRow.title} />
-                                <ReadOnlyDetail label="Type" value={getDocumentTypeName(releasingRow)} />
-                                <ReadOnlyDetail label="Purpose" value={getPurposeTypeName(releasingRow)} />
-                                <ReadOnlyDetail label="Created by" value={releasingRow.created_by_short_name || releasingRow.created_by_name} />
-                                <ReadOnlyDetail label="Date created" value={releasingRow.created_at} />
-                                <div className="sm:col-span-2">
-                                    <p className="text-xs font-semibold uppercase text-muted">Remarks</p>
-                                    <p className="mt-1 whitespace-pre-wrap break-words text-sm text-foreground">{releasingRow.remarks || '—'}</p>
-                                </div>
-                                <div className="sm:col-span-2">
-                                    <p className="text-xs font-semibold uppercase text-muted">File</p>
-                                    {releasingRow.files?.length ? <ul className="mt-1 space-y-1.5">{releasingRow.files.map((file) => <li key={file.id} className="flex flex-wrap items-baseline gap-x-2 text-sm"><span className="rounded bg-secondary px-1.5 py-0.5 text-xs font-medium uppercase text-muted">{file.type}</span>{file.url ? <a href={file.url} target="_blank" rel="noreferrer" className="break-all font-medium text-primary underline">{file.name}</a> : <span className="break-all text-muted">{file.name} — File not yet available</span>}{file.uploaded_at && <span className="text-xs text-muted">{file.uploaded_at}</span>}</li>)}</ul> : releasingRow.file_url ? <a href={releasingRow.file_url} target="_blank" rel="noreferrer" className="mt-1 inline-block break-all text-sm font-medium text-primary underline">{releasingRow.file_name || 'View attached file'}</a> : <p className="mt-1 text-sm text-foreground">{releasingRow.file_name || 'No file attached'}</p>}
-                                </div>
-                            </section></details>
+                            <DocumentReferenceDetails document={releasingRow} loading={releasingRow.details_loading} />
 
                             <section className="grid gap-4 sm:grid-cols-2" aria-label="Release details">
                                 <div>
@@ -1115,8 +1089,38 @@ function LibrarySelect({
 function ReadOnlyDetail({ label, value }: { label: string; value?: string | null }) {
     return (
         <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase text-[#898984]">{label}</p>
-            <p className="mt-1 break-words text-sm font-medium text-slate-800">{value || '—'}</p>
+            <p className="text-xs font-semibold uppercase text-muted">{label}</p>
+            <p className="mt-1 break-words text-sm font-medium text-foreground">{value || '—'}</p>
         </div>
+    );
+}
+
+function DocumentReferenceDetails({ document, loading = false }: { document: DocumentItem; loading?: boolean }) {
+    return (
+        <details className="rounded-lg border border-border p-3">
+            <summary className="cursor-pointer text-sm font-medium text-muted">Document details and attachments</summary>
+            <section aria-label="Selected document details" className="mt-3 grid gap-x-5 gap-y-4 rounded-xl border border-border bg-background p-4 sm:grid-cols-2">
+                <ReadOnlyDetail label="Tracking number" value={document.tracking_number} />
+                <ReadOnlyDetail label="Title" value={document.title} />
+                <ReadOnlyDetail label="Type" value={getDocumentTypeName(document)} />
+                <ReadOnlyDetail label="Purpose" value={getPurposeTypeName(document)} />
+                <ReadOnlyDetail label="Origin" value={document.origin_type} />
+                <ReadOnlyDetail label="Office" value={document.office_short_name || document.office?.short_name || document.office_name || document.office?.name} />
+                <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase text-muted">Status</p>
+                    <span className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(document.status)}`}>{(document.status || 'draft').toUpperCase()}</span>
+                </div>
+                <ReadOnlyDetail label="Created by" value={document.created_by_short_name || document.created_by_name} />
+                <ReadOnlyDetail label="Date created" value={document.created_at} />
+                <div className="sm:col-span-2">
+                    <p className="text-xs font-semibold uppercase text-muted">Remarks</p>
+                    <p className="mt-1 whitespace-pre-wrap break-words text-sm text-foreground">{document.remarks || '—'}</p>
+                </div>
+                <div className="sm:col-span-2">
+                    <p className="text-xs font-semibold uppercase text-muted">File</p>
+                    {document.files?.length ? <ul className="mt-1 space-y-1.5">{document.files.map((file) => <li key={file.id} className="flex flex-wrap items-baseline gap-x-2 text-sm"><span className="rounded bg-secondary px-1.5 py-0.5 text-xs font-medium uppercase text-muted">{file.type}</span>{file.url ? <a href={file.url} className="break-all font-medium text-primary underline">{file.name}</a> : <span className="break-all text-muted">{file.name} — File not available</span>}{file.uploaded_at && <span className="text-xs text-muted">{file.uploaded_at}</span>}</li>)}</ul> : loading ? null : document.file_url ? <a href={document.file_url} className="mt-1 inline-block break-all text-sm font-medium text-primary underline">{document.file_name || 'Attached file'}</a> : <p className="mt-1 text-sm text-foreground">No file attached.</p>}
+                </div>
+            </section>
+        </details>
     );
 }

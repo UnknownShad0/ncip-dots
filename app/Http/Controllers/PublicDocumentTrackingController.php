@@ -25,7 +25,7 @@ class PublicDocumentTrackingController extends Controller
                     'purpose' => $document->other_purpose ?: $document->purposeType?->name,
                     'office_name' => $document->office?->name,
                     'created_at' => $document->created_at?->format('F j, Y g:i A'),
-                    'trails' => $document->trails->sortBy([['created_at', 'asc'], ['id', 'asc']])->values()->map(fn ($trail) => [
+                    'trails' => $document->trails->sortBy([['created_at', 'desc'], ['id', 'desc']])->values()->map(fn ($trail) => [
                         'action' => $trail->action ?: ucfirst((string) $trail->status),
                         'status' => $trail->status,
                         'from_office' => $trail->fromOffice?->name,
