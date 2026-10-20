@@ -45,7 +45,7 @@ class NewPasswordController extends Controller
         $request->validate([
             'token' => 'required',
             'username' => 'required|string|max:255',
-            'password' => ['required', 'confirmed', Rules\Password::min(8)],
+            'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
         $user = User::query()->where('username', $request->input('username'))->first();

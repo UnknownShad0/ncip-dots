@@ -9,13 +9,6 @@ type Trail = {
     created_at?: string | null;
 };
 
-type TrackedFile = {
-    name: string;
-    type: string;
-    mime_type?: string | null;
-    url?: string | null;
-};
-
 type TrackedDocument = {
     tracking_number: string;
     title?: string | null;
@@ -25,7 +18,6 @@ type TrackedDocument = {
     office_name?: string | null;
     created_at?: string | null;
     trails: Trail[];
-    files: TrackedFile[];
 };
 
 export default function Show({ document }: { document: TrackedDocument }) {
@@ -74,16 +66,6 @@ export default function Show({ document }: { document: TrackedDocument }) {
                         </ol> : <p className="mt-3 rounded-lg bg-slate-50 p-4 text-sm text-slate-600">No routing activity is available yet.</p>}
                     </section>
 
-                    <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7" aria-labelledby="file-information-title">
-                        <h2 id="file-information-title" className="text-lg font-semibold">File information</h2>
-                        {document.files.length ? <ul className="mt-3 divide-y divide-slate-100">
-                            {document.files.map((file, index) => <li key={`${file.name}-${index}`} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
-                                <div className="min-w-0"><span className="block break-all font-medium text-slate-800">{file.name}</span><span className="mt-1 inline-block rounded bg-slate-100 px-2 py-1 text-xs uppercase text-slate-600">{file.type}</span></div>
-                                {file.url && <div className="flex shrink-0 gap-3"><a href={file.url} target="_blank" rel="noreferrer" className="font-medium text-blue-700 underline">View</a><a href={file.url} download={file.name} className="font-medium text-blue-700 underline">Download</a></div>}
-                            </li>)}
-                        </ul> : <p className="mt-3 text-sm text-slate-600">No file information is available.</p>}
-                        <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">These file links are available to anyone with this public tracking URL.</p>
-                    </section>
                     <p className="mt-6 text-center text-xs text-slate-500">National Commission on Indigenous Peoples · Document Tracking System</p>
                 </div>
             </main>

@@ -24,14 +24,21 @@ use Illuminate\Support\Facades\Route;
 Route::redirect('/', '/login');
 Route::get('/track/{trackingNumber}', [PublicDocumentTrackingController::class, 'show'])
     ->where('trackingNumber', '[^/]+')
+    ->middleware(['signed', 'throttle:30,1'])
     ->name('documents.track');
 
+<<<<<<< HEAD
 Route::middleware(['auth', 'active.user', 'verified'])->group(function () {
+=======
+Route::middleware(['auth', 'active', 'verified'])->group(function () {
+>>>>>>> @{-1}
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::get('/documents', [DocumentController::class, 'index'])->name('documents.index');
     Route::get('/documents/latest', [DocumentController::class, 'latest'])->name('documents.latest');
     Route::get('/documents/{id}/details', [DocumentController::class, 'details'])->whereNumber('id')->name('documents.details');
+    Route::get('/documents/{document}/files/{file}', [DocumentController::class, 'downloadFile'])
+        ->whereNumber('document')->whereNumber('file')->name('documents.files.download');
     Route::get('/document-creation', [DocumentCreationController::class, 'index'])->name('document-creation.index');
     Route::get('/document-fonts/{face}', DocumentFontController::class)
         ->where('face', 'regular|bold|italic|bold-italic')->name('document-fonts.show');

@@ -26,7 +26,7 @@ class IplumaController extends Controller
         }
 
         try {
-            $verifySsl = filter_var(env('IPLUMA_VERIFY_SSL', false), FILTER_VALIDATE_BOOLEAN);
+            $verifySsl = filter_var(env('IPLUMA_VERIFY_SSL', true), FILTER_VALIDATE_BOOLEAN);
 
             $response = Http::withOptions([
                 'verify' => $verifySsl,

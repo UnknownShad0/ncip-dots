@@ -22,7 +22,7 @@ class ApprovedDocumentForwardingTest extends TestCase
 
     private function scenario(): array
     {
-        Storage::fake('public');
+        Storage::fake('document_private');
         $range = Range::create(['name' => 'Central']);
         $origin = Office::create(['name' => 'Origin', 'range_id' => $range->id]);
         $destination = Office::create(['name' => 'Destination', 'range_id' => $range->id]);
@@ -56,9 +56,9 @@ class ApprovedDocumentForwardingTest extends TestCase
             $this->assertSame('version', $version->type);
             $this->assertSame($fresh->latestTrail->id, $version->document_trail_id);
             $this->assertSame('Approved response.pdf', $version->original_name);
-            Storage::disk('public')->assertExists($version->file_path);
-            $this->assertStringStartsWith('%PDF-', Storage::disk('public')->get($version->file_path));
-            Storage::disk('public')->assertExists($original->file_path);
+            Storage::disk('document_private')->assertExists($version->file_path);
+            $this->assertStringStartsWith('%PDF-', Storage::disk('document_private')->get($version->file_path));
+            Storage::disk('document_private')->assertExists($original->file_path);
             // Return custody to the origin to exercise another forwarding operation.
             $document->trails()->create(['from_office_id' => $document->office_id, 'to_office_id' => $document->office_id,
                 'created_by' => $document->created_by, 'status' => 'pending']);

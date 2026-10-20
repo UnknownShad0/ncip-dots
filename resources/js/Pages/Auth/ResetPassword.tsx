@@ -24,7 +24,7 @@ export default function ResetPassword({ token, username, status }: { token: stri
         <GuestLayout>
             <Head title="Choose a new password" />
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Choose a new password</h1>
-            <p className="mt-2 text-sm text-slate-600">Your password must be at least 8 characters long.</p>
+            <p className="mt-2 text-sm text-slate-600">Use at least 8 characters, including uppercase and lowercase letters, a number, and a special character.</p>
             {status && <p role="status" className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{status}</p>}
             <form onSubmit={submit} className="mt-7 space-y-5">
                 <div>

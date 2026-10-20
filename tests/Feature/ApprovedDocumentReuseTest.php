@@ -20,7 +20,7 @@ class ApprovedDocumentReuseTest extends TestCase
 
     public function test_approved_document_can_create_independent_submissions_for_two_offices(): void
     {
-        Storage::fake('public');
+        Storage::fake('document_private');
         $range = Range::create(['name' => 'Central']);
         $origin = Office::create(['name' => 'Origin', 'range_id' => $range->id]);
         $officeA = Office::create(['name' => 'A', 'range_id' => $range->id]);
@@ -41,7 +41,7 @@ class ApprovedDocumentReuseTest extends TestCase
             $this->assertSame('pending', $record->status);
             $this->assertSame('Approved memo', $record->title);
             $this->assertSame(1, $record->files()->count());
-            Storage::disk('public')->assertExists($record->files()->first()->file_path);
+            Storage::disk('document_private')->assertExists($record->files()->first()->file_path);
             $this->post('/documents/'.$record->id.'/release', ['action_type_id' => $action->id, 'to_office_id' => $office->id])
                 ->assertSessionHasNoErrors()->assertRedirect();
         }

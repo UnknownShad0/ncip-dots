@@ -46,7 +46,7 @@ class IntegrationController extends Controller
         }
 
         try {
-            $verifySsl = filter_var(env(strtoupper($service) . '_VERIFY_SSL', false), FILTER_VALIDATE_BOOLEAN);
+            $verifySsl = filter_var(env(strtoupper($service) . '_VERIFY_SSL', true), FILTER_VALIDATE_BOOLEAN);
 
             $headers = [
                 'Accept' => 'application/json',

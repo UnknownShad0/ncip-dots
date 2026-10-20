@@ -20,7 +20,11 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'administrator' => \App\Http\Middleware\EnsureAdministrator::class,
+<<<<<<< HEAD
             'active.user' => \App\Http\Middleware\EnsureActiveUser::class,
+=======
+            'active' => \App\Http\Middleware\EnsureActiveUser::class,
+>>>>>>> @{-1}
         ]);
 
         //

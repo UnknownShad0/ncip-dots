@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Document;
 use App\Models\DocumentCreationDraft;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\URL;
 use App\Services\AuditTrailWriter;
 use App\Models\Office;
 use App\Services\DocumentAccess;
@@ -58,7 +59,7 @@ class ArchiveController extends Controller
                 'id' => $document->id,
                 'title' => $document->title ?? '',
                 'tracking_number' => $document->tracking_number ?? '',
-                'tracking_url' => $document->tracking_number ? route('documents.track', ['trackingNumber' => $document->tracking_number]) : null,
+                'tracking_url' => $document->tracking_number ? URL::signedRoute('documents.track', ['trackingNumber' => $document->tracking_number]) : null,
                 'office' => $document->office,
                 'office_name' => $document->office?->name ?? '',
                 'office_short_name' => $document->office?->short_name,

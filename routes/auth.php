@@ -15,7 +15,8 @@ Route::middleware('guest')->group(function () {
     Route::get('register', [RegisteredUserController::class, 'create'])
         ->name('register');
 
-    Route::post('register', [RegisteredUserController::class, 'store']);
+    Route::post('register', [RegisteredUserController::class, 'store'])
+        ->middleware('throttle:5,1');
 
     Route::get('login', [AuthenticatedSessionController::class, 'create'])
         ->name('login');
@@ -36,7 +37,11 @@ Route::middleware('guest')->group(function () {
         ->name('password.store');
 });
 
+<<<<<<< HEAD
 Route::middleware(['auth', 'active.user'])->group(function () {
+=======
+Route::middleware(['auth', 'active'])->group(function () {
+>>>>>>> @{-1}
     Route::get('verify-email', EmailVerificationPromptController::class)
         ->name('verification.notice');
 
