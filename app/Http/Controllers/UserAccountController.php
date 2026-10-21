@@ -36,6 +36,33 @@ class UserAccountController extends Controller
         return response()->json($result);
     }
 
+    public function searchEmployees(Request $request, HrisDirectory $directory)
+    {
+        $validated = $request->validate(['query' => ['required', 'string', 'min:2', 'max:100']]);
+        $request->session()->forget('hris_employee_lookup');
+
+        try {
+            $matches = $directory->search($validated['query'], limit: 20);
+            if ($matches === [] && preg_match('/^EMP[-_][A-Z0-9-]+$/i', trim($validated['query']))) {
+                $lookup = $directory->lookup($validated['query'], includeOffices: false);
+                if ($lookup) {
+                    $matches = [$lookup['employee']];
+                }
+            }
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return response()->json(['message' => 'Employee directory is unavailable. Please check the HRIS configuration or try again.'], 502);
+        }
+
+        $matches = collect($matches)->map(fn (array $employee) => array_intersect_key($employee, array_flip([
+            'employee_code', 'first_name', 'middle_name', 'last_name', 'ext_name',
+            'username', 'division_code', 'division', 'position', 'employment_status',
+        ])))->values()->all();
+
+        return response()->json(['matches' => $matches]);
+    }
+
     public function index()
     {
         $offices = Office::query()

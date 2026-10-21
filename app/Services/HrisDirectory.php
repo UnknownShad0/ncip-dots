@@ -2,8 +2,10 @@
 
 namespace App\Services;
 
+use App\Models\HrisEmployee;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
 class HrisDirectory
@@ -48,9 +50,13 @@ class HrisDirectory
 
     public function lookup(string $employeeCode, bool $includeOffices = true): ?array
     {
-        $employeeRecords = $this->records($this->fetchEmployeeByCode($employeeCode));
-        $employee = collect($employeeRecords)
-            ->first(fn (array $record) => strcasecmp(trim((string) ($record['employee_code'] ?? '')), trim($employeeCode)) === 0);
+        $employeeRecords = [];
+        $employee = $this->localEmployee($employeeCode);
+        if (! $employee) {
+            $employeeRecords = $this->records($this->fetchEmployeeByCode($employeeCode));
+            $employee = collect($employeeRecords)
+                ->first(fn (array $record) => strcasecmp(trim((string) ($record['employee_code'] ?? '')), trim($employeeCode)) === 0);
+        }
 
         Log::debug('HRIS employee lookup evaluated', [
             'records_received' => count($employeeRecords),
@@ -76,12 +82,88 @@ class HrisDirectory
             : [];
 
         return [
-            'employee' => array_intersect_key($employee, array_flip([
-                'employee_code', 'first_name', 'middle_name', 'last_name', 'ext_name',
-                'username', 'email_address', 'division_code', 'division',
-            ])),
+            'employee' => $this->employeeFields($employee),
             'offices' => $offices,
         ];
+    }
+
+    public function search(string $search, int $limit = 20): array
+    {
+        $search = trim($search);
+        if ($search === '') {
+            return [];
+        }
+
+        $limit = max(1, min($limit, 50));
+        if (Schema::hasTable('hris_employees')) {
+            $query = HrisEmployee::query();
+            foreach (preg_split('/\s+/u', $search, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $term) {
+                $pattern = '%'.$term.'%';
+                $query->where(fn ($matches) => $matches
+                    ->where('employee_code', 'like', $pattern)
+                    ->orWhere('first_name', 'like', $pattern)
+                    ->orWhere('middle_name', 'like', $pattern)
+                    ->orWhere('last_name', 'like', $pattern)
+                    ->orWhere('ext_name', 'like', $pattern)
+                    ->orWhere('username', 'like', $pattern)
+                    ->orWhere('signatory_name', 'like', $pattern));
+            }
+
+            $matches = $query->orderBy('last_name')->orderBy('first_name')->limit($limit)->get()
+                ->map(fn (HrisEmployee $employee) => $this->employeeFields($employee->attributesToArray()))
+                ->all();
+            if ($matches !== []) {
+                return $matches;
+            }
+        }
+
+        if (! config('services.hris.use_sample_data')) {
+            return [];
+        }
+
+        $terms = preg_split('/\s+/u', $search, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        return collect($this->records($this->sampleRecords('get-employee.json')))
+            ->filter(function (array $employee) use ($terms) {
+                $haystack = mb_strtolower(implode(' ', array_filter([
+                    $employee['employee_code'] ?? null,
+                    $employee['first_name'] ?? null,
+                    $employee['middle_name'] ?? null,
+                    $employee['last_name'] ?? null,
+                    $employee['ext_name'] ?? null,
+                    $employee['username'] ?? null,
+                    $employee['signatory_name'] ?? null,
+                ])));
+
+                return collect($terms)->every(fn (string $term) => str_contains($haystack, mb_strtolower($term)));
+            })
+            ->take($limit)
+            ->map(fn (array $employee) => $this->employeeFields($employee))
+            ->values()
+            ->all();
+    }
+
+    private function localEmployee(string $employeeCode): ?array
+    {
+        if (! Schema::hasTable('hris_employees')) {
+            return null;
+        }
+
+        $employee = HrisEmployee::query()
+            ->whereRaw('LOWER(employee_code) = ?', [mb_strtolower(trim($employeeCode))])
+            ->first();
+
+        return $employee ? $this->employeeFields($employee->attributesToArray()) : null;
+    }
+
+    private function employeeFields(array $employee): array
+    {
+        return array_intersect_key($employee, array_flip([
+            'employee_code', 'first_name', 'middle_name', 'last_name', 'ext_name',
+            'username', 'email_address', 'division_code', 'division', 'position',
+            'designation', 'employment_status', 'start_date', 'end_date',
+            'signatory_name', 'signatory_designation',
+        ]));
     }
 
     private function fetchEmployeeByCode(string $employeeCode): mixed

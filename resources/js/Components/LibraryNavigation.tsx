@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { ChevronRight, Building2, FileText, Map, Target, Zap } from 'lucide-react';
+import { ChevronRight, Building2, FileText, Map, Target, Zap, Users } from 'lucide-react';
 
 export const libraryLinks = [
     { name: 'Offices', href: 'offices.index', description: 'Offices that send and receive documents.', icon: Building2 },
@@ -7,6 +7,7 @@ export const libraryLinks = [
     { name: 'Document types', href: 'document-types.index', description: 'Letters, reports, and other record types.', icon: FileText },
     { name: 'Purpose types', href: 'purpose-types.index', description: 'Why a document is being sent.', icon: Target },
     { name: 'Action types', href: 'action-types.index', description: 'Actions available during document routing.', icon: Zap },
+    { name: 'HRIS Employees', href: 'hris-employees.index', description: 'Synced employee records from HRIS.', icon: Users },
 ];
 
 export default function LibraryNavigation() {

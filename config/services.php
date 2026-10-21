@@ -19,6 +19,7 @@ return [
         'url' => env('HRIS_API_URL'),
         'token' => env('HRIS_API_TOKEN'),
         'employee_path' => env('HRIS_EMPLOYEE_PATH', '/api/employees'),
+        'roster_path' => env('HRIS_ROSTER_PATH', '/api/employees'),
         'office_path' => env('HRIS_OFFICE_PATH', '/api/offices'),
         'credentials_path' => env('HRIS_CREDENTIALS_PATH', '/api/login-credentials/verify'),
     ],

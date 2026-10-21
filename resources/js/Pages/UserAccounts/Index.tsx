@@ -44,6 +44,18 @@ type EmployeeLookup = {
     employee: { employee_code: string; first_name: string; middle_name?: string; last_name: string; ext_name?: string; username: string; email_address?: string; division_code?: string; division?: string };
     offices: { office_code: string; office_name: string; region_code: string; region_name: string }[];
 };
+type EmployeeMatch = {
+    employee_code: string;
+    first_name?: string;
+    middle_name?: string;
+    last_name?: string;
+    ext_name?: string;
+    username?: string;
+    division?: string;
+    division_code?: string;
+    position?: string;
+    employment_status?: string;
+};
 type SortKey = 'name' | 'username' | 'email' | 'role' | 'office_name' | 'account_status';
 
 const emptyForm: FormState = {
@@ -66,6 +78,7 @@ export default function UserAccountsIndex({
     const [processing, setProcessing] = useState(false);
     const [accountType, setAccountType] = useState<'dots' | 'employee' | null>(null);
     const [employeeCode, setEmployeeCode] = useState('');
+    const [employeeMatches, setEmployeeMatches] = useState<EmployeeMatch[]>([]);
     const [lookup, setLookup] = useState<EmployeeLookup | null>(null);
     const [lookupOpen, setLookupOpen] = useState(false);
     const [lookupBusy, setLookupBusy] = useState(false);
@@ -77,16 +90,35 @@ export default function UserAccountsIndex({
     const resetLookup = () => {
         lookupVersion.current++;
         setLookup(null); setLookupOpen(false); setLookupBusy(false);
-        setLookupError(''); setEmployeeCode(''); setOfficeTableId('');
+        setLookupError(''); setEmployeeCode(''); setEmployeeMatches([]); setOfficeTableId('');
     };
     const selectType = (type: 'dots' | 'employee') => {
         resetLookup(); setAccountType(type); setForm(emptyForm); setErrors({});
     };
     const searchEmployee = async () => {
         const version = ++lookupVersion.current;
-        setLookupBusy(true); setLookupError(''); setLookup(null); setForm(emptyForm); setOfficeTableId('');
+        setLookupBusy(true); setLookupError(''); setLookup(null); setEmployeeMatches([]); setForm(emptyForm); setOfficeTableId('');
         try {
-            const response = await axios.post<EmployeeLookup>('/user-accounts/lookup-employee', { employee_code: employeeCode.trim() });
+            const response = await axios.post<{ matches: EmployeeMatch[] }>('/user-accounts/search-employees', { query: employeeCode.trim() });
+            if (version !== lookupVersion.current) return;
+            setEmployeeMatches(response.data.matches);
+            if (response.data.matches.length === 0) setLookupError('No matching employee found. Sync the HRIS directory or check the search text.');
+        } catch (error) {
+            if (version !== lookupVersion.current) return;
+            setLookupError(axios.isAxiosError(error) ? error.response?.data?.errors?.query?.[0] || error.response?.data?.message || 'Employee lookup failed. Please try again.' : 'Employee lookup failed. Please try again.');
+        } finally {
+            if (version === lookupVersion.current) setLookupBusy(false);
+        }
+    };
+
+    const selectEmployee = async (employee: EmployeeMatch) => {
+        const version = ++lookupVersion.current;
+        setEmployeeCode(employee.employee_code);
+        setEmployeeMatches([]);
+        setLookupBusy(true);
+        setLookupError('');
+        try {
+            const response = await axios.post<EmployeeLookup>('/user-accounts/lookup-employee', { employee_code: employee.employee_code });
             if (version !== lookupVersion.current) return;
             const result = response.data;
             setLookup(result); setLookupOpen(false);
@@ -94,7 +126,7 @@ export default function UserAccountsIndex({
                 username: result.employee.username, email: '' });
         } catch (error) {
             if (version !== lookupVersion.current) return;
-            setLookupError(axios.isAxiosError(error) ? error.response?.data?.errors?.employee_code?.[0] || error.response?.data?.message || 'Employee lookup failed. Please try again.' : 'Employee lookup failed. Please try again.');
+            setLookupError(axios.isAxiosError(error) ? error.response?.data?.message || 'Employee lookup failed. Please try again.' : 'Employee lookup failed. Please try again.');
         } finally {
             if (version === lookupVersion.current) setLookupBusy(false);
         }
@@ -253,10 +285,16 @@ export default function UserAccountsIndex({
                     <div className="flex items-center justify-between border-b border-border pb-3"><h3 id="user-account-modal-title" className="text-lg font-semibold text-foreground">{editingRow ? 'Edit User Account' : 'New User Account'}</h3><button type="button" onClick={closeModal} className="rounded-lg px-3 py-2 text-sm text-muted hover:bg-secondary hover:text-foreground">Close</button></div>
                     {!editingRow && accountType === 'employee' && <div className="space-y-4">
                         {(!lookup || lookupOpen) && <div className="space-y-3 rounded-xl border border-border bg-background p-4">
-                            <div className="flex items-end gap-2"><div className="flex-1"><Field label="Employee Code"><input value={employeeCode} onChange={(e) => setEmployeeCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (employeeCode.trim() && !lookupBusy) void searchEmployee(); } }} placeholder="Enter employee code" className="w-full rounded-lg border-border bg-surface" /></Field></div>
+                            <div className="flex items-end gap-2"><div className="flex-1"><Field label="Search employee by code or name"><input value={employeeCode} onChange={(e) => { lookupVersion.current++; setEmployeeCode(e.target.value); setEmployeeMatches([]); setLookupError(''); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (employeeCode.trim() && !lookupBusy) void searchEmployee(); } }} placeholder="Enter employee code or name" className="w-full rounded-lg border-border bg-surface" /></Field></div>
                                 <button type="button" disabled={lookupBusy || !employeeCode.trim()} onClick={() => void searchEmployee()} className="dots-button-primary disabled:opacity-50">{lookupBusy ? 'Searching...' : 'Search'}</button>
                             </div>
                             {lookupError && <p role="alert" className="text-sm text-danger">{lookupError}</p>}
+                            {employeeMatches.length > 0 && <div className="max-h-64 overflow-y-auto rounded-lg border border-border bg-surface" role="listbox" aria-label="Matching HRIS employees">
+                                {employeeMatches.map((employee) => <button key={employee.employee_code} type="button" role="option" aria-selected="false" onClick={() => void selectEmployee(employee)} className="block w-full border-b border-border px-4 py-3 text-left last:border-b-0 hover:bg-background">
+                                    <span className="block font-medium text-foreground">{[employee.first_name, employee.middle_name, employee.last_name, employee.ext_name].filter(Boolean).join(' ') || 'Unnamed employee'}</span>
+                                    <span className="mt-0.5 block text-xs text-muted">{employee.employee_code}{employee.username ? ` · ${employee.username}` : ''}{employee.division ? ` · ${employee.division}` : employee.division_code ? ` · ${employee.division_code}` : ''}{employee.position ? ` · ${employee.position}` : ''}{employee.employment_status ? ` · ${employee.employment_status}` : ''}</span>
+                                </button>)}
+                            </div>}
                         </div>}
                         {lookup && !lookupOpen && <>
                             <button type="button" disabled={processing || lookupBusy} onClick={() => { setLookupOpen(true); setLookupError(''); }} className="self-start rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary disabled:opacity-50">Search another employee</button>

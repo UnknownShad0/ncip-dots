@@ -11,6 +11,7 @@ use App\Http\Controllers\DocumentTypeController;
 use App\Http\Controllers\DraftsController;
 use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\GmailIntegrationController;
+use App\Http\Controllers\HrisEmployeeController;
 use App\Http\Controllers\IplumaController;
 use App\Http\Controllers\OfficeController;
 use App\Http\Controllers\ProfileController;
@@ -101,7 +102,10 @@ Route::middleware(['auth', 'active.user', 'verified'])->group(function () {
         Route::get('/purpose-types', [PurposeTypeController::class, 'purposeTypes'])->name('purpose-types.index');
         Route::post('/purpose-types', [PurposeTypeController::class, 'storePurposeType'])->name('purpose-types.store');
         Route::put('/purpose-types/{id}', [PurposeTypeController::class, 'updatePurposeType'])->name('purpose-types.update');
+        Route::get('/hris-employees', [HrisEmployeeController::class, 'index'])->name('hris-employees.index');
+        Route::post('/hris-employees/sync', [HrisEmployeeController::class, 'sync'])->name('hris-employees.sync');
         Route::get('/user-accounts', [UserAccountController::class, 'index'])->name('user-accounts.index');
+        Route::post('/user-accounts/search-employees', [UserAccountController::class, 'searchEmployees'])->middleware('throttle:30,1')->name('user-accounts.search-employees');
         Route::post('/user-accounts/lookup-employee', [UserAccountController::class, 'lookupEmployee'])->middleware('throttle:20,1')->name('user-accounts.lookup-employee');
         Route::post('/user-accounts', [UserAccountController::class, 'store'])->name('user-accounts.store');
         Route::put('/user-accounts/{id}', [UserAccountController::class, 'update'])->name('user-accounts.update');
