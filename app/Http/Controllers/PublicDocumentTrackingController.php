@@ -12,6 +12,7 @@ class PublicDocumentTrackingController extends Controller
         $document = Document::query()
             ->where('tracking_number', $trackingNumber)
             ->where('is_finalized', true)
+            ->whereIn('approval_status', ['approved', 'not_required'])
             ->with(['office:id,name', 'documentType:id,name', 'purposeType:id,name', 'trails.fromOffice:id,name', 'trails.toOffice:id,name'])
             ->first();
 

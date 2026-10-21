@@ -478,7 +478,7 @@ export default function Index({
                 setErrors({});
                 setSuccessAlert({
                     title: "Draft saved",
-                    message: "Your draft was saved. You can continue editing or submit it for approval.",
+                    message: "Your draft was saved. Continue editing, or finalize it when it is ready to attach in Routing.",
                 });
             },
         };
@@ -510,7 +510,7 @@ export default function Index({
             Boolean(draft.notify_approvers_by_email),
         );
     };
-    const submitForApproval = () => {
+    const finalizeDocument = () => {
         const nextErrors: Record<string, string> = {};
         if (!typeId) nextErrors.document_type_id = "Choose a document type.";
         if (!String(content.from ?? "").trim()) nextErrors["content.from"] = "Enter the sender name.";
@@ -522,11 +522,16 @@ export default function Index({
             return;
         }
         setErrors({});
-        openSubmissionDialog(
-            { id: editing, title: content.subject || "New document", fromEditor: true },
-            approverOfficeId,
-            notifyApproversByEmail,
-        );
+        router.post("/document-creation/finalize", {
+            draft_id: editing,
+            document_type_id: typeId,
+            content,
+        }, {
+            preserveScroll: true,
+            onStart: () => setSaving(true),
+            onFinish: () => setSaving(false),
+            onError: (serverErrors) => setErrors(serverErrors),
+        });
     };
     const submitToApprovalOffice = () => {
         if (!submissionTarget || !submissionOfficeId) return;
@@ -599,30 +604,24 @@ export default function Index({
             header={
                 <div>
                     <h1 className="text-2xl font-semibold tracking-tight">
-                        {approvedOnly
-                            ? "Approved documents"
-                            : "Document creation"}
+                        Document Creation
                     </h1>
                 </div>
             }
         >
             <Head
-                title={
-                    approvedOnly ? "Approved documents" : "Document creation"
-                }
+                title="Document Creation"
             />
             <div className="mx-auto max-w-[1440px] space-y-6">
                 <div className="flex items-center gap-2 print:hidden">
                     <p className="text-sm text-muted">
-                        {approvedOnly
-                            ? "Approved records ready for the next step."
-                            : "Create a draft, save your work, then send it for approval."}
+                        "Create and edit generated documents. Finalize a completed file when it is ready to attach in Routing."
                     </p>
-                    <InfoTip label="Document creation workflow">
-                        Choose a document type and write on the page. Save the
-                        draft before choosing an approval office. Approval
-                        decisions apply to the submitted version. Registration
-                        creates the document in DOTS.
+                    <InfoTip label="Document creation">
+                        Save your work as a draft while editing. Finalizing
+                        adds the generated file to Document Workflow as Ready
+                        for Routing. It receives a DOTS tracking number when a
+                        user attaches it to a routing record.
                     </InfoTip>
                 </div>
                 {actionError && !pendingDecision && (
@@ -707,13 +706,13 @@ export default function Index({
                                         </button>
                                         <button
                                             type="button"
-                                            onClick={submitForApproval}
+                                            onClick={finalizeDocument}
                                             disabled={saving}
-                                            title="Choose an approval office; current edits will be saved and submitted"
+                                            title="Finalize this generated document for attachment in Routing"
                                             className="inline-flex items-center rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground shadow-sm hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
                                         >
-                                            <Send size={16} className="mr-2" aria-hidden="true" />
-                                            Submit for approval
+                                            <FileCheck2 size={16} className="mr-2" aria-hidden="true" />
+                                            Finalize for Routing
                                         </button>
                                     </div>
                                 </div>
@@ -782,7 +781,7 @@ export default function Index({
                     </section>
                 )}
 
-                {approvedOnly ? (
+                {false && (approvedOnly ? (
                     <DraftListSection
                         id="approved-documents"
                         title="My approved documents"
@@ -855,7 +854,7 @@ export default function Index({
                             />
                         )}
                     </div>
-                )}
+                ))}
                 <WorkspaceDialog
                     open={previewOpen}
                     onClose={() => setPreviewOpen(false)}
@@ -869,7 +868,7 @@ export default function Index({
                                     Preview document
                                 </h2>
                                 <p className="mt-1 text-sm text-muted">
-                                    Review the final layout. Close the preview to save as a draft or submit for approval.
+                                    Review the final layout. Close the preview to continue editing or finalize it for Routing.
                                 </p>
                             </div>
                         </div>

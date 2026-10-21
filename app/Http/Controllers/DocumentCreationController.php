@@ -22,6 +22,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Support\Arr;
 use Illuminate\Validation\ValidationException;
@@ -32,89 +33,16 @@ class DocumentCreationController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $userOffice = $this->userOffice($user);
-        $canReviewOfficeApprovals = $user->is_active && $user->isAdministrator() && $userOffice !== null;
-        $approvedOnly = $request->query('queue') === 'approved';
-        $queue = (string) $request->query('queue', '');
-
-        if (! $approvedOnly && $queue === 'verification') {
-            return redirect()->route('approved-documents.index', ['status' => 'awaiting_verification']);
+        if ($request->filled('queue')) {
+            return redirect()->route('document-workflow.index');
         }
 
-        $relations = [
-            'creator:id,name,firstname,lastname,office_id',
-            'creator.office:id,name',
-            'approver:id,name,firstname,lastname',
-            'approverOffice:id,name,short_name',
-            'decisionMaker:id,name,firstname,lastname',
-            'documentType:id,name',
-            'events.user:id,name,firstname,lastname,office_id,office_code',
-            'events.user.office:id,name,short_name',
-            'events.user.officeByCode:id,name,short_name',
-        ];
-
-        $workStatuses = ['pending_approval', 'revision_requested', 'rejected'];
-        $approvedStatuses = ['approved', 'awaiting_verification', 'verified', 'registered'];
-        $approvedStatus = (string) $request->query('status', 'all');
-        $approvedSearch = trim((string) $request->query('search', ''));
-
-        if ($approvedOnly) {
-            $approvedQuery = DocumentCreationDraft::query()->with($relations)
-                ->where('created_by', $user->id)
-                ->whereIn('status', $approvedStatuses)
-                ->whereNull('archived_at');
-
-            if (in_array($approvedStatus, $approvedStatuses, true)) {
-                $approvedQuery->where('status', $approvedStatus);
-            } else {
-                $approvedStatus = 'all';
-            }
-            $this->applyDraftSearch($approvedQuery, $approvedSearch);
-
-            $drafts = $this->prepareDraftPage(
-                $approvedQuery->latest()->paginate(5)->withQueryString(),
-                $user,
-                $userOffice,
-                $canReviewOfficeApprovals,
-            );
-
-            return Inertia::render('DocumentCreation/Index', [
-                'drafts' => $drafts->items(),
-                'draftsPagination' => $this->paginationSummary($drafts),
-                'approvalTasks' => null,
-                'approvalTasksPagination' => null,
-                'documentTypes' => [],
-                'savedDraftId' => session('savedDraftId'),
-                'approverOffices' => [],
-                'currentUserId' => $user->id,
-                'footerOfficeName' => DocumentMetadata::officeName($user),
-                'approvedOnly' => true,
-                'canReviewOfficeApprovals' => $canReviewOfficeApprovals,
-                'filters' => [
-                    'queue' => 'approved',
-                    'search' => $approvedSearch,
-                    'status' => $approvedStatus,
-                    'page' => $drafts->currentPage(),
-                ],
-            ]);
-        }
-
-        $myStatus = (string) $request->query('my_status', match ($queue) {
-            'submitted' => 'pending_approval',
-            'revision' => 'revision_requested',
-            default => 'all',
-        });
-        if (! in_array($myStatus, [...$workStatuses, 'all'], true)) {
-            $myStatus = 'all';
-        }
-        $mySearch = trim((string) $request->query('my_search', ''));
-        $approvalSearch = trim((string) $request->query('approval_search', ''));
         $draftToEdit = null;
         if ($request->filled('edit_draft_id')) {
             $draftToEdit = DocumentCreationDraft::query()
                 ->whereKey($request->integer('edit_draft_id'))
                 ->where('created_by', $user->id)
-                ->where('status', 'draft')
+                ->whereIn('status', ['draft', 'ready_for_routing', 'revision_requested'])
                 ->first();
             abort_unless($draftToEdit, 404);
             $draftToEdit = $draftToEdit->only([
@@ -123,61 +51,20 @@ class DocumentCreationController extends Controller
             $draftToEdit['content'] = app(DocumentTemplates::class)->presentContent(DocumentMetadata::present($draftToEdit['content'], $user));
         }
 
-        $myWorkQuery = DocumentCreationDraft::query()->with($relations)
-            ->where('created_by', $user->id)
-            ->whereIn('status', $workStatuses);
-        if ($myStatus !== 'all') {
-            $myWorkQuery->where('status', $myStatus);
-        }
-        $this->applyDraftSearch($myWorkQuery, $mySearch);
-
-        $approvalTasksQuery = DocumentCreationDraft::query()->with($relations)
-            ->where('status', 'pending_approval')
-            ->where('created_by', '!=', $user->id)
-            ->where(function ($query) use ($user, $userOffice, $canReviewOfficeApprovals) {
-                $query->where('approver_id', $user->id);
-                if ($canReviewOfficeApprovals) {
-                    $query->orWhere('approver_office_id', $userOffice->id);
-                }
-            });
-        $this->applyDraftSearch($approvalTasksQuery, $approvalSearch, includeCreator: true);
-
-        $myWork = $this->prepareDraftPage(
-            $myWorkQuery->latest()->paginate(5, ['*'], 'my_page')->withQueryString(),
-            $user,
-            $userOffice,
-            $canReviewOfficeApprovals,
-        );
-        $approvalTasks = $this->prepareDraftPage(
-            $approvalTasksQuery->latest()->paginate(5, ['*'], 'approval_page')->withQueryString(),
-            $user,
-            $userOffice,
-            $canReviewOfficeApprovals,
-        );
-
         return Inertia::render('DocumentCreation/Index', [
-            'drafts' => $myWork->items(),
-            'draftsPagination' => $this->paginationSummary($myWork),
-            'approvalTasks' => $approvalTasks->items(),
-            'approvalTasksPagination' => $this->paginationSummary($approvalTasks),
+            'drafts' => [],
+            'draftsPagination' => ['current_page' => 1, 'last_page' => 1, 'per_page' => 5, 'total' => 0],
+            'approvalTasks' => [],
+            'approvalTasksPagination' => ['current_page' => 1, 'last_page' => 1, 'per_page' => 5, 'total' => 0],
             'documentTypes' => $this->documentTypeOptions(),
             'draftToEdit' => $draftToEdit,
             'savedDraftId' => session('savedDraftId'),
-            'approverOffices' => $this->approverOffices()
-                ->map(fn (Office $office) => ['id' => $office->id, 'name' => $office->name, 'short_name' => $office->short_name])
-                ->all(),
+            'approverOffices' => [],
             'currentUserId' => $user->id,
             'footerOfficeName' => DocumentMetadata::officeName($user),
             'approvedOnly' => false,
-            'canReviewOfficeApprovals' => $canReviewOfficeApprovals,
-            'filters' => [
-                'queue' => $queue,
-                'my_search' => $mySearch,
-                'my_status' => $myStatus,
-                'approval_search' => $approvalSearch,
-                'my_page' => $myWork->currentPage(),
-                'approval_page' => $approvalTasks->currentPage(),
-            ],
+            'canReviewOfficeApprovals' => false,
+            'filters' => [],
         ]);
     }
 
@@ -276,15 +163,140 @@ class DocumentCreationController extends Controller
 
     public function update(Request $request, DocumentCreationDraft $draft)
     {
-        abort_unless((int) $draft->created_by === (int) $request->user()->id && in_array($draft->status, ['draft', 'revision_requested'], true), 403);
+        abort_unless((int) $draft->created_by === (int) $request->user()->id && in_array($draft->status, ['draft', 'ready_for_routing', 'revision_requested'], true), 403);
         $data = $this->validateDraft($request, $draft);
-        $draft->update([...$data, 'status' => 'draft']);
+        $nextStatus = $draft->official_document_id
+            && $draft->officialDocument?->approval_status === 'changes_requested'
+                ? 'revision_requested'
+                : 'draft';
+        $draft->update([...$data, 'status' => $nextStatus]);
         $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Draft updated']);
         app(AuditTrailWriter::class)->record('document.draft_updated', $draft, [
             'title' => $draft->title,
         ]);
 
         return back()->with('success', 'Draft updated.')->with('savedDraftId', $draft->id);
+    }
+
+    public function finalizeCurrent(Request $request)
+    {
+        $existing = $this->editableDraft($request);
+        $data = $this->validateDraft($request, $existing);
+        $draft = DB::transaction(function () use ($request, $data, $existing) {
+            if ($existing) {
+                $draft = DocumentCreationDraft::query()
+                    ->whereKey($existing->id)
+                    ->where('created_by', $request->user()->id)
+                    ->whereIn('status', ['draft', 'ready_for_routing', 'revision_requested'])
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                if ($draft->official_document_id) {
+                    $trackedDocument = Document::query()->lockForUpdate()->findOrFail($draft->official_document_id);
+                    abort_unless($trackedDocument->approval_status === 'changes_requested', 409, 'This tracked document is not waiting for a revision.');
+                }
+            } else {
+                $draft = DocumentCreationDraft::create([
+                    ...$data,
+                    'created_by' => $request->user()->id,
+                    'version_number' => 0,
+                    'status' => 'draft',
+                ]);
+                $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Draft created']);
+            }
+
+            $nextVersion = (int) $draft->version_number + 1;
+            $draft->update([
+                ...$data,
+                'version_number' => $nextVersion,
+                'status' => 'ready_for_routing',
+                'submitted_at' => now(),
+                'decision_at' => null,
+                'decision_remarks' => null,
+            ]);
+            $draft->versions()->create([
+                'version_number' => $nextVersion,
+                'content' => $draft->content,
+                'created_by' => $request->user()->id,
+            ]);
+            $draft->events()->create([
+                'user_id' => $request->user()->id,
+                'event' => 'Finalized; ready for routing',
+                'metadata' => ['version' => $nextVersion],
+            ]);
+            app(AuditTrailWriter::class)->record('document.ready_for_routing', $draft, [
+                'title' => $draft->title,
+                'version' => $nextVersion,
+            ]);
+
+            return $draft;
+        });
+
+        if ($draft->official_document_id) {
+            return $this->attachTrackedRevision($request, $draft);
+        }
+
+        return redirect()->route('document-workflow.index')
+            ->with('success', 'Document finalized and added to Document Workflow as Ready for Routing.')
+            ->with('savedDraftId', $draft->id);
+    }
+
+    private function attachTrackedRevision(Request $request, DocumentCreationDraft $draft)
+    {
+        $document = Document::query()->findOrFail($draft->official_document_id);
+        $pdf = app(DocumentPdf::class)->renderDraft($draft, $document->tracking_number)->output();
+        $path = 'documents/versions/'.Str::uuid().'.pdf';
+        abort_unless(Storage::disk('document_private')->put($path, $pdf), 500, 'Could not save the revised PDF.');
+
+        try {
+            DB::transaction(function () use ($request, $draft, $document, $pdf, $path) {
+                $draft = DocumentCreationDraft::query()->lockForUpdate()->findOrFail($draft->id);
+                $document = Document::query()->lockForUpdate()->findOrFail($document->id);
+                abort_unless((int) $draft->created_by === (int) $request->user()->id
+                    && (int) $draft->official_document_id === (int) $document->id
+                    && $document->approval_status === 'changes_requested', 409, 'The tracked document changed before this revision was submitted.');
+
+                $officeId = (int) ($document->latestTrail?->to_office_id ?? $document->office_id);
+                $trail = $document->trails()->create([
+                    'from_office_id' => $officeId ?: null,
+                    'to_office_id' => $officeId ?: null,
+                    'created_by' => $request->user()->id,
+                    'status' => 'pending',
+                    'action' => 'Revised document submitted for approval',
+                ]);
+                $document->files()->create([
+                    'document_trail_id' => $trail->id,
+                    'type' => 'version',
+                    'file_name' => basename($path),
+                    'original_name' => $draft->title.'.pdf',
+                    'file_path' => $path,
+                    'mime_type' => 'application/pdf',
+                    'size_bytes' => strlen($pdf),
+                    'uploaded_by' => $request->user()->id,
+                ]);
+                $document->update([
+                    'approval_status' => 'awaiting_approval',
+                    'signature_status' => ($document->signature_status ?? 'not_required') === 'not_required' ? 'not_required' : 'needs_signature',
+                ]);
+                $draft->update(['status' => 'registered']);
+                $draft->events()->create([
+                    'user_id' => $request->user()->id,
+                    'event' => 'Revised file submitted to tracked record',
+                    'metadata' => ['document_id' => $document->id, 'tracking_number' => $document->tracking_number],
+                ]);
+                app(AuditTrailWriter::class)->record('document.revision_submitted', $document, [
+                    'tracking_number' => $document->tracking_number,
+                    'document_trail_id' => $trail->id,
+                    'file_name' => $draft->title.'.pdf',
+                ], actor: $request->user());
+            });
+        } catch (\Throwable $exception) {
+            Storage::disk('document_private')->delete($path);
+            throw $exception;
+        }
+
+        return redirect()->route('document-workflow.index')
+            ->with('success', 'Revised PDF submitted under the same tracking number for approval.')
+            ->with('savedDraftId', $draft->id);
     }
 
     public function submitCurrent(Request $request)
@@ -608,7 +620,7 @@ class DocumentCreationController extends Controller
         }
 
         return DocumentCreationDraft::query()->whereKey($request->integer('draft_id'))
-            ->where('created_by', $request->user()->id)->whereIn('status', ['draft', 'revision_requested'])->firstOrFail();
+            ->where('created_by', $request->user()->id)->whereIn('status', ['draft', 'ready_for_routing', 'revision_requested'])->firstOrFail();
     }
 
     private function validateDraft(Request $request, ?DocumentCreationDraft $existing = null): array

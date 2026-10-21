@@ -91,6 +91,7 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
             .document-editor-sheet .sheet-input:focus { background:#f4f8ff; outline:2px solid #ebedee; }
             .document-editor-sheet .sheet-input::placeholder { color:#94a3b8; }
             .document-editor-sheet .sheet-meta { display:grid; grid-template-columns:106px 8px minmax(0,1fr); gap:30px; margin-bottom:8px; }
+            .document-editor-sheet .tracking-number { margin:0 0 12px; text-align:right; font-size:9pt; font-weight:700; }
             .document-editor-sheet .sheet-meta strong { padding:4px 0; font-size:11pt; font-weight:700; line-height:1.3; }
             .document-editor-sheet .recipient-label { align-self:start; appearance:none; margin:0; width:100%; border:0; border-radius:3px; padding:4px 20px 4px 0; font:700 11pt/1.3 'Document Arial',sans-serif; background-color:transparent; color:inherit; }
             .document-editor-sheet .sheet-value { font-weight:700; }
@@ -107,6 +108,7 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
             <div className="document-page-bottom">{footer}<span className="document-page-number">{index + 1} / {pages}</span></div>
         </div>)}
         <div className="document-page-flow">
+        {content.tracking_number && <div className="tracking-number">DOTS Tracking No.: {String(content.tracking_number)}</div>}
         {(['for', 'thru', 'attention', 'from', 'subject', 'date'] as const).map(key => <div className="sheet-meta" data-page-field key={key}>
             {key === 'for' ? <select className="recipient-label self-start" aria-label="Recipient label" disabled={disabled || output} value={content.recipient_label === 'TO' ? 'TO' : 'FOR'} onChange={event => onChange('recipient_label', event.target.value)}><option value="FOR">FOR</option><option value="TO">TO</option></select> : <strong>{key.toUpperCase()}</strong>}
             <strong aria-hidden="true">:</strong>

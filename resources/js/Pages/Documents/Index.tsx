@@ -6,7 +6,7 @@ import CrudAlertModal, { type WorkspaceAlertVariant } from '@/Components/Workspa
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
-import { Archive, ArrowDownUp, ChevronDown, ChevronLeft, ChevronRight, Eye, FilePlus2, Inbox, LoaderCircle, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
+import { Archive, ArrowDownUp, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, FilePlus2, FileSignature, FileText, Inbox, LoaderCircle, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 
@@ -26,7 +26,7 @@ type DocumentItem = {
     created_by_short_name?: string | null;
     file_name?: string;
     file_url?: string | null;
-    files?: Array<{ id: number; name: string; type: 'original' | 'version' | string; url: string | null; uploaded_at?: string | null }>;
+    files?: Array<{ id: number; name: string; type: 'original' | 'version' | string; url: string | null; view_url?: string | null; is_pdf?: boolean; uploaded_at?: string | null }>;
     origin_type?: string;
     last_transaction?: string;
     last_transaction_summary?: {
@@ -79,6 +79,10 @@ type DocumentItem = {
     can_terminal?: boolean;
     can_receive?: boolean;
     can_delete?: boolean;
+    approval_status?: string;
+    signature_status?: string;
+    can_approve?: boolean;
+    revision_draft_id?: number | null;
 };
 
 type LibraryOption = { id: number | string; name: string; source?: string; disabled?: boolean };
@@ -147,6 +151,8 @@ export default function DocumentsIndex({
     approvedDocuments = [],
     maxUploadSizeKb,
     editDraftId = null,
+    openDocumentId = null,
+    createRoutingDraftId = null,
 }: {
     documents?: DocumentItem[];
     title?: string;
@@ -160,15 +166,21 @@ export default function DocumentsIndex({
     approvedDocuments?: ApprovedDocument[];
     maxUploadSizeKb: number;
     editDraftId?: number | string | null;
+    openDocumentId?: number | string | null;
+    createRoutingDraftId?: number | string | null;
 }) {
     const uploadLimitKb = Number(maxUploadSizeKb ?? 0);
     const [processing, setProcessing] = useState(false);
     const [formError, setFormError] = useState('');
     const formBaseline = useRef('');
     const autoOpenedDraftId = useRef<string | null>(null);
+    const autoOpenedDocumentId = useRef<string | null>(null);
+    const autoOpenedRoutingDraftId = useRef<string | null>(null);
     const [editingRow, setEditingRow] = useState<DocumentItem | null>(null);
     const [crudAlert, setCrudAlert] = useState<CrudAlert | null>(null);
     const [viewingRow, setViewingRow] = useState<DocumentItem | null>(null);
+    const [approvalRemarks, setApprovalRemarks] = useState('');
+    const [approvalError, setApprovalError] = useState('');
     const [printDocument, setPrintDocument] = useState<DocumentItem | null>(null);
     const [releasingRow, setReleasingRow] = useState<DocumentItem | null>(null);
     const [releaseForm, setReleaseForm] = useState({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', source: 'current', approvedDraftId: '', file: null as File | null });
@@ -199,6 +211,7 @@ export default function DocumentsIndex({
         other_purpose: '',
         urgent: false,
         notify_by_email: false,
+        signature_required: false,
         file: null as File | null,
     });
 
@@ -243,6 +256,7 @@ export default function DocumentsIndex({
             other_purpose: '',
             urgent: false,
             notify_by_email: false,
+            signature_required: false,
             file: null,
         });
     };
@@ -270,6 +284,7 @@ export default function DocumentsIndex({
             other_purpose: row.other_purpose ?? '',
             urgent: Boolean(row.urgent),
             notify_by_email: Boolean(row.notify_by_email),
+            signature_required: false,
             file: null,
         });
     };
@@ -304,15 +319,35 @@ export default function DocumentsIndex({
             other_purpose: '',
             urgent: false,
             notify_by_email: false,
+            signature_required: false,
             file: null,
         });
     };
+
+    useEffect(() => {
+        const requestedId = createRoutingDraftId == null ? '' : String(createRoutingDraftId);
+        if (!requestedId || autoOpenedRoutingDraftId.current === requestedId) return;
+        const draft = approvedDocuments.find((item) => String(item.id) === requestedId && !item.disabled);
+        if (!draft) return;
+        autoOpenedRoutingDraftId.current = requestedId;
+        openCreate();
+        setForm((current) => ({
+            ...current,
+            document_source: 'approved',
+            approved_draft_id: requestedId,
+            title: draft.title,
+            document_type_id: String(draft.document_type_id),
+        }));
+    }, [approvedDocuments, createRoutingDraftId]);
 
     const handleCreate = (e: React.FormEvent, finalize: boolean) => {
         e.preventDefault();
         if (processing) return;
         const fileError = validateDocumentFile(form.file, uploadLimitKb);
         if (fileError) { setUploadError(fileError); return; }
+        if (finalize && form.document_source === 'upload' && !form.file) { setUploadError('Attach the source file before creating the routing record.'); return; }
+        if (finalize && form.signature_required && !form.file && form.document_source !== 'approved') { setUploadError('Choose a PDF file before marking it as needing a signature.'); return; }
+        if (form.signature_required && form.file && !/\.pdf$/i.test(form.file.name)) { setUploadError('Only PDF attachments can be marked as needing a signature.'); return; }
 
         const data = new FormData();
         Object.entries({ ...form, is_finalized: finalize ? '1' : '0' }).forEach(([key, value]) => {
@@ -325,7 +360,6 @@ export default function DocumentsIndex({
             onError: (errors) => setFormError(Object.values(errors).join(' ')),
             onSuccess: () => {
                 closeModal();
-                setCrudAlert({ title: 'Document saved', message: finalize ? 'Document finalized successfully.' : 'Document draft created successfully.' });
             },
         });
     };
@@ -350,10 +384,6 @@ export default function DocumentsIndex({
             return;
         }
 
-        if (releaseForm.source === 'approved' && !releaseForm.approvedDraftId) {
-            setReleaseError('Choose an approved document.');
-            return;
-        }
         if (releaseForm.source === 'upload' && !releaseForm.file) {
             setReleaseError('Choose a file to upload.');
             return;
@@ -366,7 +396,6 @@ export default function DocumentsIndex({
         data.append('remarks', releaseForm.remarks);
         data.append('document_source', releaseForm.source);
         if (releaseForm.source === 'upload' && releaseForm.file) data.append('file', releaseForm.file);
-        if (releaseForm.source === 'approved') data.append('approved_draft_id', releaseForm.approvedDraftId);
 
         const selectedOffice = offices.find((office) => String(office.id) === releaseForm.officeId);
         const isRelease = selectedAction?.name.trim().toLowerCase() === 'for release';
@@ -396,6 +425,8 @@ export default function DocumentsIndex({
     };
 
     const openDocumentDetails = async (document: DocumentItem) => {
+        setApprovalRemarks('');
+        setApprovalError('');
         setViewingRow({ ...document, details_loading: true, details_error: undefined });
         try {
             const details = await fetchDocumentDetails(document);
@@ -405,6 +436,40 @@ export default function DocumentsIndex({
                 ? { ...current, details_loading: false, details_error: 'Could not load this document’s history. Please try again.' }
                 : current);
         }
+    };
+
+    const closeDocumentDetails = () => {
+        setViewingRow(null);
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('open_document_id')) {
+            url.searchParams.delete('open_document_id');
+            window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+        }
+    };
+
+    useEffect(() => {
+        const requestedId = openDocumentId == null ? '' : String(openDocumentId);
+        if (!requestedId || autoOpenedDocumentId.current === requestedId) return;
+        const document = documents.find((item) => String(item.id) === requestedId);
+        if (!document) return;
+        autoOpenedDocumentId.current = requestedId;
+        openDocumentDetails(document);
+    }, [documents, openDocumentId]);
+
+    const decideDocument = (decision: 'approved' | 'changes_requested' | 'rejected') => {
+        if (!viewingRow?.id || processing) return;
+        setProcessing(true);
+        setApprovalError('');
+        router.post(`/documents/${viewingRow.id}/approval`, { decision, remarks: approvalRemarks }, {
+            preserveScroll: true,
+            onFinish: () => setProcessing(false),
+            onError: (errors) => setApprovalError(Object.values(errors).join(' ')),
+            onSuccess: () => {
+                closeDocumentDetails();
+                setApprovalRemarks('');
+                router.visit(route('documents.index'), { replace: true });
+            },
+        });
     };
 
     const printDisposition = async (document: DocumentItem) => {
@@ -628,7 +693,7 @@ export default function DocumentsIndex({
                             className="dots-button-accent inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm sm:px-4"
                         >
                             <FilePlus2 size={17} />
-                            New document
+                            Route a document
                         </button>
                     </div>
                 </div>
@@ -796,7 +861,7 @@ export default function DocumentsIndex({
             </div>
             </div>
 
-            <WorkspaceDialog open={Boolean(viewingRow)} onClose={() => setViewingRow(null)} labelledBy="document-details-title" width="max-w-3xl">
+            <WorkspaceDialog open={Boolean(viewingRow)} onClose={closeDocumentDetails} labelledBy="document-details-title" width="max-w-3xl">
                 {viewingRow && (
                     <section>
                         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
@@ -804,7 +869,7 @@ export default function DocumentsIndex({
                                 <h2 id="document-details-title" className="break-words text-lg font-semibold text-foreground">{viewingRow.title || 'Document details'}</h2>
                                 <p className="mt-1 break-words text-sm text-muted">{viewingRow.tracking_number || 'Tracking number unavailable'}</p>
                             </div>
-                            <button type="button" onClick={() => setViewingRow(null)} aria-label="Close document details" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
+                            <button type="button" onClick={closeDocumentDetails} aria-label="Close document details" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
                                 <X size={19} aria-hidden="true" />
                             </button>
                         </div>
@@ -813,6 +878,24 @@ export default function DocumentsIndex({
                             {viewingRow.details_loading && <p role="status" className="inline-flex items-center gap-2 rounded-lg bg-background p-3 text-sm text-muted"><LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading transaction history and attachments…</p>}
                             {viewingRow.details_error && <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{viewingRow.details_error}</p>}
                             <DocumentReferenceDetails document={viewingRow} loading={viewingRow.details_loading} />
+
+                            {viewingRow.approval_status && viewingRow.approval_status !== 'not_required' && <section className="rounded-xl border border-border bg-background p-4" aria-label="Approval and signing status">
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                    <div><h3 className="font-semibold text-foreground">Approval and signing</h3><p className="mt-1 text-sm text-muted">Approval follows the routing record. Signing is tracked separately for the attached PDF.</p></div>
+                                    <div className="flex flex-wrap gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${getStatusClasses(viewingRow.approval_status)}`}>{viewingRow.approval_status.replaceAll('_', ' ')}</span><span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold capitalize text-foreground">{(viewingRow.signature_status || 'not_required').replaceAll('_', ' ')}</span></div>
+                                </div>
+                                {viewingRow.can_approve && <form className="mt-4 space-y-3" onSubmit={(event) => event.preventDefault()}>
+                                    <label htmlFor="approval-remarks" className="block text-sm font-medium text-foreground">Remarks</label>
+                                    <textarea id="approval-remarks" maxLength={4000} rows={3} value={approvalRemarks} onChange={(event) => setApprovalRemarks(event.target.value)} className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm" placeholder="Add a note for this decision" />
+                                    {approvalError && <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{approvalError}</p>}
+                                    <div className="flex flex-wrap justify-end gap-2">
+                                        <button type="button" disabled={processing} onClick={() => decideDocument('rejected')} className="dots-button-secondary text-danger disabled:opacity-50">Reject</button>
+                                        <button type="button" disabled={processing} onClick={() => decideDocument('changes_requested')} className="dots-button-secondary disabled:opacity-50">Request changes</button>
+                                        <button type="button" disabled={processing} onClick={() => decideDocument('approved')} className="dots-button-primary disabled:opacity-50">Approve</button>
+                                    </div>
+                                </form>}
+                                {viewingRow.signature_status === 'needs_signature' && viewingRow.approval_status !== 'approved' && <p className="mt-3 text-xs text-muted">The signing action becomes available after this office approves the file.</p>}
+                            </section>}
 
                             <section aria-labelledby="transaction-history-title">
                                 <div className="mb-3 flex items-center justify-between gap-3">
@@ -823,7 +906,7 @@ export default function DocumentsIndex({
                         </section>
                         </div>
                         <div className="sticky bottom-0 flex justify-end border-t border-border bg-surface px-5 py-4 sm:px-6">
-                            <button type="button" onClick={() => setViewingRow(null)} className="dots-button-secondary">Close</button>
+                            <button type="button" onClick={closeDocumentDetails} className="dots-button-secondary">Close</button>
                         </div>
                     </section>
                 )}
@@ -878,7 +961,7 @@ export default function DocumentsIndex({
                                 <div className="sm:col-span-2">
                                     <p className="mb-2 text-sm font-medium text-foreground">Document version</p>
                                     <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Document version source">
-                                        {[['current', 'Keep current document'], ['upload', 'Upload new version'], ['approved', 'Use approved document']].map(([source, label]) => (
+                                        {[['current', 'Keep current document'], ['upload', 'Upload new version']].map(([source, label]) => (
                                             <button key={source} type="button" aria-pressed={releaseForm.source === source} onClick={() => { setReleaseForm({ ...releaseForm, source, approvedDraftId: '', file: null }); setReleaseError(''); }} className={`rounded-lg border px-3 py-2 text-sm font-medium ${releaseForm.source === source ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>{label}</button>
                                         ))}
                                     </div>
@@ -887,14 +970,6 @@ export default function DocumentsIndex({
                                         <label htmlFor="release-file" className="mb-1 block text-sm font-medium text-foreground">New version</label>
                                         <input id="release-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => { setReleaseForm({ ...releaseForm, file: event.target.files?.[0] ?? null }); setReleaseError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
                                         <p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Maximum file size: {uploadLimitKb / 1024} MB.</p>
-                                    </>}
-                                    {releaseForm.source === 'approved' && <>
-                                        <label htmlFor="release-approved-document" className="mb-1 block text-sm font-medium text-foreground">Approved document <span className="text-danger">*</span></label>
-                                        <select id="release-approved-document" required value={releaseForm.approvedDraftId} onChange={(event) => { setReleaseForm({ ...releaseForm, approvedDraftId: event.target.value }); setReleaseError(''); }} className="w-full rounded-lg border border-border bg-surface py-2 pl-3 pr-10 text-sm">
-                                            <option value="">Select an approved document</option>
-                                            {approvedDocuments.map((document) => <option key={document.id} value={document.id} disabled={document.disabled}>{document.title} · {document.document_type ?? 'Document'}{document.status === 'registered' ? ' (Previously registered; reusable)' : ''}</option>)}
-                                        </select>
-                                        <p className="mt-1 text-xs text-muted">{approvedDocuments.length ? 'The selected approved document will be saved as a new version for this transaction. The tracking number, title, and previous versions stay the same.' : 'No approved documents are available for your account.'}</p>
                                     </>}
                                 </div>
                             </section>
@@ -916,9 +991,9 @@ export default function DocumentsIndex({
                         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
                             <div>
                                 <h3 id="document-modal-title" className="text-lg font-semibold text-foreground">
-                                    {editingRow ? 'Update Document' : 'Add Document'}
+                                    {editingRow ? 'Update Document' : 'Create Routing Record'}
                                 </h3>
-                                <p className="mt-1 text-sm text-muted">{editingRow ? 'Update the document information below.' : 'Enter the details to add a document to the system.'}</p>
+                                <p className="mt-1 text-sm text-muted">{editingRow ? 'Update the document information below.' : 'Attach a source document to create its routing record and DOTS tracking number.'}</p>
                             </div>
 
                             <button type="button" onClick={requestCloseForm} aria-label="Close document form" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
@@ -935,27 +1010,27 @@ export default function DocumentsIndex({
                                     <p className="rounded-lg bg-background px-3 py-2 text-sm text-foreground">{editingRow.tracking_number || 'Not assigned'}</p>
                                 </div>
                             ) : (
-                                <p className="text-sm text-muted">A tracking number will be assigned automatically.</p>
+                                <p className="text-sm text-muted">DOTS assigns the tracking number when this routing record is created.</p>
                             )}
 
                             <div>
                                 {!editingRow && <div className="mb-4">
                                     <label htmlFor="document-source-select" className="mb-1 block text-sm font-medium text-foreground">Document source</label>
                                     <div className="flex flex-wrap gap-2" role="group" aria-label="Document source">
-                                        <button type="button" onClick={() => setForm({ ...form, document_source: 'upload', approved_draft_id: '', file: null })} className={`rounded-lg border px-3 py-2 text-sm font-medium ${form.document_source === 'upload' ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>Upload a document</button>
-                                        <button type="button" onClick={() => setForm({ ...form, document_source: 'approved', approved_draft_id: '', file: null })} className={`rounded-lg border px-3 py-2 text-sm font-medium ${form.document_source === 'approved' ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>Use approved document</button>
+                                        <button type="button" onClick={() => setForm({ ...form, document_source: 'upload', approved_draft_id: '', file: null, signature_required: false })} className={`rounded-lg border px-3 py-2 text-sm font-medium ${form.document_source === 'upload' ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>Upload a document</button>
+                                        <button type="button" onClick={() => setForm({ ...form, document_source: 'approved', approved_draft_id: '', file: null, signature_required: false })} className={`rounded-lg border px-3 py-2 text-sm font-medium ${form.document_source === 'approved' ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>Use generated document</button>
                                     </div>
                                 </div>}
                                 {!editingRow && form.document_source === 'approved' && <div className="mb-4">
-                                    <label htmlFor="approved-document-select" className="mb-1 block text-sm font-medium text-foreground">Approved document</label>
+                                    <label htmlFor="approved-document-select" className="mb-1 block text-sm font-medium text-foreground">Generated document</label>
                                     <select id="approved-document-select" required value={form.approved_draft_id} onChange={(event) => {
                                         const selected = approvedDocuments.find((document) => String(document.id) === event.target.value);
                                         setForm({ ...form, approved_draft_id: event.target.value, title: selected?.title ?? form.title, document_type_id: selected ? String(selected.document_type_id) : form.document_type_id });
                                     }} className="w-full rounded-lg border border-border bg-surface py-2 pl-3 pr-10">
-                                        <option value="">Select an approved document</option>
-                                        {approvedDocuments.map((document) => <option key={document.id} value={document.id} disabled={document.disabled}>{document.title} · {document.document_type ?? 'Document'}{document.status === 'registered' ? ' (Previously registered; reusable)' : ''}</option>)}
+                                        <option value="">Select a generated document</option>
+                                        {approvedDocuments.map((document) => <option key={document.id} value={document.id} disabled={document.disabled}>{document.title} · {document.document_type ?? 'Document'}</option>)}
                                     </select>
-                                    <p className="mt-1 text-xs text-muted">Each submission creates a new tracking record from this approved document. Release the new record to the intended office.</p>
+                                    <p className="mt-1 text-xs text-muted">This file will be attached to the new routing record, and its assigned tracking number will be printed on the PDF before review.</p>
                                 </div>}
                                 <label className="mb-1 block text-sm font-medium text-foreground">Title</label>
                                 <input
@@ -1027,10 +1102,16 @@ export default function DocumentsIndex({
                             </div>
 
                             {form.document_source === 'upload' && <div>
-                                <label className="mb-1 block text-sm font-medium text-foreground">File (optional)</label>
-                                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => { setForm({ ...form, file: e.target.files?.[0] ?? null }); setUploadError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
-                                <p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Maximum file size: {uploadLimitKb / 1024} MB.</p>
+                                <label className="mb-1 block text-sm font-medium text-foreground">Source file</label>
+                                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => { const file = e.target.files?.[0] ?? null; setForm({ ...form, file, signature_required: file && !/\.pdf$/i.test(file.name) ? false : form.signature_required }); setUploadError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
+                                <p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Uploaded PDFs receive a DOTS tracking-number stamp when attached to the routing record; other file types remain unchanged. A source file is required to create a routing record. Maximum file size: {uploadLimitKb / 1024} MB.</p>
                                 {uploadError && <p role="alert" className="mt-1 text-sm text-danger">{uploadError}</p>}
+                            </div>}
+                            {!editingRow && <div className="rounded-lg border border-border bg-background p-3">
+                                <label className={`flex items-start gap-3 text-sm ${form.document_source === 'approved' || form.file?.name.toLowerCase().endsWith('.pdf') ? 'text-foreground' : 'text-muted'}`}>
+                                    <input type="checkbox" checked={form.signature_required} disabled={form.document_source !== 'approved' && !form.file?.name.toLowerCase().endsWith('.pdf')} onChange={(event) => setForm({ ...form, signature_required: event.target.checked })} className="mt-0.5 rounded border-border" />
+                                    <span><span className="font-medium">Needs iPluma signing after approval</span><span className="mt-0.5 block text-xs text-muted">PDF files only. Signing status will appear on the tracking record.</span></span>
+                                </label>
                             </div>}
                             <div className="flex flex-wrap gap-5">
                                 <label className="inline-flex items-center gap-2 text-sm text-foreground"><input type="checkbox" checked={form.urgent} onChange={(e) => setForm({ ...form, urgent: e.target.checked })} /> Mark as urgent</label>
@@ -1046,8 +1127,7 @@ export default function DocumentsIndex({
                                     Cancel
                                 </button>
 
-                                <button type="submit" name="is_finalized" value="0" className="dots-button-secondary">Save Draft</button>
-                                <button type="submit" name="is_finalized" value="1" className="dots-button-primary">Finalize</button>
+                                <button type="submit" name="is_finalized" value="1" className="dots-button-primary">Create Routing Record</button>
                             </div>
                             </fieldset>
                         </form>
@@ -1094,8 +1174,8 @@ function ReadOnlyDetail({ label, value }: { label: string; value?: string | null
 
 function DocumentReferenceDetails({ document, loading = false }: { document: DocumentItem; loading?: boolean }) {
     return (
-        <details className="rounded-lg border border-border p-3">
-            <summary className="cursor-pointer text-sm font-medium text-muted">Document details and attachments</summary>
+        <section className="rounded-xl border border-border bg-surface p-4 sm:p-5">
+            <h3 className="text-sm font-semibold text-foreground">Document details and attachments</h3>
             <section aria-label="Selected document details" className="mt-3 grid gap-x-5 gap-y-4 rounded-xl border border-border bg-background p-4 sm:grid-cols-2">
                 <ReadOnlyDetail label="Tracking number" value={document.tracking_number} />
                 <ReadOnlyDetail label="Title" value={document.title} />
@@ -1107,6 +1187,8 @@ function DocumentReferenceDetails({ document, loading = false }: { document: Doc
                     <p className="text-xs font-semibold uppercase text-muted">Status</p>
                     <span className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(document.status)}`}>{(document.status || 'draft').toUpperCase()}</span>
                 </div>
+                <ReadOnlyDetail label="Approval" value={(document.approval_status || 'not_required').replaceAll('_', ' ')} />
+                <ReadOnlyDetail label="Signing" value={(document.signature_status || 'not_required').replaceAll('_', ' ')} />
                 <ReadOnlyDetail label="Created by" value={document.created_by_short_name || document.created_by_name} />
                 <ReadOnlyDetail label="Date created" value={document.created_at} />
                 <div className="sm:col-span-2">
@@ -1114,10 +1196,46 @@ function DocumentReferenceDetails({ document, loading = false }: { document: Doc
                     <p className="mt-1 whitespace-pre-wrap break-words text-sm text-foreground">{document.remarks || '—'}</p>
                 </div>
                 <div className="sm:col-span-2">
-                    <p className="text-xs font-semibold uppercase text-muted">File</p>
-                    {document.files?.length ? <ul className="mt-1 space-y-1.5">{document.files.map((file) => <li key={file.id} className="flex flex-wrap items-baseline gap-x-2 text-sm"><span className="rounded bg-secondary px-1.5 py-0.5 text-xs font-medium uppercase text-muted">{file.type}</span>{file.url ? <a href={file.url} className="break-all font-medium text-primary underline">{file.name}</a> : <span className="break-all text-muted">{file.name} — File not available</span>}{file.uploaded_at && <span className="text-xs text-muted">{file.uploaded_at}</span>}</li>)}</ul> : loading ? null : document.file_url ? <a href={document.file_url} className="mt-1 inline-block break-all text-sm font-medium text-primary underline">{document.file_name || 'Attached file'}</a> : <p className="mt-1 text-sm text-foreground">No file attached.</p>}
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                        <p className="text-sm font-semibold text-foreground">Attached files</p>
+                        {document.signature_status && <p className="text-xs text-muted">Signing: {document.signature_status.replaceAll('_', ' ')}. iPluma PDF submission is not connected yet.</p>}
+                    </div>
+                    {document.files?.length ? (
+                        <ul className="mt-3 space-y-2">
+                            {document.files.map((file) => (
+                                <li key={file.id} className="rounded-xl border border-border bg-surface p-3 sm:p-4">
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="flex min-w-0 items-start gap-3">
+                                            <span className="mt-0.5 rounded-lg bg-secondary p-2 text-primary"><FileText size={17} aria-hidden="true" /></span>
+                                            <div className="min-w-0">
+                                                <p className="break-words text-sm font-semibold text-foreground">{file.name}</p>
+                                                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                                                    <span className="capitalize">{file.type}</span>
+                                                    {file.is_pdf && <><span aria-hidden="true">·</span><span>PDF</span></>}
+                                                    {file.uploaded_at && <><span aria-hidden="true">·</span><span>{file.uploaded_at}</span></>}
+                                                    {!file.url && !file.view_url && <span className="text-warning">File not available</span>}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+                                            {file.view_url && <a href={file.view_url} target="_blank" rel="noopener noreferrer" className="dots-button-secondary min-h-9 px-3 py-1.5 text-xs"><Eye size={14} aria-hidden="true" />View</a>}
+                                            {file.url && <a href={file.url} className="dots-button-secondary min-h-9 px-3 py-1.5 text-xs"><Download size={14} aria-hidden="true" />Download</a>}
+                                            {file.is_pdf && document.signature_status === 'needs_signature' && <button type="button" disabled title={document.approval_status === 'approved' ? 'iPluma file submission is not connected yet.' : 'Available after approval.'} className="dots-button-secondary min-h-9 px-3 py-1.5 text-xs"><FileSignature size={14} aria-hidden="true" />Sign with iPluma</button>}
+                                            {file.is_pdf && document.signature_status === 'sent_to_ipluma' && <span className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-warning-soft px-3 py-1.5 text-xs font-medium text-warning"><FileSignature size={14} aria-hidden="true" />Sent to iPluma</span>}
+                                            {file.is_pdf && document.signature_status === 'signed' && <span className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-success-soft px-3 py-1.5 text-xs font-medium text-success"><FileSignature size={14} aria-hidden="true" />Signed</span>}
+                                        </div>
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : loading ? null : document.file_url ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <span className="break-all text-sm font-medium text-foreground">{document.file_name || 'Attached file'}</span>
+                            <a href={document.file_url} className="dots-button-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs"><Download size={14} aria-hidden="true" />Download</a>
+                        </div>
+                    ) : <p className="mt-1 text-sm text-foreground">No file attached.</p>}
                 </div>
             </section>
-        </details>
+        </section>
     );
 }

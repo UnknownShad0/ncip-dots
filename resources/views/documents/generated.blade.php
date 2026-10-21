@@ -50,6 +50,7 @@ footer .seal { position: absolute; top: 12px; left: 0; width: 55px; height: 55px
 footer .details { margin-left: 67px; }
 footer strong { font-size: 7.5pt; }
 footer .tagline { height: 17px; max-width: 100%; margin-top: 5px; }
+.tracking-number { margin: 0 0 12px; text-align: right; font-size: 9pt; font-weight: bold; }
 </style></head><body>
 <header>
 @if (isset($template) && $template['header_mode'] === 'logos')
@@ -69,6 +70,9 @@ footer .tagline { height: 17px; max-width: 100%; margin-top: 5px; }
 (02) 875 1200 · ncip.gov.ph · csc@ncip.gov.ph<br>
 <img class="tagline" src="{{ $template['footer_tagline']['src'] ?? 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('images/ncip-footer.png'))) }}" alt="Masaganang Katutubong Pamayanan: Sandigan ng Pambansang Kaunlaran"></div>
 </footer>
+@if (filled($content['tracking_number'] ?? null))
+<div class="tracking-number">DOTS Tracking No.: {{ $content['tracking_number'] }}</div>
+@endif
 <div class="metadata"><table>
 @foreach (['for' => ($content['recipient_label'] ?? 'FOR') === 'TO' ? 'TO' : 'FOR', 'thru' => 'THRU', 'attention' => 'ATTENTION', 'from' => 'FROM', 'subject' => 'SUBJECT', 'date' => 'DATE'] as $key => $label)
 @if (filled($content[$key] ?? null) || filled($content[$key.'_position'] ?? null) || in_array($key, ['from', 'subject']))

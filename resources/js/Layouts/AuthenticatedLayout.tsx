@@ -2,7 +2,7 @@ import { connectedSystems } from '@/Components/ConnectedSystemNavigation';
 import { libraryLinks } from '@/Components/LibraryNavigation';
 import { Head, Link, usePage } from '@inertiajs/react';
 import { Dialog, DialogPanel, DialogTitle, Menu as DropdownMenu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
-import { Archive, Bell, Building2, ChevronDown, ClipboardCheck, Clock3, Database, FileCheck2, FileClock, FilePlus2, FileText, Folder, History, Inbox, LayoutGrid, LogOut, Mail, Menu, UserRound, X, BookOpen, PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
+import { Archive, Bell, Building2, ChevronDown, ClipboardCheck, Clock3, Database, FileClock, FilePlus2, FileText, Folder, History, Inbox, LayoutGrid, LogOut, Mail, Menu, UserRound, X, BookOpen, PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
 import { PropsWithChildren, ReactNode, useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import PrivacyNoticeModal from '@/Components/PrivacyNoticeModal';
@@ -12,8 +12,8 @@ const groups = [
         { label: 'Documents', items: [
         { name: 'Latest documents', href: 'documents.latest', icon: Clock3 },
         { name: 'All documents', href: 'documents.index', countKey: 'pending', icon: Folder },
-        { name: 'Document creation', href: 'document-creation.index', countKey: 'approvals', icon: FileText },
-        { name: 'Approved documents', href: 'approved-documents.index', countKey: 'approved', icon: FileClock },
+        { name: 'Document creation', href: 'document-creation.index', icon: FileText },
+        { name: 'Document Workflow', href: 'document-workflow.index', countKey: 'approvals', icon: FileClock },
         { name: 'Drafts', href: 'drafts.index', countKey: 'drafts', icon: FilePlus2 },
 
     ] },
@@ -103,8 +103,7 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
                             {notificationCounts ? <>
                                 <MenuItem><Link href={`${route('dashboard')}#incoming-documents`} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><Inbox size={17} className="text-primary" /><span className="flex-1">Incoming documents</span><span className="font-semibold tabular-nums">{notificationCounts.incoming}</span></Link></MenuItem>
                                 <MenuItem><Link href={`${route('documents.index')}?status=pending`} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><Folder size={17} className="text-primary" /><span className="flex-1">Pending documents</span><span className="font-semibold tabular-nums">{notificationCounts.pending}</span></Link></MenuItem>
-                                <MenuItem><Link href={`${route('document-creation.index')}?queue=approval`} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><ClipboardCheck size={17} className="text-primary" /><span className="flex-1">Pending approvals</span><span className="font-semibold tabular-nums">{notificationCounts.approvals}</span></Link></MenuItem>
-                                <MenuItem><Link href={route('approved-documents.index')} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><FileCheck2 size={17} className="text-primary" /><span className="flex-1">Approved documents</span><span className="font-semibold tabular-nums">{notificationCounts.approved}</span></Link></MenuItem>
+                                <MenuItem><Link href={route('document-workflow.index')} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><ClipboardCheck size={17} className="text-primary" /><span className="flex-1">Document Workflow</span><span className="font-semibold tabular-nums">{notificationCounts.approvals + notificationCounts.approved}</span></Link></MenuItem>
                                 <MenuItem><Link href={route('drafts.index')} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><FilePlus2 size={17} className="text-primary" /><span className="flex-1">Drafts</span><span className="font-semibold tabular-nums">{notificationCounts.drafts}</span></Link></MenuItem>
                                 {notificationCounts.total === 0 && <p className="px-3 py-3 text-sm text-muted">You’re all caught up.</p>}
                             </> : <p className="px-3 py-3 text-sm text-muted">Notifications will appear here.</p>}

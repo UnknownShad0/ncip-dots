@@ -32,6 +32,24 @@ class DocumentFile extends Model
         ], false);
     }
 
+    public function previewUrl(): ?string
+    {
+        $extension = strtolower(pathinfo((string) ($this->original_name ?: $this->file_name), PATHINFO_EXTENSION));
+        if ($this->is_available === false || ! in_array($extension, ['pdf', 'png', 'jpg', 'jpeg'], true)) {
+            return null;
+        }
+
+        return route('documents.files.view', [
+            'document' => $this->document_id,
+            'file' => $this->id,
+        ], false);
+    }
+
+    public function isPdf(): bool
+    {
+        return strtolower(pathinfo((string) ($this->original_name ?: $this->file_name), PATHINFO_EXTENSION)) === 'pdf';
+    }
+
     public function document(): BelongsTo
     {
         return $this->belongsTo(Document::class);

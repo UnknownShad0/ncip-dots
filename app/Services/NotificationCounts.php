@@ -18,7 +18,7 @@ class NotificationCounts
         $officeId = $user->office_id ? (int) $user->office_id : null;
         $canReviewOfficeApprovals = $user->is_active && $user->isAdministrator() && $approvalOfficeId !== null;
         $cacheKey = implode(':', [
-            'notification-counts-v4',
+            'notification-counts-v5',
             $user->id,
             $officeId ?? 'none',
             $approvalOfficeId ?? 'no-approval-office',
@@ -44,15 +44,17 @@ class NotificationCounts
             $incoming = (int) ($officeDocumentCounts?->incoming ?? 0);
             $pending = (int) ($officeDocumentCounts?->pending ?? 0);
 
-            $approvals = DocumentCreationDraft::query()
-                ->where('status', 'pending_approval')
-                ->where(function ($query) use ($user, $approvalOfficeId, $canReviewOfficeApprovals) {
-                    $query->where('approver_id', $user->id);
-                    if ($canReviewOfficeApprovals) {
-                        $query->orWhere('approver_office_id', $approvalOfficeId);
-                    }
-                })
-                ->count();
+            $approvals = $canReviewOfficeApprovals
+                ? Document::query()
+                    ->where('documents.approval_status', 'awaiting_approval')
+                    ->where('documents.is_archived', false)
+                    ->where('documents.legacy_needs_review', false)
+                    ->where('documents.created_by', '!=', $user->id)
+                    ->whereHas('latestTrail', fn ($trail) => $trail
+                        ->where('status', 'pending')
+                        ->where('to_office_id', $approvalOfficeId))
+                    ->count()
+                : 0;
 
             $documentAccess = app(DocumentAccess::class);
             $trackingDraftsQuery = Document::query()
@@ -87,10 +89,9 @@ class NotificationCounts
 
         // Match the approved list and refresh on every request, including immediately
         // after archive/restore, without re-running the expensive tracking counts.
-        $counts['approved'] = DocumentCreationDraft::query()
+        $counts['approved'] = Document::query()
             ->where('created_by', $user->id)
-            ->whereNull('archived_at')
-            ->whereIn('status', ['approved', 'awaiting_verification', 'verified', 'registered'])
+            ->where('approval_status', 'approved')
             ->count();
         $counts['total'] += $counts['approved'];
 

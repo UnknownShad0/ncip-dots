@@ -6,6 +6,7 @@ use App\Http\Controllers\AuditTrailController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\DocumentCreationController;
+use App\Http\Controllers\DocumentWorkflowController;
 use App\Http\Controllers\DocumentFontController;
 use App\Http\Controllers\DocumentTypeController;
 use App\Http\Controllers\DraftsController;
@@ -34,29 +35,27 @@ Route::middleware(['auth', 'active.user', 'verified'])->group(function () {
     Route::get('/documents', [DocumentController::class, 'index'])->name('documents.index');
     Route::get('/documents/latest', [DocumentController::class, 'latest'])->name('documents.latest');
     Route::get('/documents/{id}/details', [DocumentController::class, 'details'])->whereNumber('id')->name('documents.details');
+    Route::post('/documents/{id}/approval', [DocumentController::class, 'decideApproval'])->whereNumber('id')->name('documents.approval');
+    Route::get('/documents/{document}/files/{file}/view', [DocumentController::class, 'viewFile'])
+        ->whereNumber('document')->whereNumber('file')->name('documents.files.view');
     Route::get('/documents/{document}/files/{file}', [DocumentController::class, 'downloadFile'])
         ->whereNumber('document')->whereNumber('file')->name('documents.files.download');
     Route::get('/document-creation', [DocumentCreationController::class, 'index'])->name('document-creation.index');
+    Route::get('/document-workflow', [DocumentWorkflowController::class, 'index'])->name('document-workflow.index');
     Route::get('/document-fonts/{face}', DocumentFontController::class)
         ->where('face', 'regular|bold|italic|bold-italic')->name('document-fonts.show');
     Route::get('/document-assets/{filename}', [\App\Services\DocumentTemplates::class, 'show'])->where('filename', '[a-f0-9]{64}\.(png|jpg)')->name('document-assets.show');
     Route::post('/document-creation/preview', [DocumentCreationController::class, 'preview'])->middleware('throttle:30,1')->name('document-creation.preview');
     Route::get('/document-creation/{draft}/preview', [DocumentCreationController::class, 'previewSubmission'])->middleware('throttle:30,1')->name('document-creation.preview-submission');
     Route::get('/drafts', [DraftsController::class, 'index'])->name('drafts.index');
-    Route::get('/approved-documents', function (\Illuminate\Http\Request $request) {
-        $request->query->set('queue', 'approved');
-        return app(DocumentCreationController::class)->index($request);
-    })->name('approved-documents.index');
+    Route::get('/approved-documents', fn () => redirect()->route('document-workflow.index'))->name('approved-documents.index');
     Route::post('/document-creation', [DocumentCreationController::class, 'store'])->name('document-creation.store');
-    Route::post('/document-creation/submit-current', [DocumentCreationController::class, 'submitCurrent'])->name('document-creation.submit-current');
+    Route::post('/document-creation/finalize', [DocumentCreationController::class, 'finalizeCurrent'])->name('document-creation.finalize');
     Route::delete('/document-creation/{draft}', [DocumentCreationController::class, 'destroy'])->name('document-creation.destroy');
     Route::post('/document-creation/{draft}/archive', [DocumentCreationController::class, 'archive'])->name('document-creation.archive');
     Route::post('/document-creation/{draft}/restore', [DocumentCreationController::class, 'restore'])->name('document-creation.restore');
     Route::post('/archives/{document}/restore', [ArchiveController::class, 'restore'])->name('archives.restore');
     Route::put('/document-creation/{draft}', [DocumentCreationController::class, 'update'])->name('document-creation.update');
-    Route::post('/document-creation/{draft}/submit', [DocumentCreationController::class, 'submit'])->name('document-creation.submit');
-    Route::post('/document-creation/{draft}/decision', [DocumentCreationController::class, 'decide'])->name('document-creation.decision');
-    Route::post('/document-creation/{draft}/register', [DocumentCreationController::class, 'register'])->name('document-creation.register');
     Route::post('/documents', [DocumentController::class, 'store'])->name('documents.store');
     Route::put('/documents/{id}', [DocumentController::class, 'update'])->name('documents.update');
     Route::post('/documents/{id}/release', [DocumentController::class, 'release'])->name('documents.release');

@@ -28,6 +28,8 @@ class Document extends Model
         'division_id',
         'created_by',
         'status',
+        'approval_status',
+        'signature_status',
         'received_from',
         'urgent',
         'notify_by_email',

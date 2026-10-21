@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Document;
 use App\Models\Office;
-use App\Models\DocumentCreationDraft;
 use App\Services\DocumentAccess;
 use App\Services\DashboardCharts;
 use Inertia\Inertia;
@@ -17,8 +16,7 @@ class DashboardController extends Controller
         $access = app(DocumentAccess::class);
         $officeId = $access->currentOfficeId($user);
         $canViewAllDocuments = $access->canViewAllDocuments($user);
-        $approvalOffice = $user->office ?: ($user->office_code ? $user->officeByCode : null);
-        $canReviewOfficeApprovals = $user->is_active && $user->isAdministrator() && $approvalOffice !== null;
+        $canReviewOfficeApprovals = $user->is_active && $user->isAdministrator() && $officeId !== null;
 
         $recentDocuments = $access->scope(Document::query(), $user)
             ->with(['documentType', 'office', 'creator'])
@@ -72,19 +70,23 @@ class DashboardController extends Controller
                 'archived_documents' => $access->scope(Document::query(), $user)->where('is_archived', true)->count(),
             ];
         }
-        $approvalCountQuery = DocumentCreationDraft::query()->where('status', 'pending_approval')
-            ->where(function ($query) use ($user, $approvalOffice, $canReviewOfficeApprovals) {
-                $query->where('approver_id', $user->id);
-                if ($canReviewOfficeApprovals) {
-                    $query->orWhere('approver_office_id', $approvalOffice->id);
-                }
-            });
+        $approvalCountQuery = Document::query()
+            ->where('approval_status', 'awaiting_approval')
+            ->where('is_archived', false)
+            ->where('legacy_needs_review', false)
+            ->where('created_by', '!=', $user->id);
+        if ($canReviewOfficeApprovals) {
+            $approvalCountQuery->whereHas('latestTrail', fn ($trail) => $trail
+                ->where('status', 'pending')
+                ->where('to_office_id', $officeId));
+        } else {
+            $approvalCountQuery->whereRaw('1 = 0');
+        }
 
         $stats = array_merge([
             'awaiting_my_approval' => $approvalCountQuery->count(),
-            'my_submissions_awaiting_approval' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'pending_approval')->count(),
-            'returned_for_revision' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'revision_requested')->count(),
-            'awaiting_verification' => DocumentCreationDraft::query()->where('created_by', $user->id)->where('status', 'awaiting_verification')->whereNull('archived_at')->count(),
+            'my_submissions_awaiting_approval' => Document::query()->where('created_by', $user->id)->where('approval_status', 'awaiting_approval')->count(),
+            'returned_for_revision' => Document::query()->where('created_by', $user->id)->where('approval_status', 'changes_requested')->count(),
         ], $summaryStats);
 
         $analyticsOfficeId = $canFilterCharts ? $selectedChartOfficeId : $officeId;

@@ -11,7 +11,6 @@ type DashboardStats = {
     awaiting_my_approval?: number;
     my_submissions_awaiting_approval?: number;
     returned_for_revision?: number;
-    awaiting_verification?: number;
     incoming_documents?: number;
     active_users?: number;
     pending_documents?: number;
@@ -136,7 +135,6 @@ export default function Dashboard({
         ['Awaiting my approval', stats.awaiting_my_approval, 'approval'],
         ['My pending submissions', stats.my_submissions_awaiting_approval, 'submitted'],
         ['Returned for revision', stats.returned_for_revision, 'revision'],
-        ['Awaiting verification', stats.awaiting_verification, 'verification'],
     ];
     const tasks = taskRows.filter(([, count]) => Number(count ?? 0) > 0);
     const chartScope = selectedChartOfficeId !== null
@@ -187,8 +185,8 @@ export default function Dashboard({
                     <div className="min-w-0 space-y-6">
                         <section aria-labelledby="creation-tasks-title" className="rounded-lg border border-border bg-surface p-5">
                             <div className="mb-3 flex items-center justify-between gap-2"><h2 id="creation-tasks-title" className="text-lg font-semibold">Approval tasks</h2></div>
-                            {tasks.length ? <div className="divide-y divide-border">{tasks.map(([label, count, queue]) => <Link key={queue} href={`${route('document-creation.index')}?queue=${queue}`} className="flex items-center justify-between gap-3 rounded-md py-3 text-sm hover:text-primary"><span>{label}</span><span className="rounded-md bg-warning-soft px-2 py-1 font-semibold tabular-nums text-warning">{formatNumber(count)}</span></Link>)}</div> : <p className="py-3 text-sm text-muted">No approval tasks need attention.</p>}
-                            <Link href={route('document-creation.index')} className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-primary">Document creation <ChevronRight size={15} /></Link>
+                            {tasks.length ? <div className="divide-y divide-border">{tasks.map(([label, count, queue]) => <Link key={queue} href={route('document-workflow.index')} className="flex items-center justify-between gap-3 rounded-md py-3 text-sm hover:text-primary"><span>{label}</span><span className="rounded-md bg-warning-soft px-2 py-1 font-semibold tabular-nums text-warning">{formatNumber(count)}</span></Link>)}</div> : <p className="py-3 text-sm text-muted">No approval tasks need attention.</p>}
+                            <Link href={route('document-workflow.index')} className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-primary">Document Workflow <ChevronRight size={15} /></Link>
                         </section>
                         <section aria-labelledby="recent-documents-title" className="rounded-lg border border-border bg-surface p-5">
                             <div className="mb-3 flex items-center justify-between"><h2 id="recent-documents-title" className="text-lg font-semibold">Recent documents</h2></div>

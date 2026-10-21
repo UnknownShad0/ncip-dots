@@ -17,6 +17,16 @@ class DocumentPdf
         );
     }
 
+    public function renderDraft(DocumentCreationDraft $draft, ?string $trackingNumber = null): RenderedDocumentPdf
+    {
+        $content = $this->approvedContent($draft);
+        if ($trackingNumber !== null) {
+            $content['tracking_number'] = $trackingNumber;
+        }
+
+        return $this->pdf($draft->title, $content);
+    }
+
     public function html(string $title, array $content): string
     {
         return view('documents.generated', [
