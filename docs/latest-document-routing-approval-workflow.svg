@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 2100" role="img" aria-labelledby="title description">
+  <title id="title">DOTS document and routing approval workflow</title>
+  <desc id="description">A flowchart showing document finalization, routing record creation, forwarding, receipt, office approval, revision, rejection, and optional iPluma signing after approval.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M1,1 L11,6 L1,11 Z" fill="#52647a" />
+    </marker>
+    <marker id="arrow-blue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M1,1 L11,6 L1,11 Z" fill="#3973ad" />
+    </marker>
+    <style>
+      text { font-family: Inter, "Segoe UI", Arial, sans-serif; fill: #1e293b; }
+      .title { font-size: 42px; font-weight: 750; letter-spacing: -0.5px; }
+      .subtitle { font-size: 21px; fill: #52647a; }
+      .node-title { font-size: 23px; font-weight: 700; text-anchor: middle; }
+      .node-sub { font-size: 18px; fill: #52647a; text-anchor: middle; }
+      .small { font-size: 17px; fill: #52647a; }
+      .branch { font-size: 17px; font-weight: 700; fill: #52647a; }
+      .process { fill: #ffffff; stroke: #4b78a8; stroke-width: 3; }
+      .start-end { fill: #eaf6ee; stroke: #39845a; stroke-width: 3; }
+      .decision { fill: #fff4d6; stroke: #c28a1c; stroke-width: 3; }
+      .revision { fill: #fff7eb; stroke: #c77c28; stroke-width: 3; }
+      .approved { fill: #edf7ef; stroke: #39845a; stroke-width: 3; }
+      .rejected { fill: #fff0ef; stroke: #bd514c; stroke-width: 3; }
+      .note { fill: #eef5fc; stroke: #9ab5d0; stroke-width: 2; }
+      .note-warm { fill: #fff8e9; stroke: #e0bf75; stroke-width: 2; }
+      .connector { fill: none; stroke: #52647a; stroke-width: 3; marker-end: url(#arrow); }
+      .connector-blue { fill: none; stroke: #3973ad; stroke-width: 3; marker-end: url(#arrow-blue); }
+      .annotation { fill: none; stroke: #8ba3bd; stroke-width: 2; stroke-dasharray: 7 7; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="2100" fill="#f5f8fc" />
+  <text x="900" y="58" class="title" text-anchor="middle">DOTS document and routing approval</text>
+  <text x="900" y="96" class="subtitle" text-anchor="middle">Prepare the file, route it, receive it, decide approval, then sign only if needed.</text>
+
+  <!-- Main path -->
+  <ellipse cx="900" cy="160" rx="130" ry="31" class="start-end" />
+  <text x="900" y="168" class="node-title">Start</text>
+
+  <path d="M900 191 V225" class="connector" />
+  <rect x="615" y="225" width="570" height="82" class="process" />
+  <text x="900" y="258" class="node-title">Create, edit, and finalize the file</text>
+  <text x="900" y="286" class="node-sub">No DOTS tracking number or routing approval yet</text>
+
+  <path d="M900 307 V345" class="connector" />
+  <rect x="615" y="345" width="570" height="76" class="process" />
+  <text x="900" y="391" class="node-title">Document Workflow: Ready for Routing</text>
+
+  <path d="M900 421 V455" class="connector" />
+  <rect x="615" y="455" width="570" height="98" class="process" />
+  <text x="900" y="490" class="node-title">Create a routing record</text>
+  <text x="900" y="520" class="node-sub">Attach one source: generated PDF or uploaded file</text>
+
+  <path d="M900 553 V585" class="connector" />
+  <rect x="615" y="585" width="570" height="85" class="process" />
+  <text x="900" y="620" class="node-title">DOTS assigns the tracking number</text>
+  <text x="900" y="648" class="node-sub">DOTS stamps it on PDFs</text>
+
+  <path d="M900 670 V700" class="connector" />
+  <rect x="615" y="700" width="570" height="94" class="process" />
+  <text x="900" y="736" class="node-title">Routing record is ready</text>
+  <text x="900" y="765" class="node-sub">Disposition form + attached source document</text>
+
+  <path d="M900 794 V825" class="connector" />
+  <rect x="615" y="825" width="570" height="78" class="process" />
+  <text x="900" y="872" class="node-title">Forward to the destination office</text>
+
+  <path d="M900 903 V930" class="connector" />
+  <rect x="615" y="930" width="570" height="72" class="process" />
+  <text x="900" y="974" class="node-title">Destination office sees it as Incoming</text>
+
+  <path d="M900 1002 V1030" class="connector" />
+  <rect x="615" y="1030" width="570" height="78" class="process" />
+  <text x="900" y="1062" class="node-title">Office receives the file</text>
+  <text x="900" y="1090" class="node-sub">Receiving confirms delivery; it is not approval</text>
+
+  <path d="M900 1108 V1135" class="connector" />
+  <rect x="615" y="1135" width="570" height="100" class="process" />
+  <text x="900" y="1173" class="node-title">Approval Tasks: approver reviews the file</text>
+  <text x="900" y="1202" class="node-sub">Decision happens on the tracked routing record</text>
+
+  <path d="M900 1235 V1280" class="connector" />
+  <polygon points="900,1280 1050,1360 900,1440 750,1360" class="decision" />
+  <text x="900" y="1368" class="node-title">Decision?</text>
+
+  <!-- Approval task note -->
+  <rect x="1240" y="1122" width="475" height="132" rx="14" class="note" />
+  <text x="1265" y="1157" text-anchor="start" font-size="20" font-weight="700">Who sees this task?</text>
+  <text x="1265" y="1187" class="small">Normal flow: after office receipt.</text>
+  <text x="1265" y="1214" class="small">Revisions return here after resubmission.</text>
+  <text x="1265" y="1241" class="small">The creator cannot approve their own file.</text>
+  <path d="M1185 1185 H1240" class="annotation" />
+
+  <!-- Forward version note -->
+  <rect x="1240" y="810" width="475" height="185" rx="14" class="note-warm" />
+  <text x="1265" y="846" text-anchor="start" font-size="20" font-weight="700">When forwarding</text>
+  <text x="1265" y="877" class="small">Keep the current file, or upload a revised</text>
+  <text x="1265" y="904" class="small">version. DOTS keeps the old copy and the</text>
+  <text x="1265" y="931" class="small">same tracking number; the new version</text>
+  <text x="1265" y="958" class="small">returns for approval after the office receives it.</text>
+  <path d="M1185 864 H1240" class="annotation" />
+
+  <!-- Decision branches -->
+  <path d="M900 1440 V1480" class="connector" />
+  <text x="925" y="1468" class="branch">Approve</text>
+  <rect x="660" y="1480" width="480" height="80" class="approved" />
+  <text x="900" y="1528" class="node-title">File is approved</text>
+
+  <path d="M900 1560 V1600" class="connector" />
+  <polygon points="900,1600 1035,1670 900,1740 765,1670" class="decision" />
+  <text x="900" y="1664" class="node-title">Needs iPluma</text>
+  <text x="900" y="1691" class="node-sub">signing?</text>
+
+  <path d="M900 1740 V1800" class="connector" />
+  <text x="925" y="1778" class="branch">No</text>
+  <rect x="615" y="1800" width="570" height="82" class="process" />
+  <text x="900" y="1834" class="node-title">Continue routing or finish the record</text>
+  <text x="900" y="1861" class="node-sub">Signing and approval remain separate statuses</text>
+
+  <path d="M900 1882 V1920" class="connector" />
+  <ellipse cx="900" cy="1952" rx="150" ry="32" class="start-end" />
+  <text x="900" y="1960" class="node-title">Continue / End</text>
+
+  <path d="M1035 1670 H1220" class="connector" />
+  <text x="1090" y="1648" class="branch">Yes</text>
+  <rect x="1220" y="1620" width="490" height="100" class="approved" />
+  <text x="1465" y="1658" class="node-title">Sign the PDF with iPluma</text>
+  <text x="1465" y="1688" class="node-sub">After approval · integration pending</text>
+  <path d="M1465 1720 V1841 H1185" class="connector" />
+
+  <!-- Revision branch and loop -->
+  <path d="M750 1360 H500" class="connector" />
+  <text x="540" y="1337" class="branch">Changes requested</text>
+  <rect x="80" y="1315" width="420" height="92" class="revision" />
+  <text x="290" y="1352" class="node-title">Revise the file</text>
+  <text x="290" y="1380" class="node-sub">Creator edits the returned document</text>
+
+  <path d="M290 1407 V1445" class="connector" />
+  <rect x="80" y="1445" width="420" height="115" class="revision" />
+  <text x="290" y="1484" class="node-title">Submit the new version</text>
+  <text x="290" y="1514" class="node-sub">Same tracking number;</text>
+  <text x="290" y="1539" class="node-sub">approval starts again</text>
+  <path d="M290 1560 V1580 H575 V1185 H615" class="connector-blue" />
+
+  <!-- Rejection branch -->
+  <path d="M1050 1360 H1315" class="connector" />
+  <text x="1110" y="1337" class="branch">Reject</text>
+  <ellipse cx="1470" cy="1360" rx="155" ry="38" class="rejected" />
+  <text x="1470" y="1368" class="node-title">Rejected · End</text>
+
+  <text x="900" y="2050" class="small" text-anchor="middle">Shape guide: pill = start/end · rectangle = action · diamond = decision</text>
+</svg>
