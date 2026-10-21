@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, useLayoutEffect, useRef, useState } from 'react';
 import RichDocumentEditor from './RichDocumentEditor';
 import './document-fonts.css';
 import { documentFontsReady } from './documentFonts';
@@ -46,6 +46,24 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
     content: Record<string, any>; onChange: (key: string, value: any) => void; disabled?: boolean; output?: boolean;
 }) {
     const template = content.template as DocumentTemplate | undefined;
+    const pageTemplate = content.page_template === 'letter' ? 'letter' : 'memo';
+    const hasThru = Boolean(String(content.thru ?? '').trim() || String(content.thru_position ?? '').trim());
+    const hasAttention = Boolean(String(content.attention ?? '').trim() || String(content.attention_position ?? '').trim());
+    const showThru = Boolean(content.show_thru || hasThru);
+    const showAttention = Boolean(content.show_attention || hasAttention);
+    const renderThru = output ? hasThru : showThru;
+    const renderAttention = output ? hasAttention : showAttention;
+    const legacySignature = content.show_signature_block || String(content.signature_name ?? '').trim() || String(content.signature_position ?? '').trim();
+    const signatureBlocks = Array.isArray(content.signature_blocks)
+        ? content.signature_blocks.map((block: Record<string, any>, index: number) => ({
+            id: String(block.id ?? `signature-${index + 1}`),
+            name: String(block.name ?? ''),
+            position: String(block.position ?? ''),
+        }))
+        : legacySignature ? [{ id: 'legacy-signature', name: String(content.signature_name ?? ''), position: String(content.signature_position ?? '') }] : [];
+    const hasCc = Array.isArray(content.cc) && content.cc.some((line: unknown) => String(line ?? '').trim() !== '');
+    const showCc = Boolean(content.show_cc || hasCc);
+    const renderCc = output ? hasCc : showCc;
     const [pages, setPages] = useState(1);
     const [toolbarTarget, setToolbarTarget] = useState<HTMLDivElement | null>(null);
     const header = <header className="document-header">
@@ -98,6 +116,30 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
             .document-editor-sheet .sheet-name { font-size:11pt; line-height:1.3; padding-bottom:0; }
             .document-editor-sheet .sheet-position { font-size:10pt; font-weight:400; line-height:1.25; min-height:22px; padding-top:0; padding-bottom:0; margin-top:0; }
             .document-editor-sheet .sheet-body { margin-top:26px; }
+            .document-editor-sheet .sheet-letter-date { margin:0 0 22px auto; max-width:48%; text-align:right; }
+            .document-editor-sheet .sheet-letter-subject { font-weight:700; }
+            .document-editor-sheet .sheet-letter-divider { margin-top:22px; }
+            .document-editor-sheet .sheet-letter-body { margin-top:22px; }
+            .document-editor-sheet .sheet-optional-fields { display:flex; flex-direction:column; align-items:flex-start; gap:6px; margin:4px 0 12px; font:9pt/1.3 'Document Arial',sans-serif; color:#64748b; }
+            .document-editor-sheet .sheet-optional-fields button { border:0; border-radius:4px; padding:3px 6px; background:#f1f5f9; color:#334155; font:inherit; cursor:pointer; }
+            .document-editor-sheet .sheet-optional-fields button:hover { background:#e2e8f0; }
+            .document-editor-sheet .sheet-meta-label { display:flex; align-self:start; align-items:center; justify-content:space-between; gap:4px; min-width:0; }
+            .document-editor-sheet .sheet-meta-separator { align-self:start; text-align:center; }
+            .document-editor-sheet .sheet-meta-remove { flex:0 0 18px; width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; padding:0; border:0; border-radius:4px; background:#f1f5f9; color:#475569; font:11pt/1 'Document Arial',sans-serif; cursor:pointer; }
+            .document-editor-sheet .sheet-meta-remove:hover { background:#e2e8f0; }
+            .document-editor-sheet .sheet-meta-remove:focus-visible { outline:2px solid #64748b; outline-offset:2px; }
+            .document-editor-sheet .sheet-meta-add { border:0; border-radius:4px; padding:3px 6px; background:#f1f5f9; color:#334155; font:9pt/1.3 'Document Arial',sans-serif; cursor:pointer; }
+            .document-editor-sheet .sheet-meta-add:hover { background:#e2e8f0; }
+            .document-editor-sheet .sheet-signature-remove { border:0; border-radius:4px; padding:2px 6px; background:#f1f5f9; color:#475569; font:inherit; cursor:pointer; }
+            .document-editor-sheet .sheet-signature-remove:hover { background:#e2e8f0; }
+            .document-editor-sheet .sheet-signature-list { display:grid; grid-template-columns:minmax(0,1fr); gap:20px; margin-top:24px; }
+            .document-editor-sheet .sheet-signature-list.multiple { grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:24px; row-gap:16px; }
+            .document-editor-sheet .sheet-signature-block { position:relative; min-width:0; page-break-inside:avoid; break-inside:avoid; }
+            .document-editor-sheet .sheet-signature-block .sheet-signature-remove { position:absolute; top:0; right:0; z-index:1; font:8pt/1.2 'Document Arial',sans-serif; }
+            .document-editor-sheet .sheet-signature-space { min-height:56px; }
+            .document-editor-sheet .sheet-signature-name { max-width:100%; font-weight:700; }
+            .document-editor-sheet .sheet-signature-position { max-width:100%; }
+            .document-editor-sheet .sheet-signature-help { margin-bottom:4px; color:#64748b; font:9pt/1.3 'Document Arial',sans-serif; }
             .document-editor-sheet .sheet-footer { border-top:1px solid #b9b9b9; padding-top:12px; display:flex; gap:12px; align-items:center; font:8px/1.4 'Document Arial',sans-serif; }
             .document-editor-sheet .sheet-footer strong { font-size:10px; }
             .document-editor-sheet .sheet-seal { width:55px; height:55px; object-fit:contain; }
@@ -109,19 +151,54 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
         </div>)}
         <div className="document-page-flow">
         {content.tracking_number && <div className="tracking-number">DOTS Tracking No.: {String(content.tracking_number)}</div>}
-        {(['for', 'thru', 'attention', 'from', 'subject', 'date'] as const).map(key => <div className="sheet-meta" data-page-field key={key}>
-            {key === 'for' ? <select className="recipient-label self-start" aria-label="Recipient label" disabled={disabled || output} value={content.recipient_label === 'TO' ? 'TO' : 'FOR'} onChange={event => onChange('recipient_label', event.target.value)}><option value="FOR">FOR</option><option value="TO">TO</option></select> : <strong>{key.toUpperCase()}</strong>}
-            <strong aria-hidden="true">:</strong>
+        {pageTemplate === 'letter' && <div className="sheet-letter-date" data-page-field><AutoText readOnly={disabled || output} label="Date" value={displayDocumentDate(String(content.date ?? ''))} placeholder={FIELD_PLACEHOLDERS.date} onChange={value => onChange('date', value)} className="sheet-value" /></div>}
+        {(pageTemplate === 'memo'
+            ? (['for', ...(renderThru ? ['thru'] : []), ...(renderAttention ? ['attention'] : []), 'from', 'subject', 'date'] as const)
+            : (['for', 'from', 'subject'] as const)
+        ).map(key => <Fragment key={key}><div className={`sheet-meta ${pageTemplate === 'letter' && key === 'subject' ? 'sheet-letter-subject' : ''}`} data-page-field>
+            {key === 'for' ? <select className="recipient-label self-start" aria-label="Recipient label" disabled={disabled || output} value={content.recipient_label === 'TO' ? 'TO' : 'FOR'} onChange={event => onChange('recipient_label', event.target.value)}><option value="FOR">FOR</option><option value="TO">TO</option></select> : <div className="sheet-meta-label"><strong>{key.toUpperCase()}</strong>{key === 'thru' && !output && !disabled && <button type="button" className="sheet-meta-remove print:hidden" aria-label="Remove THRU" title="Remove THRU" onClick={() => { onChange('show_thru', false); onChange('thru', ''); onChange('thru_position', ''); }}>×</button>}{key === 'attention' && !output && !disabled && <button type="button" className="sheet-meta-remove print:hidden" aria-label="Remove ATTENTION" title="Remove ATTENTION" onClick={() => { onChange('show_attention', false); onChange('attention', ''); onChange('attention_position', ''); }}>×</button>}</div>}
+            <strong className="sheet-meta-separator" aria-hidden="true">:</strong>
             <div>
                 <AutoText readOnly={disabled || output} label={key === 'for' ? (content.recipient_label || 'FOR') : key.toUpperCase()} required={['from', 'subject'].includes(key)} value={key === 'date' ? displayDocumentDate(String(content[key] ?? '')) : String(content[key] ?? '')} placeholder={FIELD_PLACEHOLDERS[key]} onChange={value => onChange(key, value)} className={`sheet-value ${['for', 'thru', 'attention', 'from'].includes(key) ? 'sheet-name' : ''}`} />
                 {['for', 'thru', 'attention', 'from'].includes(key) && <AutoText readOnly={disabled || output} label={`${key === 'for' ? (content.recipient_label || 'FOR') : key.toUpperCase()} position / designation`} value={String(content[`${key}_position`] ?? '')} placeholder="Position / designation (optional)" onChange={value => onChange(`${key}_position`, value)} className="sheet-position" />}
             </div>
-        </div>)}
-        <hr className="mt-8" />
+        </div>{pageTemplate === 'memo' && key === 'for' && !output && !disabled && (!showThru || !showAttention) && <div className="sheet-optional-fields print:hidden" aria-label="Optional memo fields">
+            {!showThru && <button type="button" onClick={() => onChange('show_thru', true)}>+ Add THRU</button>}
+            {!showAttention && <button type="button" onClick={() => onChange('show_attention', true)}>+ Add ATTENTION</button>}
+        </div>}</Fragment>)}
+        {pageTemplate === 'memo' ? <hr className="mt-8" /> : <hr className="sheet-letter-divider" />}
         <section className="sheet-body" aria-label="Document content">
             <RichDocumentEditor hideToolbar={output} toolbarTarget={toolbarTarget} placeholder="Enter document content..." onPageCount={setPages} disabled={disabled || output} value={content.body_document} plainText={content.body ?? ''} onChange={(document, text) => { onChange('body_document', document); onChange('body', text); }} />
         </section>
-        <div className="sheet-meta" data-page-cc><strong>CC</strong><strong aria-hidden="true">:</strong><AutoText readOnly={disabled || output} label="Copy recipients" value={(content.cc ?? []).join('\n')} placeholder="Copy recipients, one per line (optional)" onChange={value => onChange('cc', value.split('\n'))} /></div>
+        {signatureBlocks.length > 0 && <>
+            {pageTemplate === 'letter' && <p className="sheet-letter-closing">Sincerely,</p>}
+            <section className={`sheet-signature-list ${signatureBlocks.length > 1 ? 'multiple' : ''}`} aria-label="Signature blocks">
+                {signatureBlocks.map((block, index) => <div className="sheet-signature-block" data-page-field key={block.id}>
+                    {!output && !disabled && <button type="button" className="sheet-signature-remove print:hidden" aria-label={`Remove signature block ${index + 1}`} onClick={() => onChange('signature_blocks', signatureBlocks.filter(item => item.id !== block.id))}>Remove</button>}
+                    <div className="sheet-signature-space" aria-hidden="true" />
+                    <AutoText readOnly={disabled || output} label={`Signatory ${index + 1} name`} value={block.name} placeholder="Signatory name" onChange={value => onChange('signature_blocks', signatureBlocks.map(item => item.id === block.id ? { ...item, name: value } : item))} className="sheet-signature-name" />
+                    <AutoText readOnly={disabled || output} label={`Signatory ${index + 1} position or title`} value={block.position} placeholder="Position / title (optional)" onChange={value => onChange('signature_blocks', signatureBlocks.map(item => item.id === block.id ? { ...item, position: value } : item))} className="sheet-signature-position" />
+                </div>)}
+            </section>
+        </>}
+        {!output && !disabled && <div className="sheet-optional-fields print:hidden" aria-label="Optional signature blocks">
+            <button type="button" onClick={() => {
+                const id = `signature-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                const firstMemoBlock = pageTemplate === 'memo' && signatureBlocks.length === 0;
+                onChange('signature_blocks', [...signatureBlocks, {
+                    id,
+                    name: firstMemoBlock ? String(content.from ?? '') : '',
+                    position: firstMemoBlock ? String(content.from_position ?? '') : '',
+                }]);
+            }}>{signatureBlocks.length > 0 ? '+ Add another signature' : '+ Add signature block'}</button>
+        </div>}
+        {renderCc ? <div className="sheet-meta" data-page-cc>
+            <div className="sheet-meta-label"><strong>CC</strong>{!output && !disabled && <button type="button" className="sheet-meta-remove print:hidden" aria-label="Remove CC" title="Remove CC" onClick={() => { onChange('show_cc', false); onChange('cc', []); }}>×</button>}</div><strong className="sheet-meta-separator" aria-hidden="true">:</strong><div>
+                <AutoText readOnly={disabled || output} label="Copy recipients" value={(content.cc ?? []).join('\n')} placeholder="Copy recipients, one per line" onChange={value => onChange('cc', value.split('\n'))} />
+            </div>
+        </div> : !output && !disabled && <div className="sheet-meta" data-page-cc>
+            <strong>CC</strong><strong className="sheet-meta-separator" aria-hidden="true">:</strong><div><button type="button" className="sheet-meta-add print:hidden" aria-label="Add CC field" onClick={() => onChange('show_cc', true)}>+ Add CC</button></div>
+        </div>}
         </div>
     </article></div>;
 }

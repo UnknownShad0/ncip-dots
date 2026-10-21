@@ -112,13 +112,21 @@ export const DocumentPagination = Extension.create<{ onPageCount: (pages: number
                         breaks.push(`${position}:${height.toFixed(2)}:${columns ?? 0}`);
                     };
                     const metadata = root.querySelectorAll<HTMLElement>('[data-page-field]');
-                    const fieldOffsets: [HTMLElement, number][] = [];
+                    const bodySection = root.querySelector<HTMLElement>('.sheet-body');
+                    const beforeBody: HTMLElement[] = [];
+                    const afterBody: HTMLElement[] = [];
                     metadata.forEach(field => {
+                        if (bodySection && (bodySection.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING)) afterBody.push(field);
+                        else beforeBody.push(field);
+                    });
+                    const fieldOffsets: [HTMLElement, number][] = [];
+                    const placeFields = (fields: HTMLElement[]) => fields.forEach(field => {
                         const bounds = field.getBoundingClientRect();
                         const gap = spaceBeforePageUnit(bounds.top - origin + offset, bounds.height);
                         fieldOffsets.push([field, gap]);
                         offset += gap;
                     });
+                    placeFields(beforeBody);
                     const flowText = (node: DocumentNode, position: number, initialOffset: number): number => {
                         let localOffset = initialOffset;
                         const element = view.nodeDOM(position);
@@ -158,14 +166,16 @@ export const DocumentPagination = Extension.create<{ onPageCount: (pages: number
                             return false;
                         }
                     });
+                    placeFields(afterBody);
                     const cc = root.querySelector<HTMLElement>('[data-page-cc]');
-                    let bottom = view.dom.getBoundingClientRect().bottom - origin + offset;
                     if (cc) {
                         const bounds = cc.getBoundingClientRect();
                         const gap = spaceBeforePageUnit(bounds.top - origin + offset, bounds.height);
                         fieldOffsets.push([cc, gap]);
-                        bottom = bounds.bottom - origin + offset + gap;
+                        offset += gap;
                     }
+                    const flow = root.querySelector<HTMLElement>('.document-page-flow');
+                    const bottom = (flow?.getBoundingClientRect().bottom ?? view.dom.getBoundingClientRect().bottom) - origin + offset;
                     root.classList.remove('measuring-document-pages');
                     fieldOffsets.forEach(([field, gap]) => field.style.setProperty('--field-page-gap', `${gap}px`));
                     const nextSignature = breaks.join('|');

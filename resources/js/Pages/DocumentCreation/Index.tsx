@@ -89,10 +89,14 @@ type Option = {
     sample_content?: Record<string, any> | null;
 };
 const blank = {
+    page_template: "memo",
     recipient_label: "FOR",
     for: "",
     thru: "",
     attention: "",
+    show_thru: false,
+    show_attention: false,
+    show_cc: false,
     from: "",
     subject: "",
     date: new Intl.DateTimeFormat("en-US", { month: "long", day: "2-digit", year: "numeric", timeZone: "Asia/Manila" }).format(new Date()),
@@ -100,9 +104,34 @@ const blank = {
     thru_position: "",
     attention_position: "",
     from_position: "",
+    signature_blocks: [] as { id: string; name: string; position: string }[],
     body: "",
     cc: [] as string[],
 };
+
+function normalizeDraftContent(saved: Record<string, any> = {}): Record<string, any> {
+    const { show_signature_block, signature_name, signature_position, ...content } = saved;
+    const cc = Array.isArray(content.cc) ? content.cc : [];
+    const hasLegacySignature = Boolean(show_signature_block || String(signature_name ?? "").trim() || String(signature_position ?? "").trim());
+    const signatureBlocks = Array.isArray(content.signature_blocks)
+        ? content.signature_blocks.map((block: Record<string, any>, index: number) => ({
+            id: String(block.id ?? `signature-${index + 1}`),
+            name: String(block.name ?? ""),
+            position: String(block.position ?? ""),
+        }))
+        : hasLegacySignature ? [{ id: "legacy-signature", name: String(signature_name ?? ""), position: String(signature_position ?? "") }] : [];
+
+    return {
+        ...blank,
+        ...content,
+        page_template: content.page_template === "letter" ? "letter" : "memo",
+        show_thru: Boolean(content.show_thru || String(content.thru ?? "").trim() || String(content.thru_position ?? "").trim()),
+        show_attention: Boolean(content.show_attention || String(content.attention ?? "").trim() || String(content.attention_position ?? "").trim()),
+        show_cc: Boolean(content.show_cc || cc.some((line: unknown) => String(line ?? "").trim())),
+        cc,
+        signature_blocks: signatureBlocks,
+    };
+}
 
 const statusPresentation: Record<
     string,
@@ -325,7 +354,7 @@ export default function Index({
 }) {
     const [editing, setEditing] = useState<number | null>(draftToEdit?.id ?? null);
     const [typeId, setTypeId] = useState(String(draftToEdit?.document_type_id ?? ""));
-    const [content, setContent] = useState<Record<string, any>>({ ...blank, footer_office_name: footerOfficeName, ...(draftToEdit?.content ?? {}) });
+    const [content, setContent] = useState<Record<string, any>>(() => normalizeDraftContent({ footer_office_name: footerOfficeName, ...(draftToEdit?.content ?? {}) }));
     const [savedTemplate, setSavedTemplate] = useState<{ typeId: string; template?: DocumentTemplate } | null>(draftToEdit ? { typeId: String(draftToEdit.document_type_id), template: draftToEdit.content.template } : null);
     const [approverOfficeId, setApproverOfficeId] = useState(String(draftToEdit?.approver_office_id ?? ""));
     const [notifyApproversByEmail, setNotifyApproversByEmail] = useState(Boolean(draftToEdit?.notify_approvers_by_email));
@@ -373,7 +402,7 @@ export default function Index({
         setEditing(draftToEdit.id);
         setSavedTemplate({ typeId: String(draftToEdit.document_type_id), template: draftToEdit.content.template });
         setTypeId(String(draftToEdit.document_type_id));
-        setContent({ ...blank, ...draftToEdit.content });
+        setContent(normalizeDraftContent(draftToEdit.content));
         setApproverOfficeId(String(draftToEdit.approver_office_id ?? ""));
         setNotifyApproversByEmail(Boolean(draftToEdit.notify_approvers_by_email));
         setDirty(false);
@@ -431,7 +460,7 @@ export default function Index({
         setEditing(null);
         setSavedTemplate(null);
         setTypeId("");
-        setContent({ ...blank, footer_office_name: footerOfficeName });
+        setContent(normalizeDraftContent({ footer_office_name: footerOfficeName }));
         setApproverOfficeId("");
         setNotifyApproversByEmail(false);
         setDirty(false);
@@ -441,7 +470,7 @@ export default function Index({
         setEditing(draft.id);
         setSavedTemplate({ typeId: String(draft.document_type_id), template: draft.content.template });
         setTypeId(String(draft.document_type_id));
-        setContent({ ...blank, ...draft.content });
+        setContent(normalizeDraftContent(draft.content));
         setApproverOfficeId(String(draft.approver_office_id ?? ""));
         setNotifyApproversByEmail(Boolean(draft.notify_approvers_by_email));
         setDirty(false);
@@ -718,7 +747,7 @@ export default function Index({
                                 </div>
                                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-5 py-3">
                                     <label className="flex items-center gap-3 text-sm text-muted">
-                                        Template
+                                        Document type
                                         <select
                                             aria-label="Document type"
                                             required
@@ -750,9 +779,21 @@ export default function Index({
                                             ))}
                                         </select>
                                     </label>
+                                    <label className="flex items-center gap-3 text-sm text-muted">
+                                        Template
+                                        <select
+                                            aria-label="Page template"
+                                            value={content.page_template === "letter" ? "letter" : "memo"}
+                                            onChange={(event) => change("page_template", event.target.value)}
+                                            className="rounded-lg border-border bg-surface py-1.5 text-sm"
+                                        >
+                                            <option value="memo">Memo</option>
+                                            <option value="letter">Letter</option>
+                                        </select>
+                                    </label>
                                     {/* <button type="button" onClick={loadSample} disabled={!selectedType?.sample_content || saving} className="dots-button-secondary disabled:opacity-40">Load sample content</button> */}
                                     <p className="text-xs text-muted">
-                                        {content.template?.name || "NCIP Standard"} · Letter · Portrait{" "}
+                                        {content.template?.name || "NCIP Standard"} · Letterhead · US Letter paper · Portrait
 
                                     </p>
                                 </div>

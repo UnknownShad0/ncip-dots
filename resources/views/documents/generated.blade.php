@@ -15,6 +15,7 @@ header .full-header { height: 90px; max-width: 100%; }
 .header-layout .header-text { font-size:10pt; padding:0 10px; }
 .header-layout .header-text div:nth-child(2) { font-weight:bold; }
 .metadata { padding-bottom: 24px; border-bottom: 1px solid #222; margin-bottom: 26px; }
+.letter-metadata { padding-bottom:0; border-bottom:0; margin-bottom:0; }
 .metadata table, table.cc { width: 100%; border-collapse: collapse; }
 .metadata th, .metadata td { padding:0; }
 .metadata th, .cc th { width: 106px; text-align: left; vertical-align: top; font-size: 11pt; font-weight:bold; line-height:1.3; }
@@ -30,6 +31,15 @@ header .full-header { height: 90px; max-width: 100%; }
 .metadata .field-value { min-height:23px; padding:4px 6px 4px 0; font-weight:bold; white-space:pre-wrap; }
 .metadata .person-name { min-height:26px; padding-bottom:0; font-size:11pt; line-height:1.3; }
 .metadata .position { min-height:22px; padding-right:6px; font-size:10pt; font-weight:normal; line-height:1.25; margin:0; white-space:pre-wrap; }
+.letter-date { margin:0 0 22px auto; max-width:48%; text-align:right; font-weight:normal; }
+.letter-subject { font-weight:bold; }
+.letter-divider { margin-top:22px; }
+.signature-list { display:grid; grid-template-columns:minmax(0,1fr); gap:20px; margin-top:24px; }
+.signature-list.multiple { grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:24px; row-gap:16px; }
+.signature-block { min-width:0; page-break-inside:avoid; break-inside:avoid; }
+.signature-space { height:56px; }
+.signature-name { max-width:360px; min-height:23px; font-weight:bold; white-space:pre-wrap; }
+.signature-position { max-width:360px; min-height:22px; font-size:10pt; white-space:pre-wrap; }
 .body { white-space: pre-wrap; overflow-wrap: break-word; }
 .rich-body { white-space: normal; overflow-wrap: break-word; }
 .rich-body p { margin:0 0 9pt; white-space:pre-wrap; word-wrap:break-word; }
@@ -73,19 +83,38 @@ footer .tagline { height: 17px; max-width: 100%; margin-top: 5px; }
 @if (filled($content['tracking_number'] ?? null))
 <div class="tracking-number">DOTS Tracking No.: {{ $content['tracking_number'] }}</div>
 @endif
-<div class="metadata"><table>
-@foreach (['for' => ($content['recipient_label'] ?? 'FOR') === 'TO' ? 'TO' : 'FOR', 'thru' => 'THRU', 'attention' => 'ATTENTION', 'from' => 'FROM', 'subject' => 'SUBJECT', 'date' => 'DATE'] as $key => $label)
+@php($pageTemplate = ($content['page_template'] ?? 'memo') === 'letter' ? 'letter' : 'memo')
+@if ($pageTemplate === 'letter' && filled($content['date'] ?? null))
+<div class="letter-date">{{ \App\Services\DocumentMetadata::displayDate($content['date']) }}</div>
+@endif
+<div class="metadata {{ $pageTemplate === 'letter' ? 'letter-metadata' : '' }}"><table>
+@foreach (($pageTemplate === 'letter' ? ['for' => ($content['recipient_label'] ?? 'FOR') === 'TO' ? 'TO' : 'FOR', 'from' => 'FROM', 'subject' => 'SUBJECT'] : ['for' => ($content['recipient_label'] ?? 'FOR') === 'TO' ? 'TO' : 'FOR', 'thru' => 'THRU', 'attention' => 'ATTENTION', 'from' => 'FROM', 'subject' => 'SUBJECT', 'date' => 'DATE']) as $key => $label)
 @if (filled($content[$key] ?? null) || filled($content[$key.'_position'] ?? null) || in_array($key, ['from', 'subject']))
-<tr><th>{{ $label }}</th><td class="field-colon">:</td><td><div class="field-value {{ in_array($key, ['for', 'thru', 'attention', 'from']) ? 'person-name' : '' }}">{{ $key === 'date' ? \App\Services\DocumentMetadata::displayDate($content[$key] ?? null) : ($content[$key] ?? '') }}</div>@if (in_array($key, ['for', 'thru', 'attention', 'from']) && filled($content[$key.'_position'] ?? null))<div class="position">{{ $content[$key.'_position'] }}</div>@endif</td></tr>
+<tr><th>{{ $label }}</th><td class="field-colon">:</td><td><div class="field-value {{ in_array($key, ['for', 'thru', 'attention', 'from']) ? 'person-name' : '' }} {{ $pageTemplate === 'letter' && $key === 'subject' ? 'letter-subject' : '' }}">{{ $key === 'date' ? \App\Services\DocumentMetadata::displayDate($content[$key] ?? null) : ($content[$key] ?? '') }}</div>@if (in_array($key, ['for', 'thru', 'attention', 'from']) && filled($content[$key.'_position'] ?? null))<div class="position">{{ $content[$key.'_position'] }}</div>@endif</td></tr>
 @endif
 @endforeach
 </table></div>
+@if ($pageTemplate === 'letter')<hr class="letter-divider">@endif
 @if (isset($content['body_document']))
 <div class="rich-body">{!! app(\App\Services\RichDocumentContent::class)->html($content['body_document']) !!}</div>
 @else
 <div class="body">{{ $content['body'] ?? '' }}</div>
 @endif
-@if (count(array_filter($content['cc'] ?? [])))
-<table class="cc"><tr><th>CC</th><td class="field-colon">:</td><td>{{ implode("\n", array_filter($content['cc'])) }}</td></tr></table>
+@php($legacySignature = !empty($content['show_signature_block']) || filled($content['signature_name'] ?? null) || filled($content['signature_position'] ?? null))
+@php($signatureBlocks = is_array($content['signature_blocks'] ?? null) ? array_values($content['signature_blocks']) : ($legacySignature ? [['name' => $content['signature_name'] ?? '', 'position' => $content['signature_position'] ?? '']] : []))
+@if (count($signatureBlocks))
+@if ($pageTemplate === 'letter')<div>Sincerely,</div>@endif
+<section class="signature-list {{ count($signatureBlocks) > 1 ? 'multiple' : '' }}">
+@foreach ($signatureBlocks as $signature)
+<div class="signature-block">
+<div class="signature-space"></div>
+@if (filled($signature['name'] ?? null))<div class="signature-name">{{ $signature['name'] }}</div>@endif
+@if (filled($signature['position'] ?? null))<div class="signature-position">{{ $signature['position'] }}</div>@endif
+</div>
+@endforeach
+</section>
+@endif
+@if (count(array_filter($content['cc'] ?? [], fn ($line) => trim((string) $line) !== '')))
+<table class="cc"><tr><th>CC</th><td class="field-colon">:</td><td>{{ implode("\n", array_filter($content['cc'], fn ($line) => trim((string) $line) !== '')) }}</td></tr></table>
 @endif
 </body></html>

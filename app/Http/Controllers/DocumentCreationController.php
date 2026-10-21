@@ -629,14 +629,21 @@ class DocumentCreationController extends Controller
             'document_type_id' => ['required', 'integer', 'exists:document_types,id'],
             'title' => ['nullable', 'string', 'max:255'],
             'content' => ['required', 'array'],
+            'content.page_template' => ['nullable', 'string', 'in:memo,letter'],
             'content.recipient_label' => ['nullable', 'in:FOR,TO'],
             'content.for' => ['nullable', 'string', 'max:255'], 'content.thru' => ['nullable', 'string', 'max:255'],
             'content.attention' => ['nullable', 'string', 'max:255'], 'content.from' => ['required', 'string', 'max:255'],
             'content.subject' => ['required', 'string', 'max:255'], 'content.date' => ['nullable', 'string', 'max:100'],
+            'content.show_thru' => ['nullable', 'boolean'], 'content.show_attention' => ['nullable', 'boolean'], 'content.show_cc' => ['nullable', 'boolean'],
             'content.for_position' => ['nullable', 'string', 'max:255'],
             'content.thru_position' => ['nullable', 'string', 'max:255'],
             'content.attention_position' => ['nullable', 'string', 'max:255'],
             'content.from_position' => ['nullable', 'string', 'max:255'],
+            'content.signature_blocks' => ['nullable', 'array', 'max:10'],
+            'content.signature_blocks.*' => ['required', 'array'],
+            'content.signature_blocks.*.id' => ['nullable', 'string', 'max:100'],
+            'content.signature_blocks.*.name' => ['nullable', 'string', 'max:255'],
+            'content.signature_blocks.*.position' => ['nullable', 'string', 'max:255'],
             'content.body' => ['required_without:content.body_document', 'nullable', 'string', 'max:50000'],
             'content.body_document' => ['nullable', 'array'],
             'content.cc' => ['nullable', 'array', 'max:100'], 'content.cc.*' => ['nullable', 'string', 'max:255'],
@@ -648,8 +655,16 @@ class DocumentCreationController extends Controller
         ]);
         $type = DocumentType::query()->whereKey($data['document_type_id'])->where('is_active', true)->first();
         abort_unless($type, 422, 'Choose an active document type.');
-        $data['content'] = Arr::only($data['content'], ['recipient_label', 'for', 'thru', 'attention', 'from', 'for_position', 'thru_position', 'attention_position', 'from_position', 'subject', 'date', 'body', 'body_document', 'cc']);
+        $data['content'] = Arr::only($data['content'], ['page_template', 'recipient_label', 'for', 'thru', 'attention', 'show_thru', 'show_attention', 'show_cc', 'from', 'for_position', 'thru_position', 'attention_position', 'from_position', 'subject', 'date', 'signature_blocks', 'body', 'body_document', 'cc']);
+        $data['content']['page_template'] ??= 'memo';
         $data['content']['recipient_label'] ??= 'FOR';
+        $data['content']['show_thru'] = (bool) ($data['content']['show_thru'] ?? false);
+        $data['content']['show_attention'] = (bool) ($data['content']['show_attention'] ?? false);
+        $data['content']['show_cc'] = (bool) ($data['content']['show_cc'] ?? false);
+        $data['content']['signature_blocks'] = array_map(
+            fn (array $block) => Arr::only($block, ['id', 'name', 'position']),
+            array_values($data['content']['signature_blocks'] ?? []),
+        );
         if (isset($data['content']['body_document'])) {
             $rich = app(RichDocumentContent::class);
             $data['content']['body_document'] = $rich->normalize($data['content']['body_document']);
