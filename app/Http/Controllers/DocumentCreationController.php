@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Document;
 use App\Models\DocumentCreationDraft;
+use App\Models\DocumentRoute;
+use App\Models\DocumentRouteStep;
 use App\Models\GmailConnection;
 use App\Models\DocumentCreationVersion;
 use App\Models\DocumentType;
@@ -13,6 +15,7 @@ use App\Services\AuditTrailWriter;
 use App\Services\DocumentTemplates;
 use App\Jobs\SendDocumentStatusEmail;
 use App\Jobs\SendDocumentApprovalRequestEmail;
+use App\Jobs\SendDocumentRouteNotification;
 use App\Services\DocumentPdf;
 use App\Services\DocumentMetadata;
 use App\Services\RichDocumentContent;
@@ -273,7 +276,59 @@ class DocumentCreationController extends Controller
                     'size_bytes' => strlen($pdf),
                     'uploaded_by' => $request->user()->id,
                 ]);
+                $previousRoute = $document->routes()->with('steps')->orderByDesc('id')->lockForUpdate()->first();
+                if ($previousRoute && $previousRoute->status === 'changes_requested') {
+                    $restartFromOfficeId = $previousRoute->from_office_id ?: ($document->office_id ?: $officeId);
+                    $restartedRoute = $document->routes()->create([
+                        'created_by' => $request->user()->id,
+                        'from_office_id' => $restartFromOfficeId,
+                        'action_type_id' => $previousRoute->action_type_id,
+                        'mode' => $previousRoute->mode,
+                        'status' => 'pending',
+                        'other_action' => $previousRoute->other_action,
+                        'remarks' => 'Route restarted after a revised document was submitted.',
+                        'started_at' => now(),
+                    ]);
+                    foreach ($previousRoute->steps as $previousStep) {
+                        $isImmediatelyActive = $restartedRoute->mode === 'parallel' || (int) $previousStep->position === 1;
+                        $step = $restartedRoute->steps()->create([
+                            'office_id' => $previousStep->office_id,
+                            'position' => $previousStep->position,
+                            'status' => $isImmediatelyActive ? 'available' : 'waiting',
+                        ]);
+                        if (! $isImmediatelyActive) {
+                            continue;
+                        }
+
+                        $dispatchTrail = $document->trails()->create([
+                            'from_office_id' => $restartFromOfficeId,
+                            'to_office_id' => $step->office_id,
+                            'created_by' => $request->user()->id,
+                            'status' => 'available',
+                            'action' => $restartedRoute->mode === 'parallel'
+                                ? 'Revised document routed for parallel approval'
+                                : 'Revised document routed for sequential approval, step 1',
+                        ]);
+                        $step->update(['dispatch_trail_id' => $dispatchTrail->id]);
+                        $step->loadMissing('office');
+                        if ($step->office) {
+                            $this->notifyRouteApprovers($document, $restartedRoute, $step->office);
+                        }
+                    }
+
+                    app(AuditTrailWriter::class)->record('document.route_restarted_after_revision', $document, [
+                        'tracking_number' => $document->tracking_number,
+                        'previous_route_id' => $previousRoute->id,
+                        'route_id' => $restartedRoute->id,
+                        'mode' => $restartedRoute->mode,
+                        'offices' => $previousRoute->steps->map(fn (DocumentRouteStep $step) => [
+                            'id' => $step->office_id,
+                            'position' => $step->position,
+                        ])->values()->all(),
+                    ], actor: $request->user());
+                }
                 $document->update([
+                    'status' => 'pending',
                     'approval_status' => 'awaiting_approval',
                     'signature_status' => ($document->signature_status ?? 'not_required') === 'not_required' ? 'not_required' : 'needs_signature',
                 ]);
@@ -297,6 +352,31 @@ class DocumentCreationController extends Controller
         return redirect()->route('document-workflow.index')
             ->with('success', 'Revised PDF submitted under the same tracking number for approval.')
             ->with('savedDraftId', $draft->id);
+    }
+
+    private function notifyRouteApprovers(Document $document, DocumentRoute $route, Office $office): void
+    {
+        if (! GmailConnection::query()->exists()) {
+            return;
+        }
+
+        User::query()
+            ->where('office_id', $office->id)
+            ->where('is_active', true)
+            ->get()
+            ->filter(fn (User $user) => $user->isAdministrator() && $user->canReceiveDocuments()
+                && (int) $user->id !== (int) $document->created_by
+                && filter_var($user->email, FILTER_VALIDATE_EMAIL))
+            ->each(fn (User $user) => SendDocumentRouteNotification::dispatch(
+                recipientEmail: $user->email,
+                recipientName: $user->name,
+                documentId: (int) $document->id,
+                documentTitle: $document->title,
+                trackingNumber: $document->tracking_number,
+                officeName: $office->name,
+                event: 'approval_required',
+                routingMode: $route->mode,
+            )->afterCommit());
     }
 
     public function submitCurrent(Request $request)

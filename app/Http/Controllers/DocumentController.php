@@ -5,12 +5,15 @@ namespace App\Http\Controllers;
 use App\Models\ActionType;
 use App\Models\Document;
 use App\Models\DocumentCreationDraft;
+use App\Models\DocumentRoute;
+use App\Models\DocumentRouteStep;
 use App\Models\DocumentTrail;
 use App\Models\DocumentType;
 use App\Models\GmailConnection;
 use App\Models\Office;
 use App\Models\PurposeType;
 use App\Models\User;
+use App\Jobs\SendDocumentRouteNotification;
 use App\Jobs\SendDocumentTrackingReceivedEmail;
 use App\Services\AuditTrailWriter;
 use App\Services\DocumentAccess;
@@ -54,9 +57,16 @@ class DocumentController extends Controller
                 'files', 'creator', 'office', 'documentType', 'purposeType',
                 'latestTrail.creator', 'latestTrail.fromOffice', 'latestTrail.toOffice',
                 'trails.creator', 'trails.fromOffice', 'trails.toOffice', 'trails.holderOffice', 'trails.legacyReceivingOffice',
+                'latestRoute.fromOffice', 'latestRoute.steps.office', 'latestRoute.steps.receiver', 'latestRoute.steps.decider',
+                'routes.fromOffice', 'routes.steps.office', 'routes.steps.receiver', 'routes.steps.decider',
             ])
             ->findOrFail($id);
         $latestFile = $document->files->sortByDesc('id')->first();
+        $rootRoute = $document->routes->whereNull('parent_step_id')->sortByDesc('id')->first();
+        $currentOfficeId = app(DocumentAccess::class)->currentOfficeId($user);
+        $activeRouteStep = $currentOfficeId
+            ? $this->findRouteStepForOffice($document, (int) $currentOfficeId, 'in_progress')
+            : null;
 
         return response()->json([
             'document_type' => $document->documentType?->name ?? '',
@@ -66,6 +76,29 @@ class DocumentController extends Controller
             'approval_status' => $document->approval_status ?? 'not_required',
             'signature_status' => $document->signature_status ?? 'not_required',
             'can_approve' => $this->canApproveDocument($document, $user),
+            'can_receive' => $document->routes->isNotEmpty()
+                ? $this->canReceiveRouteStep($document, $user)
+                : $this->canReceiveLegacyDocument($document, $user),
+            'can_release' => $this->canForwardDocument($document, $user),
+            'forwarding_under' => $activeRouteStep ? $activeRouteStep[1]->office?->name : null,
+            'forwarding_blocked_office_ids' => $activeRouteStep ? $this->branchAncestorOfficeIds($activeRouteStep[1]) : [],
+            'route_mode' => $rootRoute?->mode,
+            'route_status' => $rootRoute?->status,
+            'route_from_office' => $rootRoute?->fromOffice?->name ?? $document->office?->name,
+            'route_steps' => $rootRoute?->steps->map(fn (DocumentRouteStep $step) => [
+                'id' => $step->id,
+                'office_id' => $step->office_id,
+                'office' => $step->office?->name,
+                'position' => $step->position,
+                'status' => $step->status,
+                'decision' => $step->decision,
+                'remarks' => $step->decision_remarks,
+                'received_by' => $step->receiver?->name,
+                'received_at' => $step->received_at?->format('F j Y h:i:s A'),
+                'decided_by' => $step->decider?->name,
+                'decided_at' => $step->decided_at?->format('F j Y h:i:s A'),
+            ])->values() ?? [],
+            'route_tree' => $this->serializeRouteTree($document),
             'file_name' => $latestFile?->original_name ?? $latestFile?->file_name,
             'file_url' => $latestFile?->downloadUrl(),
             'files' => $document->files->sortBy('id')->map(fn ($file) => [
@@ -93,6 +126,8 @@ class DocumentController extends Controller
                     ($trail->creator?->lastname ?? '')
                 ) ?: $trail->creator?->name,
                 'created_at' => $trail->created_at?->format('F j Y h:i:s A'),
+                'created_at_timestamp' => $trail->created_at?->timestamp,
+                'id' => $trail->id,
             ]),
             'created_by_name' => $document->creator?->name ?? '',
         ]);
@@ -419,7 +454,7 @@ class DocumentController extends Controller
         $user = auth()->user();
         $filters = request()->validate([
             'search' => ['nullable', 'string', 'max:200'],
-            'status' => ['nullable', 'in:all,pending,ongoing,approved,released,archived,rejected'],
+            'status' => ['nullable', 'in:all,pending,ongoing,approved,released,archived,changes_requested,rejected'],
             'sort' => ['nullable', 'in:tracking_number,title,document_type,origin_type,status,office_name,last_transaction'],
             'direction' => ['nullable', 'in:asc,desc'],
             'per_page' => ['nullable', 'integer', 'in:5,10,15,20,50'],
@@ -468,7 +503,7 @@ class DocumentController extends Controller
         if ($latestOnly) {
             $newDocumentQuery->where('created_at', '>=', now()->subDays(15));
         }
-        $latestStatusValue = 'COALESCE((SELECT latest_status.status FROM document_trails AS latest_status WHERE latest_status.document_id = documents.id ORDER BY latest_status.id DESC LIMIT 1), documents.status)';
+        $latestStatusValue = "CASE WHEN EXISTS (SELECT 1 FROM document_routes AS active_route WHERE active_route.document_id = documents.id AND active_route.status = 'pending') THEN 'pending' ELSE COALESCE((SELECT latest_route.status FROM document_routes AS latest_route WHERE latest_route.document_id = documents.id ORDER BY latest_route.id DESC LIMIT 1), (SELECT latest_status.status FROM document_trails AS latest_status WHERE latest_status.document_id = documents.id ORDER BY latest_status.id DESC LIMIT 1), documents.status) END";
         if ($search !== '') {
             $like = '%'.$search.'%';
             $newDocumentQuery->where(function ($query) use ($like, $search, $latestStatusValue) {
@@ -507,12 +542,21 @@ class DocumentController extends Controller
             if ($currentOfficeId === null) {
                 $newDocumentQuery->whereRaw('1 = 0');
             } else {
-                $newDocumentQuery->whereExists(DB::table('document_trails as pending_trail')
-                    ->selectRaw('1')
-                    ->whereColumn('pending_trail.document_id', 'documents.id')
-                    ->whereRaw('pending_trail.id = (SELECT MAX(latest_pending_trail.id) FROM document_trails AS latest_pending_trail WHERE latest_pending_trail.document_id = documents.id)')
-                    ->where('pending_trail.status', 'pending')
-                    ->where('pending_trail.to_office_id', $currentOfficeId));
+                $newDocumentQuery->where(function ($pending) use ($currentOfficeId) {
+                    $pending->whereExists(DB::table('document_trails as pending_trail')
+                        ->selectRaw('1')
+                        ->whereColumn('pending_trail.document_id', 'documents.id')
+                        ->whereRaw('pending_trail.id = (SELECT MAX(latest_pending_trail.id) FROM document_trails AS latest_pending_trail WHERE latest_pending_trail.document_id = documents.id)')
+                        ->where('pending_trail.status', 'pending')
+                        ->where('pending_trail.to_office_id', $currentOfficeId))
+                        ->orWhereExists(DB::table('document_route_steps as route_step')
+                            ->join('document_routes as route', 'route.id', '=', 'route_step.document_route_id')
+                            ->selectRaw('1')
+                            ->whereColumn('route.document_id', 'documents.id')
+                            ->where('route.status', 'pending')
+                            ->where('route_step.office_id', $currentOfficeId)
+                            ->whereIn('route_step.status', ['available', 'in_progress', 'waiting_on_branch']));
+                });
             }
         } elseif ($statusFilter !== 'all') {
             if ($statusFilter === 'archived') {
@@ -534,8 +578,10 @@ class DocumentController extends Controller
                 'office', 'documentType', 'purposeType',
                 'latestTrail.creator', 'latestTrail.fromOffice', 'latestTrail.toOffice',
                 'latestTrail.holderOffice', 'latestTrail.legacyReceivingOffice',
+                'latestRoute.fromOffice', 'latestRoute.steps.office', 'latestRoute.steps.receiver', 'latestRoute.steps.decider',
+                'routes.fromOffice', 'routes.steps.office', 'routes.steps.receiver', 'routes.steps.decider',
             ])
-            ->select(['documents.id', 'documents.legacy_doc_id', 'documents.legacy_needs_review', 'documents.is_archived', 'documents.tracking_number', 'documents.title', 'documents.status', 'documents.office_id', 'documents.created_by', 'documents.is_finalized', 'documents.remarks', 'documents.document_type_id', 'documents.action_type_id', 'documents.other_action', 'documents.purpose_type_id', 'documents.other_document_type', 'documents.other_purpose', 'documents.origin_type', 'documents.received_from', 'documents.urgent', 'documents.notify_by_email', 'documents.created_at'])
+            ->select(['documents.id', 'documents.legacy_doc_id', 'documents.legacy_needs_review', 'documents.is_archived', 'documents.tracking_number', 'documents.title', 'documents.status', 'documents.approval_status', 'documents.signature_status', 'documents.office_id', 'documents.created_by', 'documents.is_finalized', 'documents.remarks', 'documents.document_type_id', 'documents.action_type_id', 'documents.other_action', 'documents.purpose_type_id', 'documents.other_document_type', 'documents.other_purpose', 'documents.origin_type', 'documents.received_from', 'documents.urgent', 'documents.notify_by_email', 'documents.created_at'])
             ->when($sortKey !== null, function ($query) use ($sortKey, $sortDirection) {
                 $sortColumns = [
                     'tracking_number' => 'documents.tracking_number',
@@ -547,26 +593,27 @@ class DocumentController extends Controller
                     'last_transaction' => DocumentTrail::query()->selectRaw("COALESCE(NULLIF(action, ''), status)")->whereColumn('document_trails.document_id', 'documents.id')->orderByDesc('id')->limit(1),
                 ];
                 $query->orderBy($sortColumns[$sortKey], $sortDirection);
-            }, fn ($query) => $query->orderBy('documents.created_at', 'desc'))
+            }, fn ($query) => $query->orderByRaw("COALESCE((SELECT latest_transaction.created_at FROM document_trails AS latest_transaction WHERE latest_transaction.document_id = documents.id ORDER BY latest_transaction.created_at DESC, latest_transaction.id DESC LIMIT 1), documents.created_at) DESC"))
             ->orderBy('documents.id', 'desc')
             ->paginate($perPage)
             ->withQueryString()
             ->through(function ($document) use ($currentOfficeId, $isAdministrator, $user) {
                 $latest = $document->latestTrail;
-                $holderOfficeId = $latest?->to_office_id ?? $document->office_id;
-                $isPendingHolder = strtolower((string) ($latest?->status ?? $document->status)) === 'pending'
-                    && $currentOfficeId !== null && (int) $holderOfficeId === (int) $currentOfficeId;
+                $routes = $document->routes;
+                $rootRoute = $routes->whereNull('parent_step_id')->sortByDesc('id')->first();
+                $routeTreeHasPending = $routes->contains(fn (DocumentRoute $candidate) => $candidate->status === 'pending');
                 $isIncoming = strtolower((string) ($latest?->status ?? '')) === 'available'
                     && $currentOfficeId !== null && (int) $latest?->to_office_id === (int) $currentOfficeId;
                 $isOriginOffice = $currentOfficeId !== null && (int) $document->office_id === (int) $currentOfficeId;
                 $isDraft = ! $document->legacy_needs_review && ! $document->is_finalized && strtolower((string) $document->status) === 'draft';
+                $routeIsPending = $routeTreeHasPending;
 
                 return [
                     'id' => $document->id,
                     'tracking_number' => $document->tracking_number ?? '',
                     'tracking_url' => $document->tracking_number ? URL::signedRoute('documents.track', ['trackingNumber' => $document->tracking_number]) : null,
                     'title' => $document->title ?? '',
-                    'status' => $document->is_archived ? 'archived' : $this->workflowStatus($latest?->status ?? $document->status),
+                    'status' => $document->is_archived ? 'archived' : ($routeIsPending ? 'pending' : $this->workflowStatus($latest?->status ?? $document->status)),
                     'needs_review' => (bool) $document->legacy_needs_review,
                     'office_name' => $document->office?->name ?? '',
                     'office_short_name' => $document->office?->short_name,
@@ -606,11 +653,31 @@ class DocumentController extends Controller
                     'is_finalized' => (bool) $document->is_finalized,
                     'approval_status' => $document->approval_status ?? 'not_required',
                     'signature_status' => $document->signature_status ?? 'not_required',
+                    'route_mode' => $rootRoute?->mode,
+                    'route_status' => $rootRoute?->status,
+                    'route_from_office' => $rootRoute?->fromOffice?->name ?? $document->office?->name,
+                    'route_steps' => $rootRoute?->steps->map(fn (DocumentRouteStep $step) => [
+                        'id' => $step->id,
+                        'office_id' => $step->office_id,
+                        'office' => $step->office?->name,
+                        'position' => $step->position,
+                        'status' => $step->status,
+                        'decision' => $step->decision,
+                        'remarks' => $step->decision_remarks,
+                        'received_by' => $step->receiver?->name,
+                        'received_at' => $step->received_at?->format('F j Y h:i:s A'),
+                        'decided_by' => $step->decider?->name,
+                        'decided_at' => $step->decided_at?->format('F j Y h:i:s A'),
+                    ])->values() ?? [],
+                    'route_tree' => $this->serializeRouteTree($document),
                     'can_approve' => $this->canApproveDocument($document, $user),
                     'can_update' => $isDraft && ($isAdministrator || ($isOriginOffice && (int) $document->created_by === (int) $user?->id)),
-                    'can_release' => ! $document->legacy_needs_review && ! $document->is_archived && $isPendingHolder,
-                    'can_terminal' => ! $document->legacy_needs_review && ! $document->is_archived && $isPendingHolder,
-                    'can_receive' => ! $document->legacy_needs_review && ! $document->is_archived && $isIncoming && $user->canReceiveDocuments(),
+                    'can_release' => ! $document->legacy_needs_review && ! $document->is_archived
+                        && $this->canForwardDocument($document, $user),
+                    'can_terminal' => ! $document->legacy_needs_review && ! $document->is_archived
+                        && $this->canTagDocumentTerminal($document, $user),
+                    'can_receive' => ! $document->legacy_needs_review && ! $document->is_archived
+                        && ($this->canReceiveRouteStep($document, $user) || ($routes->isEmpty() && $isIncoming && $user->canReceiveDocuments())),
                     'can_delete' => $isDraft && ($isAdministrator || ($isOriginOffice && (int) $document->created_by === (int) $user?->id)),
                 ];
             });
@@ -744,7 +811,9 @@ class DocumentController extends Controller
                 'title' => $validated['title'],
                 'tracking_number' => 'draft-'.Str::uuid(),
                 'status' => $validated['is_finalized'] ? 'pending' : 'draft',
-                'approval_status' => $validated['is_finalized'] ? 'awaiting_approval' : 'not_required',
+                // Approval starts only after the sender selects receiving offices
+                // in the Forward dialog. A new routing record has no approver yet.
+                'approval_status' => 'not_required',
                 'signature_status' => $validated['is_finalized'] && ($validated['signature_required'] ?? false) ? 'needs_signature' : 'not_required',
                 'remarks' => $validated['remarks'] ?? null,
                 'document_type_id' => $validated['document_type_id'] ?? null,
@@ -770,7 +839,7 @@ class DocumentController extends Controller
                     'from_office_id' => $officeId,
                     'created_by' => auth()->id(),
                     'status' => 'pending',
-                    'action' => 'Created routing record; awaiting approval',
+                    'action' => 'Created routing record; ready for routing',
                 ]);
             }
 
@@ -844,7 +913,169 @@ class DocumentController extends Controller
         $document = $access->scope(Document::query(), $user)->findOrFail($id);
 
         DB::transaction(function () use ($document, $user, $validated, $access) {
-            $document = Document::query()->with('latestTrail')->lockForUpdate()->findOrFail($document->id);
+            $document = Document::query()->with(['latestTrail', 'latestRoute'])->lockForUpdate()->findOrFail($document->id);
+            $routes = $document->routes()
+                ->with(['steps.office', 'steps.receiver', 'steps.decider', 'parentStep.office'])
+                ->orderByDesc('id')
+                ->lockForUpdate()
+                ->get();
+            $document->setRelation('routes', $routes);
+            $officeId = $access->currentOfficeId($user);
+            $activeRouteStep = $officeId ? $this->findRouteStepForOffice($document, (int) $officeId, 'in_progress') : null;
+
+            if ($routes->isNotEmpty()) {
+                abort_unless($this->canApproveDocument($document, $user), 403, 'Only an authorized approver at an active route office can decide this submission.');
+                abort_unless($activeRouteStep, 403, 'This office does not have an active approval step.');
+                [$route, $step] = $activeRouteStep;
+
+                $decision = $validated['decision'];
+                $action = match ($decision) {
+                    'approved' => 'Approved',
+                    'changes_requested' => 'Changes requested',
+                    default => 'Rejected',
+                };
+                $trail = $document->trails()->create([
+                    'from_office_id' => $officeId,
+                    'to_office_id' => $officeId,
+                    'created_by' => $user->id,
+                    'status' => $decision,
+                    'action' => $action,
+                    'remarks' => $validated['remarks'] ?? null,
+                ]);
+                $step->update([
+                    'status' => $decision,
+                    'decision' => $decision,
+                    'decision_remarks' => $validated['remarks'] ?? null,
+                    'decision_trail_id' => $trail->id,
+                    'decided_by' => $user->id,
+                    'decided_at' => now(),
+                ]);
+
+                if ($decision !== 'approved') {
+                    foreach ($routes as $candidateRoute) {
+                        if ($candidateRoute->status !== 'pending') {
+                            continue;
+                        }
+
+                        $candidateRoute->steps
+                            ->where('id', '!=', $step->id)
+                            ->whereIn('status', ['waiting', 'available', 'in_progress', 'waiting_on_branch'])
+                            ->each(fn (DocumentRouteStep $candidateStep) => $candidateStep->update(['status' => 'paused']));
+                        $candidateRoute->update([
+                            'status' => $candidateRoute->id === $route->id ? $decision : 'paused',
+                            'completed_at' => now(),
+                        ]);
+                    }
+                    $document->update(['approval_status' => $decision, 'status' => $decision]);
+                    if ($decision === 'changes_requested') {
+                        $originRoute = $routes->whereNull('parent_step_id')->sortByDesc('id')->first();
+                        $originOfficeId = $originRoute?->from_office_id ?? $document->office_id;
+                        if ($originOfficeId && (int) $originOfficeId !== (int) $officeId) {
+                            $document->trails()->create([
+                                'from_office_id' => $officeId,
+                                'to_office_id' => $originOfficeId,
+                                'created_by' => $user->id,
+                                'status' => 'changes_requested',
+                                'action' => 'Returned to the originating office for adjustments',
+                                'remarks' => $validated['remarks'] ?? null,
+                            ]);
+                        }
+                    }
+                } else {
+                    $route->load('steps');
+                    $nextStep = $route->mode === 'sequential'
+                        ? $route->steps->first(fn (DocumentRouteStep $candidate) => (int) $candidate->position === (int) $step->position + 1)
+                        : null;
+
+                    if ($nextStep && $nextStep->status === 'waiting') {
+                        $dispatchTrail = $document->trails()->create([
+                            'from_office_id' => $officeId,
+                            'to_office_id' => $nextStep->office_id,
+                            'created_by' => $user->id,
+                            'status' => 'available',
+                            'action' => 'Advanced to sequential approval step '.($nextStep->position),
+                        ]);
+                        $nextStep->update([
+                            'status' => 'available',
+                            'dispatch_trail_id' => $dispatchTrail->id,
+                        ]);
+                        $document->update(['approval_status' => 'awaiting_approval', 'status' => 'pending']);
+                        $nextStep->loadMissing('office');
+                        if ($nextStep->office) {
+                            $this->notifyRouteOffice($document, $route, $nextStep->office);
+                        }
+                    } elseif ($route->steps->every(fn (DocumentRouteStep $candidate) => $candidate->status === 'approved')) {
+                        $route->update(['status' => 'approved', 'completed_at' => now()]);
+                        if ($route->parent_step_id) {
+                            $parentStep = DocumentRouteStep::query()->with('office')->lockForUpdate()->findOrFail($route->parent_step_id);
+                            $parentStep->update(['status' => 'in_progress']);
+                            $parentStep->route()->update(['updated_at' => now()]);
+                            $branchCompleteTrail = $document->trails()->create([
+                                'from_office_id' => $officeId,
+                                'to_office_id' => $parentStep->office_id,
+                                'created_by' => $user->id,
+                                'status' => 'pending',
+                                'action' => 'Branch complete; parent office decision required',
+                            ]);
+                            app(AuditTrailWriter::class)->record('document.route_branch_completed', $document, [
+                                'tracking_number' => $document->tracking_number,
+                                'child_route_id' => $route->id,
+                                'parent_step_id' => $parentStep->id,
+                                'document_trail_id' => $branchCompleteTrail->id,
+                            ], actor: $user);
+                            if ($parentStep->office) {
+                                $this->notifyRouteOffice($document, $route, $parentStep->office);
+                            }
+                            if ($parentStep->office) {
+                                $this->notifyRouteCreator($document, $route, $parentStep->office, 'A forwarded branch is complete', null);
+                            }
+                            $document->update(['approval_status' => 'awaiting_approval', 'status' => 'pending']);
+                        } else {
+                            $document->update(['approval_status' => 'approved', 'status' => 'approved']);
+                        }
+                    } else {
+                        $document->update(['approval_status' => 'awaiting_approval', 'status' => 'pending']);
+                    }
+                }
+
+                $step->loadMissing('office');
+                if ($step->office) {
+                    $this->notifyRouteCreator($document, $route, $step->office, $decision, $validated['remarks'] ?? null);
+                }
+
+                $draft = DocumentCreationDraft::query()->where('official_document_id', $document->id)->first();
+                if ($draft) {
+                    if (in_array($decision, ['changes_requested', 'rejected'], true)) {
+                        $draft->update([
+                            'status' => $decision === 'changes_requested' ? 'revision_requested' : 'rejected',
+                            'decision_at' => now(),
+                            'decision_remarks' => $validated['remarks'] ?? null,
+                        ]);
+                    }
+                    $draft->events()->create([
+                        'user_id' => $user->id,
+                        'event' => $action,
+                        'remarks' => $validated['remarks'] ?? null,
+                        'metadata' => [
+                            'document_id' => $document->id,
+                            'document_route_id' => $route->id,
+                            'document_route_step_id' => $step->id,
+                            'document_trail_id' => $trail->id,
+                        ],
+                    ]);
+                }
+
+                app(AuditTrailWriter::class)->record('document.approval.'.$decision, $document, [
+                    'tracking_number' => $document->tracking_number,
+                    'document_route_id' => $route->id,
+                    'document_route_step_id' => $step->id,
+                    'document_trail_id' => $trail->id,
+                    'remarks' => $validated['remarks'] ?? null,
+                ], actor: $user);
+
+                return;
+            }
+
             abort_unless($this->canApproveDocument($document, $user), 403, 'Only an authorized approver at the current office can decide this submission.');
             $officeId = $access->currentOfficeId($user);
             $decision = $validated['decision'];
@@ -969,63 +1200,138 @@ class DocumentController extends Controller
         $validated = $request->validate([
             'action_type_id' => ['required', 'integer', 'exists:action_types,id'],
             'other_action' => ['nullable', 'string', 'max:255'],
-            'to_office_id' => ['required', 'integer', 'exists:offices,id'],
+            'routing_mode' => ['nullable', 'in:sequential,parallel'],
+            'to_office_ids' => ['required_without:to_office_id', 'array', 'min:1', 'max:30'],
+            'to_office_ids.*' => ['required', 'integer', 'distinct', 'exists:offices,id'],
+            'to_office_id' => ['nullable', 'integer', 'exists:offices,id'],
             'remarks' => ['nullable', 'string', 'max:250'],
             'document_source' => ['nullable', 'in:current,upload'],
             'approved_draft_id' => ['prohibited'],
             'file' => ['required_if:document_source,upload', 'prohibited_if:document_source,current', 'nullable', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:'.self::MAX_DOCUMENT_UPLOAD_KB],
         ]);
         $validated = $this->normalizeActionTypeDetails($validated);
-        $targetOffice = Office::findOrFail($validated['to_office_id']);
-        if (! $this->officeIsInCurrentUserRange($targetOffice)) {
+        $validated['routing_mode'] = $validated['routing_mode'] ?? 'sequential';
+        $officeIds = array_values(array_unique(array_map('intval', $validated['to_office_ids'] ?? [$validated['to_office_id'] ?? 0])));
+        $officeIds = array_values(array_filter($officeIds, fn (int $officeId) => $officeId > 0));
+        if ($officeIds === []) {
+            throw ValidationException::withMessages(['to_office_ids' => 'Choose at least one receiving office.']);
+        }
+        $document = app(DocumentAccess::class)->scope(Document::query(), $request->user())
+            ->with(['latestTrail', 'latestRoute'])
+            ->findOrFail($id);
+        $parentStep = $this->authorizeCurrentHolder($document, allowBranch: true);
+        $officeId = app(DocumentAccess::class)->currentOfficeId($request->user());
+        if (in_array((int) $officeId, $officeIds, true)) {
+            throw ValidationException::withMessages(['to_office_ids' => 'Choose another office; the sending office cannot be a receiving step.']);
+        }
+        if ($parentStep && array_intersect($officeIds, $this->branchAncestorOfficeIds($parentStep)) !== []) {
             throw ValidationException::withMessages([
-                'to_office_id' => 'Choose a receiving office within your assigned office range.',
+                'to_office_ids' => 'A branch cannot route back to an office already included above it. Use Request changes to return the document to an earlier office.',
             ]);
         }
-        if (! $this->officeHasActiveUsers($targetOffice)) {
-            throw ValidationException::withMessages([
-                'to_office_id' => 'Choose a receiving office with at least one active user.',
-            ]);
+        $targetOffices = Office::query()->whereIn('id', $officeIds)->get()->keyBy('id');
+        foreach ($officeIds as $targetOfficeId) {
+            $targetOffice = $targetOffices->get($targetOfficeId);
+            if (! $targetOffice || ! $this->officeIsInCurrentUserRange($targetOffice)) {
+                throw ValidationException::withMessages([
+                    'to_office_ids' => 'Choose receiving offices within your assigned office range.',
+                ]);
+            }
+            if (! $this->officeHasActiveApprovers($targetOffice, (int) $document->created_by)) {
+                throw ValidationException::withMessages([
+                    'to_office_ids' => 'Every receiving office must have at least one active approver.',
+                ]);
+            }
         }
-        $document = Document::with('latestTrail')->findOrFail($id);
-        $this->authorizeCurrentHolder($document);
-        $officeId = app(DocumentAccess::class)->currentOfficeId(auth()->user());
         $sourceOfficeName = Office::query()->whereKey($officeId)->value('name');
 
         $hasReplacementFile = $request->hasFile('file');
-        $trail = DB::transaction(function () use ($document, $validated, $officeId, $sourceOfficeName, $targetOffice, $hasReplacementFile) {
-                $trail = $document->trails()->create([
+        $storedPath = null;
+        try {
+            $trail = DB::transaction(function () use ($request, $document, $validated, $officeIds, $targetOffices, $officeId, $sourceOfficeName, $hasReplacementFile, &$storedPath) {
+            $lockedDocument = Document::query()->with(['latestTrail', 'latestRoute'])->lockForUpdate()->findOrFail($document->id);
+            $parentStep = $this->authorizeCurrentHolder($lockedDocument, allowBranch: true);
+            if ($parentStep && array_intersect($officeIds, $this->branchAncestorOfficeIds($parentStep)) !== []) {
+                throw ValidationException::withMessages([
+                    'to_office_ids' => 'A branch cannot route back to an office already included above it. Use Request changes to return the document to an earlier office.',
+                ]);
+            }
+            $now = now();
+            $route = $lockedDocument->routes()->create([
+                'created_by' => auth()->id(),
+                'from_office_id' => $officeId,
+                'parent_step_id' => $parentStep?->id,
+                'action_type_id' => $validated['action_type_id'],
+                'mode' => $validated['routing_mode'],
+                'status' => 'pending',
+                'other_action' => $validated['other_action'] ?? null,
+                'remarks' => $validated['remarks'] ?? null,
+                'started_at' => $now,
+            ]);
+            $firstDispatchTrail = null;
+            foreach ($officeIds as $position => $targetOfficeId) {
+                $targetOffice = $targetOffices->get($targetOfficeId);
+                $isImmediatelyActive = $validated['routing_mode'] === 'parallel' || $position === 0;
+                $step = $route->steps()->create([
+                    'office_id' => $targetOfficeId,
+                    'position' => $position + 1,
+                    'status' => $isImmediatelyActive ? 'available' : 'waiting',
+                ]);
+                if (! $isImmediatelyActive) {
+                    continue;
+                }
+
+                $dispatchTrail = $lockedDocument->trails()->create([
                     'from_office_id' => $officeId,
-                    'to_office_id' => $validated['to_office_id'],
+                    'to_office_id' => $targetOfficeId,
                     'created_by' => auth()->id(),
                     'status' => 'available',
-                    'action' => 'Released - '.$validated['action_type_name'].(mb_strtolower($validated['action_type_name']) === 'others' ? ': '.$validated['other_action'] : ''),
+                    'action' => ($validated['routing_mode'] === 'parallel' ? 'Routed for parallel approval - ' : 'Routed for sequential approval - ').$validated['action_type_name'].(mb_strtolower($validated['action_type_name']) === 'others' ? ': '.$validated['other_action'] : ''),
                     'remarks' => $validated['remarks'] ?? null,
+                    'created_at' => $now,
+                    'updated_at' => $now,
                 ]);
-                $document->update([
-                    'status' => 'available',
-                    ...($hasReplacementFile ? [
-                        'approval_status' => 'awaiting_approval',
-                        'signature_status' => ($document->signature_status ?? 'not_required') === 'not_required' ? 'not_required' : 'needs_signature',
-                    ] : []),
-                ]);
-                app(AuditTrailWriter::class)->record('document.released', $document, [
-                    'tracking_number' => $document->tracking_number,
-                    'from_office_id' => $officeId,
-                    'from_office_name' => $sourceOfficeName,
-                    'to_office_id' => $targetOffice->id,
-                    'to_office_name' => $targetOffice->name,
-                    'action_type' => $validated['action_type_name'],
-                ]);
+                $step->update(['dispatch_trail_id' => $dispatchTrail->id]);
+                $firstDispatchTrail ??= $dispatchTrail;
+                $this->notifyRouteOffice($lockedDocument, $route, $targetOffice);
+            }
+            if ($parentStep) {
+                $parentStep->update(['status' => 'waiting_on_branch']);
+            }
+            $lockedDocument->update([
+                'status' => 'pending',
+                'approval_status' => 'awaiting_approval',
+                ...($hasReplacementFile ? [
+                    'signature_status' => ($lockedDocument->signature_status ?? 'not_required') === 'not_required' ? 'not_required' : 'needs_signature',
+                ] : []),
+            ]);
+            if ($file = $request->file('file')) {
+                $storedPath = $this->storeRoutedDocumentFile($lockedDocument, $file, 'version', $firstDispatchTrail);
+            }
+            app(AuditTrailWriter::class)->record('document.routed', $lockedDocument, [
+                'tracking_number' => $lockedDocument->tracking_number,
+                'route_id' => $route->id,
+                'parent_step_id' => $parentStep?->id,
+                'mode' => $route->mode,
+                'from_office_id' => $officeId,
+                'from_office_name' => $sourceOfficeName,
+                'to_offices' => collect($officeIds)->map(fn ($targetId) => [
+                    'id' => $targetId,
+                    'name' => $targetOffices->get($targetId)?->name,
+                ])->all(),
+                'action_type' => $validated['action_type_name'],
+            ]);
 
-                return $trail;
-        });
-
-        if ($file = $request->file('file')) {
-            $this->storeRoutedDocumentFile($document, $file, 'version', $trail);
+            return $firstDispatchTrail;
+            });
+        } catch (\Throwable $exception) {
+            if ($storedPath !== null) {
+                Storage::disk('document_private')->delete($storedPath);
+            }
+            throw $exception;
         }
 
-        return back()->with('success', 'Document released successfully.');
+        return back()->with('success', 'Document routed to the selected offices successfully.');
     }
 
     public function receive($id)
@@ -1039,6 +1345,52 @@ class DocumentController extends Controller
         $document = DB::transaction(function () use ($id, $officeId, $user) {
             $document = Document::query()->lockForUpdate()->findOrFail($id);
             abort_if($document->legacy_needs_review || $document->is_archived, 403, 'This document needs review or is archived.');
+            $routes = $document->routes()->with('steps')->orderByDesc('id')->lockForUpdate()->get();
+            $document->setRelation('routes', $routes);
+            $routeStep = $this->findRouteStepForOffice($document, (int) $officeId, 'available');
+            if ($routeStep) {
+                [$route, $step] = $routeStep;
+
+                $dispatchTrail = $step->dispatchTrail()->with('fromOffice')->first();
+                $receivedAt = now();
+                $receiptTrail = $document->trails()->create([
+                    'from_office_id' => $dispatchTrail?->from_office_id ?? $route->from_office_id,
+                    'to_office_id' => $officeId,
+                    'created_by' => $user->id,
+                    'status' => 'pending',
+                    'action' => 'Received for approval',
+                    'created_at' => $receivedAt,
+                    'updated_at' => $receivedAt,
+                ]);
+                $step->update([
+                    'status' => 'in_progress',
+                    'received_by' => $user->id,
+                    'received_at' => $receivedAt,
+                ]);
+                $document->update([
+                    'status' => 'pending',
+                    'approval_status' => 'awaiting_approval',
+                    'received_at' => $receivedAt,
+                    'received_from' => $dispatchTrail?->fromOffice?->name,
+                ]);
+                $document->loadMissing('creator');
+                app(AuditTrailWriter::class)->record('document.route_step_received', $document, [
+                    'tracking_number' => $document->tracking_number,
+                    'route_id' => $route->id,
+                    'route_step_id' => $step->id,
+                    'office_id' => $officeId,
+                    'office_name' => $user->office?->name,
+                    'document_trail_id' => $receiptTrail->id,
+                ], actor: $user);
+
+                return $document;
+            }
+            if ($routes->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'tracking_number' => 'This document is not currently waiting for your office to receive it.',
+                ]);
+            }
+
             $latestTrail = $document->trails()->orderByDesc('id')->lockForUpdate()->first();
 
             if (! (
@@ -1211,37 +1563,85 @@ class DocumentController extends Controller
         return $validated;
     }
 
-    private function authorizeCurrentHolder(Document $document): void
+    private function authorizeCurrentHolder(Document $document, bool $allowBranch = false): ?DocumentRouteStep
     {
         abort_if($document->legacy_needs_review || $document->is_archived, 403, 'This document needs review or is archived.');
         $officeId = app(DocumentAccess::class)->currentOfficeId(auth()->user());
+        $routes = $document->relationLoaded('routes')
+            ? $document->routes
+            : $document->routes()->with('steps')->get();
+
+        if ($routes->isNotEmpty()) {
+            $document->setRelation('routes', $routes);
+            if ($allowBranch && $officeId !== null) {
+                $activeStep = $this->findRouteStepForOffice($document, (int) $officeId, 'in_progress');
+                if ($activeStep) {
+                    [, $step] = $activeStep;
+                    abort_if($routes->contains(fn (DocumentRoute $route) => (int) $route->parent_step_id === (int) $step->id), 403,
+                        'This office already used its branch and must make its own decision.');
+
+                    return $step;
+                }
+            }
+
+            $hasPendingRoutes = $routes->contains(fn (DocumentRoute $candidate) => $candidate->status === 'pending');
+            $rootRoute = $routes->whereNull('parent_step_id')->sortByDesc('id')->first();
+            $isRootOffice = $officeId !== null
+                && (int) ($rootRoute?->from_office_id ?? $document->office_id) === (int) $officeId;
+            $completedRoot = $rootRoute?->status === 'approved' && $isRootOffice;
+            $resubmittingAfterChanges = $allowBranch
+                && ($document->approval_status ?? null) === 'changes_requested'
+                && ! $hasPendingRoutes
+                && $isRootOffice;
+
+            abort_unless(! $hasPendingRoutes && ($completedRoot || $resubmittingAfterChanges), 403,
+                'Complete the active office decisions before forwarding this document.');
+
+            return null;
+        }
+
         $latest = $document->latestTrail;
+        $isUnroutedInitialRecord = ($document->approval_status ?? null) === 'awaiting_approval'
+            && $latest?->to_office_id === null
+            && strtolower((string) $latest?->status) === 'pending';
+        abort_unless(in_array($document->approval_status ?? 'not_required', ['approved', 'not_required'], true)
+            || $isUnroutedInitialRecord,
+            403,
+            'The current office must approve this document before it can be routed onward.'
+        );
+
         $holderOfficeId = $latest?->to_office_id ?? $document->office_id;
 
         abort_unless($officeId && strtolower((string) ($latest?->status ?? $document->status)) === 'pending'
             && (int) $holderOfficeId === (int) $officeId, 403);
+
+        return null;
     }
 
     private function documentFormOptions(): array
     {
+        $currentOfficeId = app(DocumentAccess::class)->currentOfficeId(auth()->user());
         $receivingOffices = Office::query()
             ->with('range:id,name')
             ->orderBy('name')
             ->get(['id', 'name', 'range_id', 'legacy_range_id'])
-            ->filter(fn (Office $office) => $this->officeIsInCurrentUserRange($office))
+            ->filter(fn (Office $office) => $this->officeIsInCurrentUserRange($office)
+                && (int) $office->id !== (int) $currentOfficeId)
             ->values();
-        $officesWithActiveUsers = User::query()
+        $officesWithActiveApprovers = User::query()
             ->whereIn('office_id', $receivingOffices->modelKeys())
             ->where('is_active', true)
-            ->distinct()
+            ->get()
+            ->filter(fn (User $user) => $user->isAdministrator() && $user->canReceiveDocuments())
             ->pluck('office_id')
+            ->unique()
             ->flip();
         $receivingOffices = $receivingOffices
             ->map(fn (Office $office) => [
                 'id' => (string) $office->id,
                 'name' => $office->name,
                 'source' => 'New DB',
-                'disabled' => ! $officesWithActiveUsers->has($office->id),
+                'disabled' => ! $officesWithActiveApprovers->has($office->id),
             ])
             ->values()
             ->all();
@@ -1296,11 +1696,225 @@ class DocumentController extends Controller
         }
 
         $officeId = app(DocumentAccess::class)->currentOfficeId($user);
+        $routes = $document->relationLoaded('routes')
+            ? $document->routes
+            : $document->routes()->with('steps')->get();
+        if ($routes->isNotEmpty()) {
+            if ($officeId === null) {
+                return false;
+            }
+            $document->setRelation('routes', $routes);
+
+            return $this->findRouteStepForOffice($document, (int) $officeId, 'in_progress') !== null;
+        }
+
         $latest = $document->latestTrail;
 
         return $officeId !== null
             && $latest !== null
             && strtolower((string) $latest->status) === 'pending'
+            && $latest->to_office_id !== null
+            && (int) $latest->to_office_id === $officeId;
+    }
+
+    private function canReceiveRouteStep(Document $document, User $user): bool
+    {
+        if (! $user->is_active || ! $user->canReceiveDocuments()
+            || $document->is_archived || $document->legacy_needs_review) {
+            return false;
+        }
+
+        $officeId = app(DocumentAccess::class)->currentOfficeId($user);
+        if ($officeId === null) {
+            return false;
+        }
+
+        $routes = $document->relationLoaded('routes')
+            ? $document->routes
+            : $document->routes()->with('steps')->get();
+        if ($routes->isEmpty()) {
+            return false;
+        }
+        $document->setRelation('routes', $routes);
+
+        return $this->findRouteStepForOffice($document, (int) $officeId, 'available') !== null;
+    }
+
+    private function findRouteStepForOffice(Document $document, int $officeId, string $status): ?array
+    {
+        $routes = $document->relationLoaded('routes')
+            ? $document->routes
+            : $document->routes()->with('steps')->get();
+
+        foreach ($routes->sortByDesc('id') as $route) {
+            if ($route->status !== 'pending') {
+                continue;
+            }
+            $step = $route->steps->first(fn (DocumentRouteStep $candidate) =>
+                (int) $candidate->office_id === $officeId && $candidate->status === $status
+            );
+            if (! $step) {
+                continue;
+            }
+            if ($route->mode === 'sequential'
+                && $route->steps->where('position', '<', $step->position)->contains(fn (DocumentRouteStep $previous) => $previous->status !== 'approved')) {
+                continue;
+            }
+
+            return [$route, $step];
+        }
+
+        return null;
+    }
+
+    private function canForwardDocument(Document $document, User $user): bool
+    {
+        if (! $user->is_active || $document->is_archived || $document->legacy_needs_review) {
+            return false;
+        }
+        $officeId = app(DocumentAccess::class)->currentOfficeId($user);
+        if ($officeId === null) {
+            return false;
+        }
+        $routes = $document->relationLoaded('routes')
+            ? $document->routes
+            : $document->routes()->with('steps')->get();
+        if ($routes->isNotEmpty()) {
+            $document->setRelation('routes', $routes);
+            $activeStep = $this->findRouteStepForOffice($document, (int) $officeId, 'in_progress');
+            if ($activeStep) {
+                [, $step] = $activeStep;
+
+                return ! $routes->contains(fn (DocumentRoute $route) => (int) $route->parent_step_id === (int) $step->id);
+            }
+
+            $hasPendingRoutes = $routes->contains(fn (DocumentRoute $route) => $route->status === 'pending');
+            $rootRoute = $routes->whereNull('parent_step_id')->sortByDesc('id')->first();
+            $isRootOffice = (int) ($rootRoute?->from_office_id ?? $document->office_id) === (int) $officeId;
+
+            return ! $hasPendingRoutes && $isRootOffice
+                && ($rootRoute?->status === 'approved'
+                    || (($document->approval_status ?? null) === 'changes_requested' && $rootRoute !== null));
+        }
+
+        $latest = $document->relationLoaded('latestTrail') ? $document->latestTrail : $document->latestTrail()->first();
+        $isInitialUnrouted = ($document->approval_status ?? null) === 'awaiting_approval'
+            && $latest?->to_office_id === null
+            && strtolower((string) $latest?->status) === 'pending';
+        $holderOfficeId = $latest?->to_office_id ?? $document->office_id;
+
+        return (in_array($document->approval_status ?? 'not_required', ['approved', 'not_required'], true)
+                || $isInitialUnrouted)
+            && strtolower((string) ($latest?->status ?? $document->status)) === 'pending'
+            && (int) $holderOfficeId === (int) $officeId;
+    }
+
+    private function canTagDocumentTerminal(Document $document, User $user): bool
+    {
+        $officeId = app(DocumentAccess::class)->currentOfficeId($user);
+        if (! $officeId) {
+            return false;
+        }
+        $routes = $document->relationLoaded('routes')
+            ? $document->routes
+            : $document->routes()->get();
+        if ($routes->isNotEmpty()) {
+            $rootRoute = $routes->whereNull('parent_step_id')->sortByDesc('id')->first();
+
+            return ! $routes->contains(fn (DocumentRoute $route) => $route->status === 'pending')
+                && $rootRoute?->status === 'approved'
+                && (int) $rootRoute->from_office_id === (int) $officeId;
+        }
+
+        $latest = $document->relationLoaded('latestTrail') ? $document->latestTrail : $document->latestTrail()->first();
+        $holderOfficeId = $latest?->to_office_id ?? $document->office_id;
+
+        return strtolower((string) ($latest?->status ?? $document->status)) === 'pending'
+            && (int) $holderOfficeId === (int) $officeId
+            && in_array($document->approval_status ?? 'not_required', ['approved', 'not_required'], true);
+    }
+
+    private function branchAncestorOfficeIds(DocumentRouteStep $parentStep): array
+    {
+        $officeIds = collect([(int) $parentStep->office_id]);
+        $step = $parentStep;
+        $seenRoutes = [];
+
+        while (true) {
+            $route = $step->relationLoaded('route') ? $step->route : $step->route()->with('steps')->first();
+            if (! $route || in_array($route->id, $seenRoutes, true)) {
+                break;
+            }
+            $seenRoutes[] = $route->id;
+            if ($route->from_office_id) {
+                $officeIds->push((int) $route->from_office_id);
+            }
+            $route->steps->each(fn (DocumentRouteStep $ancestorStep) => $officeIds->push((int) $ancestorStep->office_id));
+            $step = $route->parentStep()->with('route.steps')->first();
+            if (! $step) {
+                break;
+            }
+        }
+
+        return $officeIds->unique()->values()->all();
+    }
+
+    private function serializeRouteTree(Document $document, bool $public = false): array
+    {
+        $routes = $document->relationLoaded('routes')
+            ? $document->routes
+            : $document->routes()->with(['fromOffice', 'steps.office', 'steps.receiver', 'steps.decider'])->get();
+
+        $serializeRoute = function (DocumentRoute $route) use (&$serializeRoute, $routes, $public): array {
+            return [
+                'id' => $route->id,
+                'mode' => $route->mode,
+                'status' => $route->status,
+                'from_office' => $route->fromOffice?->name,
+                'parent_step_id' => $route->parent_step_id,
+                'steps' => $route->steps->map(function (DocumentRouteStep $step) use (&$serializeRoute, $routes, $public) {
+                    $serialized = [
+                        'id' => $step->id,
+                        'office_id' => $step->office_id,
+                        'office' => $step->office?->name,
+                        'position' => $step->position,
+                        'status' => $step->status,
+                        'child_routes' => $routes->where('parent_step_id', $step->id)->sortBy('id')
+                            ->map(fn (DocumentRoute $childRoute) => $serializeRoute($childRoute))->values()->all(),
+                    ];
+                    if (! $public) {
+                        $serialized += [
+                            'decision' => $step->decision,
+                            'remarks' => $step->decision_remarks,
+                            'received_by' => $step->receiver?->name,
+                            'received_at' => $step->received_at?->format('F j Y h:i:s A'),
+                            'decided_by' => $step->decider?->name,
+                            'decided_at' => $step->decided_at?->format('F j Y h:i:s A'),
+                        ];
+                    }
+
+                    return $serialized;
+                })->values()->all(),
+            ];
+        };
+
+        return $routes->whereNull('parent_step_id')->sortBy('id')
+            ->map(fn (DocumentRoute $route) => $serializeRoute($route))->values()->all();
+    }
+
+    private function canReceiveLegacyDocument(Document $document, User $user): bool
+    {
+        if (! $user->is_active || ! $user->canReceiveDocuments()
+            || $document->is_archived || $document->legacy_needs_review) {
+            return false;
+        }
+
+        $officeId = app(DocumentAccess::class)->currentOfficeId($user);
+        $latest = $document->latestTrail;
+
+        return $officeId !== null
+            && $latest !== null
+            && strtolower((string) $latest->status) === 'available'
             && $latest->to_office_id !== null
             && (int) $latest->to_office_id === $officeId;
     }
@@ -1377,9 +1991,63 @@ class DocumentController extends Controller
         return null;
     }
 
-    private function officeHasActiveUsers(Office $office): bool
+    private function officeHasActiveApprovers(Office $office, ?int $exceptUserId = null): bool
     {
-        return User::query()->where('office_id', $office->id)->where('is_active', true)->exists();
+        return User::query()
+            ->where('office_id', $office->id)
+            ->where('is_active', true)
+            ->get()
+            ->contains(fn (User $user) => $user->isAdministrator() && $user->canReceiveDocuments()
+                && (int) $user->id !== (int) $exceptUserId);
+    }
+
+    private function notifyRouteOffice(Document $document, DocumentRoute $route, Office $office): void
+    {
+        if (! GmailConnection::query()->exists()) {
+            return;
+        }
+
+        User::query()
+            ->where('office_id', $office->id)
+            ->where('is_active', true)
+            ->get()
+            ->filter(fn (User $user) => $user->isAdministrator() && $user->canReceiveDocuments()
+                && (int) $user->id !== (int) $document->created_by
+                && filter_var($user->email, FILTER_VALIDATE_EMAIL))
+            ->each(fn (User $user) => SendDocumentRouteNotification::dispatch(
+                recipientEmail: $user->email,
+                recipientName: $user->name,
+                documentId: (int) $document->id,
+                documentTitle: $document->title,
+                trackingNumber: $document->tracking_number,
+                officeName: $office->name,
+                event: 'approval_required',
+                routingMode: $route->mode,
+            )->afterCommit());
+    }
+
+    private function notifyRouteCreator(Document $document, DocumentRoute $route, Office $office, string $event, ?string $remarks = null): void
+    {
+        if (! $document->notify_by_email || ! GmailConnection::query()->exists()) {
+            return;
+        }
+
+        $creator = $document->creator()->first();
+        if (! $creator || ! filter_var($creator->email, FILTER_VALIDATE_EMAIL)) {
+            return;
+        }
+
+        SendDocumentRouteNotification::dispatch(
+            recipientEmail: $creator->email,
+            recipientName: $creator->name,
+            documentId: (int) $document->id,
+            documentTitle: $document->title,
+            trackingNumber: $document->tracking_number,
+            officeName: $office->name,
+            event: $event,
+            routingMode: $route->mode,
+            remarks: $remarks,
+        )->afterCommit();
     }
 
     private function storeDocumentFile(Document $document, UploadedFile $file, string $type, ?DocumentTrail $trail = null): string

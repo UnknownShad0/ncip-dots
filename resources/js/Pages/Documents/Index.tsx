@@ -6,9 +6,33 @@ import CrudAlertModal, { type WorkspaceAlertVariant } from '@/Components/Workspa
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
-import { Archive, ArrowDownUp, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, FilePlus2, FileSignature, FileText, Inbox, LoaderCircle, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
+import { Archive, ArrowDown, ArrowDownUp, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, FilePlus2, FileSignature, FileText, GripVertical, Inbox, LoaderCircle, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+
+type RouteTreeStep = {
+    id: number;
+    office_id: number;
+    office: string;
+    position: number;
+    status: string;
+    decision?: string | null;
+    remarks?: string | null;
+    received_by?: string | null;
+    received_at?: string | null;
+    decided_by?: string | null;
+    decided_at?: string | null;
+    child_routes?: RouteTree[];
+};
+
+type RouteTree = {
+    id: number;
+    mode: 'sequential' | 'parallel';
+    status: string;
+    from_office?: string | null;
+    parent_step_id?: number | null;
+    steps: RouteTreeStep[];
+};
 
 type DocumentItem = {
     id?: number | string | null;
@@ -46,6 +70,7 @@ type DocumentItem = {
     details_error?: string;
     created_at?: string;
     transactions?: Array<{
+        id?: number;
         action?: string | null;
         status?: string | null;
         remarks?: string | null;
@@ -58,6 +83,7 @@ type DocumentItem = {
         created_by?: string | null;
         created_by_short_name?: string | null;
         created_at?: string | null;
+        created_at_timestamp?: number | null;
     }>;
     office?: {
         name?: string;
@@ -76,6 +102,8 @@ type DocumentItem = {
     is_finalized?: boolean;
     can_update?: boolean;
     can_release?: boolean;
+    forwarding_under?: string | null;
+    forwarding_blocked_office_ids?: number[];
     can_terminal?: boolean;
     can_receive?: boolean;
     can_delete?: boolean;
@@ -83,6 +111,23 @@ type DocumentItem = {
     signature_status?: string;
     can_approve?: boolean;
     revision_draft_id?: number | null;
+    route_mode?: 'sequential' | 'parallel' | null;
+    route_status?: string | null;
+    route_from_office?: string | null;
+    route_steps?: Array<{
+        id: number;
+        office_id: number;
+        office: string;
+        position: number;
+        status: string;
+        decision?: string | null;
+        remarks?: string | null;
+        received_by?: string | null;
+        received_at?: string | null;
+        decided_by?: string | null;
+        decided_at?: string | null;
+    }>;
+    route_tree?: RouteTree[];
 };
 
 type LibraryOption = { id: number | string; name: string; source?: string; disabled?: boolean };
@@ -159,11 +204,16 @@ const getStatusClasses = (status?: string) => {
         case 'completed':
         case 'released':
         case 'processed':
-        case 'available':
         case 'done':
             return 'bg-success-soft text-success';
         case 'pending':
         case 'ongoing':
+        case 'available':
+        case 'waiting':
+        case 'in_progress':
+        case 'waiting_on_branch':
+        case 'paused':
+        case 'changes_requested':
             return 'bg-warning-soft text-warning';
         case 'rejected':
         case 'cancelled':
@@ -222,8 +272,9 @@ export default function DocumentsIndex({
     const [approvalError, setApprovalError] = useState('');
     const [printDocument, setPrintDocument] = useState<DocumentItem | null>(null);
     const [releasingRow, setReleasingRow] = useState<DocumentItem | null>(null);
-    const [releaseForm, setReleaseForm] = useState({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', source: 'current', approvedDraftId: '', file: null as File | null });
+    const [releaseForm, setReleaseForm] = useState({ actionTypeId: '', otherAction: '', routingMode: 'sequential' as 'sequential' | 'parallel', officeIds: [] as string[], remarks: '', source: 'current', approvedDraftId: '', file: null as File | null });
     const [releaseError, setReleaseError] = useState('');
+    const [draggedOfficeId, setDraggedOfficeId] = useState<string | null>(null);
     const [uploadError, setUploadError] = useState('');
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [search, setSearch] = useState(filters?.search ?? '');
@@ -269,7 +320,8 @@ export default function DocumentsIndex({
 
     const closeRelease = () => {
         if (processing) return;
-        const dirty = releaseForm.source !== 'current' || Object.entries(releaseForm).some(([key, value]) => key !== 'source' && Boolean(value));
+        const dirty = releaseForm.source !== 'current' || releaseForm.officeIds.length > 0 || releaseForm.remarks.length > 0
+            || Boolean(releaseForm.actionTypeId || releaseForm.otherAction || releaseForm.file);
         if (!dirty) { setReleasingRow(null); return; }
         setCrudAlert({ title: 'Discard forwarding details?', message: 'Your unsaved changes will be lost.', confirmLabel: 'Discard changes', isDestructive: true, onConfirm: () => { setCrudAlert(null); setReleasingRow(null); } });
     };
@@ -419,7 +471,7 @@ export default function DocumentsIndex({
 
         const selectedAction = actionTypes.find((action) => String(action.id) === releaseForm.actionTypeId);
         const needsOtherAction = selectedAction?.name.trim().toLowerCase() === 'others';
-        if (!releaseForm.actionTypeId || !releaseForm.officeId || (needsOtherAction && !releaseForm.otherAction.trim())) {
+        if (!releaseForm.actionTypeId || releaseForm.officeIds.length === 0 || (needsOtherAction && !releaseForm.otherAction.trim())) {
             setReleaseError('Complete the required fields before submitting.');
             return;
         }
@@ -440,30 +492,71 @@ export default function DocumentsIndex({
         const data = new FormData();
         data.append('action_type_id', releaseForm.actionTypeId);
         data.append('other_action', needsOtherAction ? releaseForm.otherAction.trim() : '');
-        data.append('to_office_id', releaseForm.officeId);
+        data.append('routing_mode', releaseForm.routingMode);
+        releaseForm.officeIds.forEach((officeId) => data.append('to_office_ids[]', officeId));
         data.append('remarks', releaseForm.remarks);
         data.append('document_source', releaseForm.source);
         if (releaseForm.source === 'upload' && releaseForm.file) data.append('file', releaseForm.file);
 
-        const selectedOffice = offices.find((office) => String(office.id) === releaseForm.officeId);
-        const isRelease = selectedAction?.name.trim().toLowerCase() === 'for release';
+        const selectedOffices = releaseForm.officeIds
+            .map((officeId) => offices.find((office) => String(office.id) === officeId)?.name)
+            .filter((officeName): officeName is string => Boolean(officeName));
         const documentReference = releasingRow.tracking_number || releasingRow.title || 'The document';
 
         setProcessing(true);
-        setFormError('');
+        setReleaseError('');
         router.post(`/documents/${releasingRow.id}/release`, data, {
             onFinish: () => setProcessing(false),
             onSuccess: () => {
                 setReleasingRow(null);
-                setReleaseForm({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', source: 'current', approvedDraftId: '', file: null });
+                setReleaseForm({ actionTypeId: '', otherAction: '', routingMode: 'sequential', officeIds: [], remarks: '', source: 'current', approvedDraftId: '', file: null });
                 setReleaseError('');
                 setCrudAlert({
-                    title: isRelease ? 'Document released' : 'Document forwarded',
-                    message: `${documentReference} was ${isRelease ? 'released to' : 'forwarded to'} ${selectedOffice?.name || 'the receiving office'}. You can follow its progress in the document history.`,
+                    title: 'Document routed',
+                    message: `${documentReference} was sent for ${releaseForm.routingMode} approval to ${selectedOffices.join(', ')}. Every listed office must approve.`,
                 });
             },
-            onError: (errors) => setReleaseError(errors.approved_draft_id ?? errors.document_source ?? errors.file ?? errors.other_action ?? errors.action_type_id ?? errors.to_office_id ?? errors.remarks ?? 'Could not release this document.'),
+            onError: (errors) => setReleaseError(Object.values(errors).join(' ') || 'Could not route this document.'),
         });
+    };
+
+    const toggleReleaseOffice = (officeId: string) => {
+        if (!releaseForm.officeIds.includes(officeId) && releaseForm.officeIds.length >= 30) {
+            setReleaseError('Choose no more than 30 offices.');
+            return;
+        }
+        setReleaseForm((current) => ({
+            ...current,
+            officeIds: current.officeIds.includes(officeId)
+                ? current.officeIds.filter((selected) => selected !== officeId)
+                : [...current.officeIds, officeId],
+        }));
+        setReleaseError('');
+    };
+
+    const moveReleaseOffice = (officeId: string, direction: -1 | 1) => {
+        setReleaseForm((current) => {
+            const currentIndex = current.officeIds.indexOf(officeId);
+            const nextIndex = currentIndex + direction;
+            if (currentIndex < 0 || nextIndex < 0 || nextIndex >= current.officeIds.length) return current;
+            const officeIds = [...current.officeIds];
+            [officeIds[currentIndex], officeIds[nextIndex]] = [officeIds[nextIndex], officeIds[currentIndex]];
+            return { ...current, officeIds };
+        });
+    };
+
+    const reorderReleaseOffice = (targetOfficeId: string) => {
+        if (!draggedOfficeId || draggedOfficeId === targetOfficeId) return;
+        setReleaseForm((current) => {
+            const officeIds = [...current.officeIds];
+            const fromIndex = officeIds.indexOf(draggedOfficeId);
+            const toIndex = officeIds.indexOf(targetOfficeId);
+            if (fromIndex < 0 || toIndex < 0) return current;
+            officeIds.splice(fromIndex, 1);
+            officeIds.splice(toIndex, 0, draggedOfficeId);
+            return { ...current, officeIds };
+        });
+        setDraggedOfficeId(null);
     };
 
     const fetchDocumentDetails = async (document: DocumentItem) => {
@@ -530,7 +623,7 @@ export default function DocumentsIndex({
 
     const openRelease = async (document: DocumentItem) => {
         setReleasingRow({ ...document, details_loading: true });
-        setReleaseForm({ actionTypeId: '', otherAction: '', officeId: '', remarks: '', source: 'current', approvedDraftId: '', file: null });
+        setReleaseForm({ actionTypeId: '', otherAction: '', routingMode: 'sequential', officeIds: [], remarks: '', source: 'current', approvedDraftId: '', file: null });
         setReleaseError('');
         try {
             const details = await fetchDocumentDetails(document);
@@ -719,6 +812,7 @@ export default function DocumentsIndex({
                             <option value="approved">Approved</option>
                             <option value="released">Released</option>
                             <option value="archived">Archived</option>
+                            <option value="changes_requested">Changes requested</option>
                             <option value="rejected">Rejected</option>
                         </select>
 
@@ -913,6 +1007,7 @@ export default function DocumentsIndex({
                             {viewingRow.details_loading && <p role="status" className="inline-flex items-center gap-2 rounded-lg bg-background p-3 text-sm text-muted"><LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading transaction history and attachments…</p>}
                             {viewingRow.details_error && <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{viewingRow.details_error}</p>}
                             <DocumentReferenceDetails document={viewingRow} loading={viewingRow.details_loading} />
+                            <DocumentRouteProgress document={viewingRow} />
 
                             {viewingRow.approval_status && viewingRow.approval_status !== 'not_required' && <section className="rounded-xl border border-border bg-background p-4" aria-label="Approval and signing status">
                                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -959,6 +1054,8 @@ export default function DocumentsIndex({
                         <div className="space-y-6 p-5 sm:p-6">
                             {releasingRow.details_loading && <p role="status" className="inline-flex items-center gap-2 rounded-lg bg-background p-3 text-sm text-muted"><LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading attachments…</p>}
                             <DocumentReferenceDetails document={releasingRow} loading={releasingRow.details_loading} />
+                            <DocumentRouteProgress document={releasingRow} />
+                            {releasingRow.forwarding_under && <p className="rounded-xl border border-primary/20 bg-secondary/50 px-4 py-3 text-sm text-foreground"><strong>{releasingRow.forwarding_under}</strong> will remain responsible for its own approval after this branch finishes. Offices already above this branch are disabled; use Request changes to return the document for adjustments.</p>}
                             <DocumentTransactionHistory transactions={releasingRow.transactions} loading={releasingRow.details_loading} />
 
                             <section className="grid gap-4 sm:grid-cols-2" aria-label="Release details">
@@ -975,13 +1072,75 @@ export default function DocumentsIndex({
                                         <input id="release-other-action" required maxLength={255} value={releaseForm.otherAction} onChange={(event) => { setReleaseForm({ ...releaseForm, otherAction: event.target.value }); setReleaseError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
                                     </div>
                                 )}
-                                <div>
-                                    <label htmlFor="release-office" className="mb-1 block text-sm font-medium text-foreground">Receiving office <span className="text-danger">*</span></label>
-                                    <select id="release-office" required value={releaseForm.officeId} onChange={(event) => { setReleaseForm({ ...releaseForm, officeId: event.target.value }); setReleaseError(''); }} className="w-full rounded-lg border border-border bg-surface py-2 pl-3 pr-10 text-sm">
-                                        <option value="">{offices.length ? 'Select receiving office' : `No receiving offices available${officeRangeLabel ? ` in ${officeRangeLabel}` : ' in your range'}`}</option>
-                                        {offices.map((office) => <option key={office.id} value={office.id} disabled={office.disabled}>{office.name}</option>)}
-                                    </select>
+                                <div className="sm:col-span-2">
+                                    <p className="mb-2 text-sm font-medium text-foreground">Routing type</p>
+                                    <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Routing type">
+                                        {([
+                                            ['sequential', 'Step by step', 'Each office acts after the previous office approves.'],
+                                            ['parallel', 'At the same time', 'All offices can review and approve independently.'],
+                                        ] as const).map(([mode, label, description]) => (
+                                            <button key={mode} type="button" aria-pressed={releaseForm.routingMode === mode} onClick={() => setReleaseForm({ ...releaseForm, routingMode: mode })} className={`rounded-xl border p-3 text-left ${releaseForm.routingMode === mode ? 'border-primary bg-secondary' : 'border-border bg-surface'}`}>
+                                                <span className="block text-sm font-semibold text-foreground">{label}</span>
+                                                <span className="mt-1 block text-xs text-muted">{description}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p className="mt-2 text-xs text-muted">Every selected office must approve.</p>
                                 </div>
+                                <div className="sm:col-span-2">
+                                    <p className="mb-2 text-sm font-medium text-foreground">Required offices <span className="text-danger">*</span><span className="ml-2 text-xs font-normal text-muted">Choose up to 30; every selected office must approve.</span></p>
+                                    <div className="grid max-h-52 gap-2 overflow-y-auto rounded-xl border border-border bg-background p-2 sm:grid-cols-2">
+                                        {offices.map((office) => {
+                                            const blockedByParentRoute = releasingRow.forwarding_blocked_office_ids?.includes(Number(office.id)) ?? false;
+                                            const unavailable = office.disabled || blockedByParentRoute;
+
+                                            return <label key={office.id} className={`flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2 text-sm ${unavailable || (releaseForm.officeIds.length >= 30 && !releaseForm.officeIds.includes(String(office.id))) ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${releaseForm.officeIds.includes(String(office.id)) ? 'border-primary bg-secondary' : 'border-border bg-surface'}`}>
+                                                <input type="checkbox" checked={releaseForm.officeIds.includes(String(office.id))} disabled={unavailable || (releaseForm.officeIds.length >= 30 && !releaseForm.officeIds.includes(String(office.id)))} onChange={() => toggleReleaseOffice(String(office.id))} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
+                                                <span className="text-foreground">{office.name}{blockedByParentRoute && <span className="ml-2 text-xs text-muted">Already above</span>}</span>
+                                            </label>;
+                                        })}
+                                        {offices.length === 0 && <p className="p-2 text-sm text-muted">No receiving offices are available{officeRangeLabel ? ` in ${officeRangeLabel}` : ' in your range'}.</p>}
+                                    </div>
+                                </div>
+                                {releaseForm.officeIds.length > 0 && (
+                                    <div className="sm:col-span-2">
+                                        <p className="mb-2 text-sm font-medium text-foreground">Route preview</p>
+                                        {releaseForm.routingMode === 'sequential' ? (
+                                            <ol className="space-y-2" aria-label="Sequential office order">
+                                                {releaseForm.officeIds.map((officeId, index) => {
+                                                    const office = offices.find((option) => String(option.id) === officeId);
+                                                    return <li key={officeId} draggable onDragStart={() => setDraggedOfficeId(officeId)} onDragOver={(event) => event.preventDefault()} onDrop={() => reorderReleaseOffice(officeId)} onDragEnd={() => setDraggedOfficeId(null)} className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3">
+                                                        <GripVertical size={17} className="shrink-0 cursor-grab text-muted" aria-label="Drag to reorder" />
+                                                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-white">{index + 1}</span>
+                                                        <span className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">{office?.name}</span>
+                                                        <div className="flex shrink-0 gap-1">
+                                                            <button type="button" disabled={index === 0} onClick={() => moveReleaseOffice(officeId, -1)} aria-label={`Move ${office?.name} up`} className="rounded-md p-2 text-muted hover:bg-secondary disabled:opacity-30"><ArrowUp size={15} /></button>
+                                                            <button type="button" disabled={index === releaseForm.officeIds.length - 1} onClick={() => moveReleaseOffice(officeId, 1)} aria-label={`Move ${office?.name} down`} className="rounded-md p-2 text-muted hover:bg-secondary disabled:opacity-30"><ArrowDown size={15} /></button>
+                                                            <button type="button" onClick={() => toggleReleaseOffice(officeId)} aria-label={`Remove ${office?.name}`} className="rounded-md p-2 text-muted hover:bg-danger-soft hover:text-danger"><X size={15} /></button>
+                                                        </div>
+                                                    </li>;
+                                                })}
+                                            </ol>
+                                        ) : (
+                                            <div className="rounded-xl border border-border bg-background p-4">
+                                                <div className="mx-auto w-fit rounded-xl border border-primary bg-surface px-4 py-2 text-sm font-semibold text-foreground">This document</div>
+                                                <div className="mx-auto h-6 w-px bg-border" aria-hidden="true" />
+                                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                                    {releaseForm.officeIds.map((officeId) => {
+                                                        const office = offices.find((option) => String(option.id) === officeId);
+                                                        return <div key={officeId} className="relative rounded-xl border border-primary/40 bg-surface p-3 text-center">
+                                                            <span className="absolute -top-3 left-1/2 h-3 w-px -translate-x-1/2 bg-border" aria-hidden="true" />
+                                                            <span className="mx-auto mb-2 block h-2.5 w-2.5 rounded-full bg-primary" aria-hidden="true" />
+                                                            <p className="break-words text-sm font-semibold text-foreground">{office?.name}</p>
+                                                            <p className="mt-1 text-xs text-muted">Required approval</p>
+                                                            <button type="button" onClick={() => toggleReleaseOffice(officeId)} className="mt-2 text-xs font-medium text-danger hover:underline">Remove</button>
+                                                        </div>;
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                                 <div className="sm:col-span-2">
                                     <label htmlFor="release-remarks" className="mb-1 block text-sm font-medium text-foreground">Remarks</label>
                                     <textarea id="release-remarks" maxLength={250} rows={3} value={releaseForm.remarks} onChange={(event) => setReleaseForm({ ...releaseForm, remarks: event.target.value })} className="w-full resize-y rounded-lg border border-border px-3 py-2 text-sm" />
@@ -1220,26 +1379,196 @@ function LibrarySelect({
     );
 }
 
+function DocumentRouteProgress({ document }: { document: DocumentItem }) {
+    const routes: RouteTree[] = document.route_tree?.length
+        ? document.route_tree
+        : document.route_steps?.length
+            ? [{
+                id: 0,
+                mode: document.route_mode || 'sequential',
+                status: document.route_status || 'pending',
+                from_office: document.route_from_office,
+                steps: document.route_steps.map((step) => ({ ...step, child_routes: [] })),
+            }]
+            : [];
+    if (routes.length === 0) return null;
+
+    const statusLabel = (status: string) => ({
+        waiting: 'Waiting',
+        available: 'Waiting to receive',
+        in_progress: 'In progress',
+        waiting_on_branch: 'Waiting on branch',
+        approved: 'Approved',
+        changes_requested: 'Changes requested',
+        rejected: 'Rejected',
+        paused: 'Paused',
+    }[status] ?? status.replaceAll('_', ' '));
+    const collectSteps = (items: RouteTree[]): RouteTreeStep[] => items.flatMap((route) => route.steps.flatMap((step) => [step, ...collectSteps(step.child_routes ?? [])]));
+    const allSteps = collectSteps(routes);
+    const approvedCount = allSteps.filter((step) => step.status === 'approved').length;
+    const rootRoute = routes[routes.length - 1];
+    const originOffice = document.route_from_office || rootRoute?.from_office || document.office_short_name || document.office_name || 'Originating office';
+
+    return (
+        <section className="overflow-hidden rounded-2xl border border-border bg-background" aria-label="Office approval route">
+            <div className="border-b border-border bg-gradient-to-br from-primary/10 via-surface to-background p-4 sm:p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">Route map</p>
+                        <h3 className="mt-1 text-base font-semibold text-foreground">Office approval route</h3>
+                        <p className="mt-1 text-sm text-muted">Every listed office must approve. Forwarded offices appear as smaller branches, and the parent office still makes its own decision.</p>
+                    </div>
+                    <span className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${getStatusClasses(document.status || 'pending')}`}>{statusLabel(document.status || 'pending')}</span>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted">
+                    <span><strong className="text-foreground">{allSteps.length}</strong> {allSteps.length === 1 ? 'office' : 'offices'}</span>
+                    <span><strong className="text-success">{approvedCount}</strong> approved</span>
+                    <span><strong className="text-foreground">{allSteps.length - approvedCount}</strong> remaining</span>
+                </div>
+            </div>
+
+            <div className="p-4 sm:p-5">
+                <div className="relative rounded-xl border border-primary/20 bg-surface p-3 sm:p-4">
+                    <span className="absolute -bottom-5 left-6 h-5 w-px bg-primary/30" aria-hidden="true" />
+                    <div className="flex items-center gap-3">
+                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary text-white"><FileText size={19} aria-hidden="true" /></span>
+                        <div className="min-w-0">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Route started from</p>
+                            <p className="break-words text-sm font-semibold text-foreground">{originOffice}</p>
+                            <p className="mt-0.5 break-all font-mono text-xs text-muted">{document.tracking_number || document.title}</p>
+                        </div>
+                        <span className="ml-auto hidden rounded-full bg-secondary px-2.5 py-1 text-[11px] font-semibold capitalize text-primary sm:inline-flex">{routes.length} {routes.length === 1 ? 'route' : 'routes'}</span>
+                    </div>
+                </div>
+
+                <div className="mt-6 space-y-4">
+                    {routes.map((route, index) => <RouteTreeGroup key={route.id} route={route} statusLabel={statusLabel} depth={0} round={index + 1} />)}
+                </div>
+            </div>
+        </section>
+    );
+}
+
+function RouteTreeGroup({ route, statusLabel, depth, round }: { route: RouteTree; statusLabel: (status: string) => string; depth: number; round?: number }) {
+    const isParallel = route.mode === 'parallel';
+
+    return <section className={depth > 0 ? 'rounded-xl border border-border bg-background p-3 sm:p-4' : ''} aria-label={depth > 0 ? `Forwarded route from ${route.from_office || 'office'}` : `Route round ${round}`}>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div>
+                <p className="text-xs font-semibold text-foreground">{depth > 0 ? `${isParallel ? 'Parallel branch' : 'Step by step branch'}` : `Route ${round}`}</p>
+                <p className="text-[11px] text-muted">{isParallel ? 'Parallel · offices can act independently' : 'Step by step · next office waits for approval'}</p>
+            </div>
+            <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${getStatusClasses(route.status)}`}>{statusLabel(route.status)}</span>
+        </div>
+        <ol className="relative space-y-3 pl-7" aria-label={isParallel ? 'Parallel office branches' : 'Sequential office steps'}>
+            {route.steps.length > 1 && <span className="absolute bottom-5 left-[11px] top-5 w-px bg-gradient-to-b from-primary/40 via-border to-border" aria-hidden="true" />}
+            {route.steps.map((step) => {
+                const isActive = ['in_progress', 'available', 'waiting_on_branch'].includes(step.status);
+                const markerClass = step.status === 'approved'
+                    ? 'border-success bg-success'
+                    : ['rejected', 'changes_requested'].includes(step.status)
+                        ? 'border-danger bg-danger'
+                        : isActive
+                            ? 'border-primary bg-primary ring-4 ring-primary/10'
+                            : 'border-border bg-surface';
+
+                return <li key={step.id} className="relative">
+                    <span className={`absolute -left-[28px] top-5 z-[1] h-3.5 w-3.5 rounded-full border-2 ${markerClass}`} aria-hidden="true" />
+                    <span className="absolute -left-3.5 top-[26px] w-3.5 border-t border-border" aria-hidden="true" />
+                    <RouteOfficeCard step={step} statusLabel={statusLabel} branch={isParallel} compact={depth > 0} />
+                    {step.child_routes?.length ? <div className="relative ml-5 mt-3 border-l-2 border-dashed border-primary/35 pl-4 sm:ml-6 sm:pl-5">
+                        <span className="absolute -left-[2px] -top-3 h-3 border-l-2 border-dashed border-primary/35" aria-hidden="true" />
+                        <span className="absolute -left-5 top-0 w-5 border-t-2 border-dashed border-primary/35 sm:-left-6 sm:w-6" aria-hidden="true" />
+                        <p className="mb-2 inline-flex rounded-full bg-primary/5 px-2.5 py-1 text-[11px] font-semibold text-primary">Forwarded by {step.office}</p>
+                        <div className="space-y-3">{step.child_routes.map((child) => <RouteTreeGroup key={child.id} route={child} statusLabel={statusLabel} depth={depth + 1} />)}</div>
+                    </div> : null}
+                </li>;
+            })}
+        </ol>
+    </section>;
+}
+
+function RouteOfficeCard({
+    step,
+    statusLabel,
+    branch = false,
+    compact = false,
+}: {
+    step: RouteTreeStep;
+    statusLabel: (status: string) => string;
+    branch?: boolean;
+    compact?: boolean;
+}) {
+    const isActive = ['available', 'in_progress', 'waiting_on_branch'].includes(step.status);
+    const isDecision = ['approved', 'changes_requested', 'rejected'].includes(step.status);
+    const childBranchApproved = step.child_routes?.some((route) => route.status === 'approved');
+
+    return (
+        <div className={`rounded-xl border transition-colors ${compact ? 'p-3' : 'p-3.5 sm:p-4'} ${isActive ? 'border-primary/40 bg-primary/5 shadow-sm' : step.status === 'approved' ? 'border-success/25 bg-success-soft/30' : 'border-border bg-surface'}`}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-3">
+                    <span className={`grid shrink-0 place-items-center rounded-lg font-bold ${compact ? 'h-7 w-7 text-[11px]' : 'h-8 w-8 text-xs'} ${isDecision && step.status === 'approved' ? 'bg-success-soft text-success' : isActive ? 'bg-primary text-white' : 'bg-background text-muted'}`}>{step.position}</span>
+                    <div className="min-w-0">
+                        <p className={`break-words font-semibold text-foreground ${compact ? 'text-xs' : 'text-sm'}`}>{step.office || 'Office unavailable'}</p>
+                        <p className="mt-0.5 text-xs text-muted">{branch ? `Branch ${step.position}` : `Step ${step.position}`}</p>
+                    </div>
+                </div>
+                <span className={`shrink-0 rounded-full font-semibold capitalize ${compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'} ${getStatusClasses(step.status)}`}>{statusLabel(step.status)}</span>
+            </div>
+            {step.status === 'waiting_on_branch' && <p className="mt-3 text-xs text-muted">This office is waiting for its forwarded offices to finish.</p>}
+            {childBranchApproved && step.status === 'in_progress' && <p className="mt-3 rounded-lg bg-success-soft/50 px-3 py-2 text-xs font-medium text-success">Forwarded branch complete. This office still needs to approve.</p>}
+            {(step.decided_by || step.received_by || step.decided_at || step.received_at) && <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-border/70 pt-2.5 text-xs text-muted">
+                {(step.decided_by || step.received_by) && <span>{isDecision ? 'Decision by' : 'Received by'} <strong className="font-medium text-foreground">{step.decided_by || step.received_by}</strong></span>}
+                {(step.decided_at || step.received_at) && <span>{isDecision ? 'Decided' : 'Received'} {step.decided_at || step.received_at}</span>}
+            </div>}
+            {step.remarks && <p className="mt-3 whitespace-pre-wrap break-words rounded-lg border border-border bg-background px-3 py-2 text-xs leading-relaxed text-foreground">{step.remarks}</p>}
+        </div>
+    );
+}
+
 function DocumentTransactionHistory({ transactions, loading = false }: { transactions?: DocumentItem['transactions']; loading?: boolean }) {
     return (
         <section aria-label="Transaction history">
-            <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="font-semibold text-foreground">Transaction history</h3>
-                <span className="text-xs text-muted">{transactions?.length ?? 0} transactions</span>
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                <div>
+                    <h3 className="font-semibold text-foreground">Activity timeline</h3>
+                    <p className="mt-0.5 text-xs text-muted">Newest activity appears first.</p>
+                </div>
+                <span className="rounded-full bg-background px-2.5 py-1 text-xs font-medium text-muted">{transactions?.length ?? 0} events</span>
             </div>
             {transactions?.length ? (
-                <div className="overflow-x-auto rounded-xl border border-border" tabIndex={0} role="region" aria-label="Transaction history table; scroll horizontally for more columns">
-                    <table className="w-full min-w-[760px] border-collapse text-left text-sm">
-                        <thead className="bg-background text-xs uppercase tracking-wide text-muted"><tr><th className="px-3 py-3 font-semibold">Action</th><th className="px-3 py-3 font-semibold">Status</th><th className="px-3 py-3 font-semibold">Office movement</th><th className="px-3 py-3 font-semibold">User</th><th className="px-3 py-3 font-semibold">Date</th></tr></thead>
-                        <tbody className="divide-y divide-border">{transactions.map((transaction, index) => <tr key={`${transaction.created_at ?? 'transaction'}-${index}`}>
-                            <td className="px-3 py-3 font-medium text-foreground">{transaction.action || transaction.status || 'Transaction'}</td>
-                            <td className="px-3 py-3 capitalize text-foreground">{transaction.status || '—'}</td>
-                            <td className="px-3 py-3 text-foreground">{[transaction.from_office_short_name || transaction.from_office, transaction.to_office_short_name || transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder_short_name || transaction.holder ? `Held by ${transaction.holder_short_name || transaction.holder}` : 'Office details unavailable')}</td>
-                            <td className="px-3 py-3 text-foreground">{transaction.created_by_short_name || transaction.created_by || '—'}</td>
-                            <td className="px-3 py-3 whitespace-nowrap text-foreground">{transaction.created_at || '—'}</td>
-                        </tr>)}</tbody>
-                    </table>
-                </div>
+                <ol className="relative space-y-3" aria-label="Document activity, newest first">
+                    {transactions.map((transaction, index) => {
+                        const fromOffice = transaction.from_office_short_name || transaction.from_office;
+                        const toOffice = transaction.to_office_short_name || transaction.to_office;
+                        const holder = transaction.holder_short_name || transaction.holder;
+                        const actor = transaction.created_by_short_name || transaction.created_by;
+
+                        return <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="relative pl-7">
+                            {index < transactions.length - 1 && <span className="absolute bottom-[-14px] left-[9px] top-3 w-px bg-border" aria-hidden="true" />}
+                            <span className={`absolute left-0 top-3 h-[19px] w-[19px] rounded-full border-[5px] border-surface ring-1 ring-border ${transaction.status === 'approved' ? 'bg-success' : ['rejected', 'changes_requested'].includes(transaction.status ?? '') ? 'bg-danger' : 'bg-primary'}`} aria-hidden="true" />
+                            <article className="rounded-xl border border-border bg-surface p-3.5 sm:p-4">
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <h4 className="break-words text-sm font-semibold text-foreground">{transaction.action || transaction.status || 'Document activity'}</h4>
+                                        {transaction.status && <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${getStatusClasses(transaction.status)}`}>{transaction.status.replaceAll('_', ' ')}</span>}
+                                    </div>
+                                    <time className="shrink-0 text-xs text-muted">{transaction.created_at || 'Date unavailable'}</time>
+                                </div>
+                                {(fromOffice || toOffice || holder) && <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-background px-3 py-2 text-xs">
+                                    {fromOffice && <span className="font-medium text-foreground">{fromOffice}</span>}
+                                    {fromOffice && toOffice && <span className="text-primary" aria-label="to">→</span>}
+                                    {toOffice && <span className="font-medium text-foreground">{toOffice}</span>}
+                                    {!fromOffice && !toOffice && holder && <span className="text-muted">Held by <strong className="font-medium text-foreground">{holder}</strong></span>}
+                                </div>}
+                                {(actor || transaction.remarks) && <div className="mt-3 space-y-2 text-xs text-muted">
+                                    {actor && <p>Recorded by <strong className="font-medium text-foreground">{actor}</strong></p>}
+                                    {transaction.remarks && <p className="whitespace-pre-wrap break-words rounded-lg border border-border bg-background px-3 py-2 leading-relaxed text-foreground">{transaction.remarks}</p>}
+                                </div>}
+                            </article>
+                        </li>;
+                    })}
+                </ol>
             ) : loading ? null : <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">No transactions recorded.</p>}
         </section>
     );

@@ -90,6 +90,16 @@ class Document extends Model
         return $this->hasOne(DocumentTrail::class)->latestOfMany();
     }
 
+    public function routes(): HasMany
+    {
+        return $this->hasMany(DocumentRoute::class);
+    }
+
+    public function latestRoute(): HasOne
+    {
+        return $this->hasOne(DocumentRoute::class)->latestOfMany();
+    }
+
     public function scopeArchived(Builder $query, ?int $year = null): Builder
     {
         $query->where('is_archived', true);

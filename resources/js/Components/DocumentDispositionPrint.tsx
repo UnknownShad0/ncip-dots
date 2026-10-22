@@ -14,7 +14,11 @@ type DocumentItem = {
     documentType?: { name?: string } | null;
     other_document_type?: string | null;
     purpose_type?: string;
+    route_mode?: 'sequential' | 'parallel' | null;
+    route_status?: string | null;
+    route_steps?: Array<{ office?: string | null; position: number; status: string }>;
     transactions?: Array<{
+        id?: number;
         action?: string | null;
         status?: string | null;
         remarks?: string | null;
@@ -27,6 +31,7 @@ type DocumentItem = {
         created_by?: string | null;
         created_by_short_name?: string | null;
         created_at?: string | null;
+        created_at_timestamp?: number | null;
     }>;
 };
 
@@ -39,20 +44,30 @@ const getDocumentTypeName = (document: any): string => {
 };
 type DispositionPrintBlock = {
     key: string;
-    type: 'title' | 'fields' | 'remarks-value' | 'trail-remarks' | 'trail-action';
+    type: 'title' | 'fields' | 'remarks-value' | 'route-history-heading' | 'route-history-row' | 'pending-office-heading' | 'pending-office-row';
     text?: string;
     start?: number;
     end?: number;
+    date?: string;
+    office?: string;
+    action?: string;
+    handledBy?: string;
+    status?: string;
+    remarks?: string;
 };
 const DISPOSITION_PAGE_BODY_HEIGHT = 700;
 
 export default function DocumentDispositionPrint({ document }: { document: DocumentItem }) {
-    const transactions = document.transactions ?? [];
-    const latest = transactions[0];
+    const transactions = [...(document.transactions ?? [])].sort((left, right) => {
+        const leftTime = left.created_at_timestamp ?? 0;
+        const rightTime = right.created_at_timestamp ?? 0;
+        return leftTime - rightTime || (left.id ?? 0) - (right.id ?? 0);
+    });
+    const latest = transactions.at(-1);
     const measure = useRef<HTMLDivElement>(null);
     const [pages, setPages] = useState<DispositionPrintBlock[][]>([]);
     const [portalRoot, setPortalRoot] = useState<HTMLDivElement | null>(null);
-    const trailBlocks = transactions.flatMap((entry, index) => {
+    const routeHistoryBlocks: DispositionPrintBlock[] = transactions.map((entry, index) => {
         const actionType = (entry.action || entry.status || '').toLowerCase();
         const fromOffice = entry.from_office_short_name || entry.from_office;
         const toOffice = entry.to_office_short_name || entry.to_office;
@@ -62,20 +77,42 @@ export default function DocumentDispositionPrint({ document }: { document: Docum
             : actionType.includes('receiv')
                 ? toOffice || holder || fromOffice
                 : holder || fromOffice || toOffice;
-        return [
-            ...(entry.remarks ? [{ key: `trail-remarks-${index}`, type: 'trail-remarks' as const, text: `Remarks: '${entry.remarks}'` }] : []),
-            {
-                key: `trail-action-${index}`,
-                type: 'trail-action' as const,
-                text: `✔ ${entry.action || entry.status || 'Processed'} by ${entry.created_by_short_name || entry.created_by || 'Unknown user'} of ${office || 'Unknown office'}${entry.created_at ? ` at ${entry.created_at}` : ''}`,
-            },
-        ];
+
+        return {
+            key: `chronological-trail-${entry.id ?? index}`,
+            type: 'route-history-row',
+            date: entry.created_at || 'Date unavailable',
+            office: office || 'Office unavailable',
+            action: entry.action || 'Processed',
+            status: entry.status || '',
+            handledBy: entry.created_by_short_name || entry.created_by || 'Unknown user',
+            remarks: entry.remarks || '',
+        };
     });
+    const pendingOfficeSteps = (document.route_steps ?? []).filter((step) => ['waiting', 'available', 'in_progress', 'paused'].includes(step.status));
+    const pendingOfficeBlocks: DispositionPrintBlock[] = pendingOfficeSteps.length
+        ? pendingOfficeSteps.map((step) => ({
+            key: `pending-office-${step.position}`,
+            type: 'pending-office-row',
+            office: step.office || 'Office unavailable',
+            status: step.status.replaceAll('_', ' '),
+        }))
+        : [{
+            key: 'pending-office-none',
+            type: 'pending-office-row',
+            office: 'No offices waiting',
+            status: document.route_status === 'approved' ? 'All offices approved' : 'No multi-office route',
+        }];
     const blocks: DispositionPrintBlock[] = [
         { key: 'title', type: 'title' },
         { key: 'fields', type: 'fields' },
         ...(document.remarks ? [{ key: 'remarks-value', type: 'remarks-value' as const, text: document.remarks }] : []),
-        ...trailBlocks,
+        { key: 'route-history-heading', type: 'route-history-heading' },
+        ...(routeHistoryBlocks.length ? routeHistoryBlocks : [{ key: 'route-history-empty', type: 'route-history-row' as const, action: 'No routing activity recorded' }]),
+        ...(document.route_steps?.length ? [
+            { key: 'pending-office-heading', type: 'pending-office-heading' as const },
+            ...pendingOfficeBlocks,
+        ] : []),
     ];
     const serialized = JSON.stringify(blocks);
     const image = (name: string) => `/images/${name}`;
@@ -174,8 +211,8 @@ export default function DocumentDispositionPrint({ document }: { document: Docum
             <tbody>
                 <tr>
                     <td className="field-label">TO/FOR:</td>
-                    <td className="field-value">{latest?.to_office_short_name || latest?.to_office || 'Not specified'}</td>
-                    <td className="qr-cell" rowSpan={6}>
+                    <td className="field-value">{document.route_steps?.map((step) => step.office).filter(Boolean).join(', ') || latest?.to_office_short_name || latest?.to_office || 'Not specified'}</td>
+                    <td className="qr-cell" rowSpan={7}>
                         <div className="disposition-qr">{document.tracking_url ? <QRCode value={document.tracking_url} size={88} level="M" bgColor="#ffffff" fgColor="#111827" /> : 'No tracking URL'}</div>
                         <div className="disposition-qr-note"><strong>DOTS No.:</strong><br />{document.tracking_number || 'Not assigned'}</div>
                     </td>
@@ -185,20 +222,39 @@ export default function DocumentDispositionPrint({ document }: { document: Docum
                 <tr><td className="field-label">PURPOSE:</td><td className="field-value">{document.purpose_type || 'For Appropriate Action'}</td></tr>
                 <tr><td className="field-label">DOCUMENT:</td><td className="field-value">{getDocumentTypeName(document) || 'No document attached'}</td></tr>
                 <tr><td className="field-label">DATE CREATED:</td><td className="field-value">{document.created_at || '—'}</td></tr>
+                <tr><td className="field-label">ROUTING:</td><td className="field-value">{document.route_mode ? `${document.route_mode} · ${document.route_status || 'pending'}` : 'Standard office routing'}</td></tr>
             </tbody>
         </table>;
+        if (block.type === 'route-history-heading') return <>
+            <h2 className="disposition-section-heading">ROUTING HISTORY</h2>
+            <div className="disposition-history-heading" role="row">
+                <strong>Date and time</strong><strong>Office</strong><strong>Action / status</strong><strong>Handled by</strong><strong>Remarks</strong>
+            </div>
+        </>;
+        if (block.type === 'route-history-row') return <div className="disposition-history-row" role="row">
+            <span>{block.date || '—'}</span>
+            <span>{block.office || '—'}</span>
+            <span>{block.action || 'Processed'}{block.status ? ` (${block.status})` : ''}</span>
+            <span>{block.handledBy || '—'}</span>
+            <span>{block.remarks || '—'}</span>
+        </div>;
+        if (block.type === 'pending-office-heading') return <>
+            <h2 className="disposition-section-heading">PENDING OFFICES</h2>
+            <div className="disposition-pending-heading" role="row"><strong>Office</strong><strong>Status</strong></div>
+        </>;
+        if (block.type === 'pending-office-row') return <div className="disposition-pending-row" role="row">
+            <span>{block.office || '—'}</span><span>{block.status || 'Pending'}</span>
+        </div>;
         const start = block.start ?? 0;
         const end = block.end ?? block.text?.length ?? 0;
         const text = block.text?.slice(start, end);
-        const isLastPiece = end === block.text?.length;
         if (block.type === 'remarks-value') return <section className="disposition-remarks">
             <div className="disposition-remarks-heading">
                 {start === 0 && <strong className="disposition-remarks-label">REMARKS:</strong>}
                 <div className="disposition-remarks-value" data-disposition-text>{text}</div>
             </div>
         </section>;
-        if (block.type === 'trail-remarks') return <div className={`disposition-trail-remarks ${start === 0 ? 'disposition-trail-first-piece' : ''} ${isLastPiece ? 'disposition-trail-last-piece' : ''}`} data-disposition-text>{text}</div>;
-        return <div className={`disposition-trail-action ${isLastPiece ? 'disposition-trail-last-piece' : ''}`} data-disposition-text>{text}</div>;
+        return null;
     };
 
     const renderFooter = (pageIndex: number) => <footer className="disposition-footer">
@@ -240,6 +296,14 @@ export default function DocumentDispositionPrint({ document }: { document: Docum
                 .disposition-remarks-heading { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 8px; line-height: 1.4; }
                 .disposition-remarks-label { flex: 0 0 .8in; font-size: 7.4pt; font-weight: bold; text-transform: uppercase; }
                 .disposition-remarks-value { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+                .disposition-section-heading { margin: 12px 0 4px; border-bottom: 1px solid #777; padding-bottom: 3px; font-size: 8pt; font-weight: bold; letter-spacing: .04em; break-after: avoid; }
+                .disposition-history-heading, .disposition-history-row { display: grid; grid-template-columns: .95in 1.05in 1.35in 1.05in minmax(0, 1fr); gap: 5px; padding: 5px 4px; font-size: 6.8pt; line-height: 1.3; }
+                .disposition-history-heading { border-bottom: 1px solid #777; background: #f2f2f2; }
+                .disposition-history-row { border-bottom: 1px solid #d0d0d0; break-inside: avoid; }
+                .disposition-history-heading strong, .disposition-history-row span, .disposition-pending-heading strong, .disposition-pending-row span { min-width: 0; overflow-wrap: anywhere; }
+                .disposition-pending-heading, .disposition-pending-row { display: grid; grid-template-columns: 2fr 1fr; gap: 6px; padding: 4px; font-size: 7pt; line-height: 1.3; }
+                .disposition-pending-heading { border-bottom: 1px solid #777; background: #f2f2f2; }
+                .disposition-pending-row { border-bottom: 1px solid #d0d0d0; break-inside: avoid; }
                 .disposition-trail-remarks { margin: 4px 0 12px .3in; line-height: 1.45; overflow-wrap: anywhere; }
                 .disposition-trail-remarks:not(.disposition-trail-first-piece) { margin-top: 0; }
                 .disposition-trail-remarks:not(.disposition-trail-last-piece) { margin-bottom: 0; }
