@@ -20,6 +20,8 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'administrator' => \App\Http\Middleware\EnsureAdministrator::class,
+            'navigation.visible' => \App\Http\Middleware\EnsureNavigationVisible::class,
+            'super.admin' => \App\Http\Middleware\EnsureSuperAdmin::class,
             'active.user' => \App\Http\Middleware\EnsureActiveUser::class,
         ]);
 

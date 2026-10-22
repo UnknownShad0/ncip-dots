@@ -108,6 +108,17 @@ class User extends Authenticatable
         return in_array((int) $this->role_id, [1, 2], true);
     }
 
+    public function isSuperAdmin(): bool
+    {
+        if ($this->role_id !== null) {
+            return (int) $this->role_id === 1;
+        }
+
+        $role = Str::of((string) $this->role)->lower()->replace(['_', '-'], ' ')->squish()->toString();
+
+        return in_array($role, ['system admin', 'super admin'], true);
+    }
+
     public function canReceiveDocuments(): bool
     {
         // A stored role ID is authoritative; names support accounts without one.

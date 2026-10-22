@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Services\AuditTrailWriter;
+use App\Services\NavigationAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -45,14 +46,47 @@ class AuthenticatedSessionController extends Controller
         app(AuditTrailWriter::class)->record('login.succeeded', $request->user());
         $request->session()->regenerate();
         $request->session()->put('privacy_notice_login_id', (string) Str::uuid());
+        $navigationAccess = app(NavigationAccess::class);
+        $landingRoute = $navigationAccess->firstVisibleRoute($request->user());
+
+        if ($this->intendedRouteIsHidden($request, $navigationAccess)) {
+            $request->session()->forget('url.intended');
+
+            return redirect()->route($landingRoute);
+        }
 
         if (! $request->user()->canManageLibraries() && $this->intendedRouteRequiresAdministrator($request)) {
             $request->session()->forget('url.intended');
 
-            return redirect()->route('dashboard');
+            return redirect()->route($landingRoute);
         }
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        return redirect()->intended(route($landingRoute, absolute: false));
+    }
+
+    private function intendedRouteIsHidden(Request $request, NavigationAccess $navigationAccess): bool
+    {
+        $intendedUrl = $request->session()->get('url.intended');
+        if (! is_string($intendedUrl) || $intendedUrl === '' || $request->user()->isSuperAdmin()) {
+            return false;
+        }
+
+        try {
+            $intendedRequest = Request::create($intendedUrl);
+            $intendedRoute = app('router')->getRoutes()->match($intendedRequest);
+            $intendedRequest->setRouteResolver(fn () => $intendedRoute);
+        } catch (NotFoundHttpException|MethodNotAllowedHttpException) {
+            return false;
+        }
+
+        $keys = $navigationAccess->accessKeysForRequest($intendedRequest, $request->user());
+        if ($keys === null) {
+            return false;
+        }
+
+        $visibility = $navigationAccess->forUser($request->user());
+
+        return ! collect($keys)->contains(fn (string $key) => ($visibility[$key] ?? false) === true);
     }
 
     private function intendedRouteRequiresAdministrator(Request $request): bool

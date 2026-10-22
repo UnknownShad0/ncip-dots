@@ -14,6 +14,7 @@ use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\GmailIntegrationController;
 use App\Http\Controllers\HrisEmployeeController;
 use App\Http\Controllers\IplumaController;
+use App\Http\Controllers\NavigationAccessController;
 use App\Http\Controllers\OfficeController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicDocumentTrackingController;
@@ -29,7 +30,7 @@ Route::get('/track/{trackingNumber}', [PublicDocumentTrackingController::class, 
     ->middleware(['signed', 'throttle:30,1'])
     ->name('documents.track');
 
-Route::middleware(['auth', 'active.user', 'verified'])->group(function () {
+Route::middleware(['auth', 'active.user', 'verified', 'navigation.visible'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::get('/documents', [DocumentController::class, 'index'])->name('documents.index');
@@ -108,6 +109,12 @@ Route::middleware(['auth', 'active.user', 'verified'])->group(function () {
         Route::post('/user-accounts/lookup-employee', [UserAccountController::class, 'lookupEmployee'])->middleware('throttle:20,1')->name('user-accounts.lookup-employee');
         Route::post('/user-accounts', [UserAccountController::class, 'store'])->name('user-accounts.store');
         Route::put('/user-accounts/{id}', [UserAccountController::class, 'update'])->name('user-accounts.update');
+
+    });
+
+    Route::middleware('super.admin')->group(function () {
+        Route::get('/navigation-access', [NavigationAccessController::class, 'index'])->name('navigation-access.index');
+        Route::put('/navigation-access', [NavigationAccessController::class, 'update'])->name('navigation-access.update');
     });
 
     Route::get('/connected-systems', fn () => \Inertia\Inertia::render('ConnectedSystems/Index'))->name('connected-systems.index');

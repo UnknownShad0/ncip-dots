@@ -1,5 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     ArrowRight,
     ChevronRight,
@@ -122,6 +122,7 @@ export default function Index({ search: initialSearch = '', readyDocuments = [],
     approvedPagination: Page;
     canReview?: boolean;
 }) {
+    const { navigationVisibility } = usePage().props as any;
     const [search, setSearch] = useState(initialSearch);
     const [activeQueue, setActiveQueue] = useState<QueueKey | null>(null);
 
@@ -178,7 +179,7 @@ export default function Index({ search: initialSearch = '', readyDocuments = [],
                 ? <Link href={route('document-creation.index', { edit_draft_id: document.id })} className="dots-button-primary inline-flex min-h-10 items-center gap-2">Revise document<ArrowRight size={15} aria-hidden="true" /></Link>
                 : <>
                     <Link href={route('document-creation.index', { edit_draft_id: document.id })} className="dots-button-secondary inline-flex min-h-10 items-center">Edit</Link>
-                    <Link href={route('documents.index', { create_routing_draft_id: document.id })} className="dots-button-primary inline-flex min-h-10 items-center gap-2">Create routing record<ArrowRight size={15} aria-hidden="true" /></Link>
+                    {navigationVisibility?.all_documents === true && <Link href={route('documents.index', { create_routing_draft_id: document.id })} className="dots-button-primary inline-flex min-h-10 items-center gap-2">Create routing record<ArrowRight size={15} aria-hidden="true" /></Link>}
                 </>}
         />);
     } else if (activeQueue === 'approvals') {

@@ -2,35 +2,36 @@ import { connectedSystems } from '@/Components/ConnectedSystemNavigation';
 import { libraryLinks } from '@/Components/LibraryNavigation';
 import { Head, Link, usePage } from '@inertiajs/react';
 import { Dialog, DialogPanel, DialogTitle, Menu as DropdownMenu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
-import { Archive, Bell, Building2, ChevronDown, ClipboardCheck, Clock3, Database, FileClock, FilePlus2, FileText, Folder, History, Inbox, LayoutGrid, LogOut, Mail, Menu, UserRound, X, BookOpen, PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
+import { Archive, Bell, Building2, ChevronDown, ClipboardCheck, Clock3, Database, FileClock, FilePlus2, FileText, Folder, History, Inbox, LayoutGrid, LogOut, Mail, Menu, UserRound, X, BookOpen, PanelLeftClose, PanelLeftOpen, ShieldCheck, ListChecks } from 'lucide-react';
 import { PropsWithChildren, ReactNode, useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import PrivacyNoticeModal from '@/Components/PrivacyNoticeModal';
 
 const groups = [
-    { label: '', items: [{ name: 'Dashboard', href: 'dashboard', countKey: 'incoming', icon: LayoutGrid }] },
+    { label: '', items: [{ key: 'dashboard', name: 'Dashboard', href: 'dashboard', countKey: 'incoming', icon: LayoutGrid }] },
         { label: 'Documents', items: [
-        { name: 'Latest documents', href: 'documents.latest', icon: Clock3 },
-        { name: 'All documents', href: 'documents.index', countKey: 'pending', icon: Folder },
-        { name: 'Document creation', href: 'document-creation.index', icon: FileText },
-        { name: 'Document Workflow', href: 'document-workflow.index', countKey: 'approvals', icon: FileClock },
-        { name: 'Drafts', href: 'drafts.index', countKey: 'drafts', icon: FilePlus2 },
+        { key: 'latest_documents', name: 'Latest documents', href: 'documents.latest', icon: Clock3 },
+        { key: 'all_documents', name: 'All documents', href: 'documents.index', countKey: 'pending', icon: Folder },
+        { key: 'document_creation', name: 'Document creation', href: 'document-creation.index', icon: FileText },
+        { key: 'document_workflow', name: 'Document Workflow', href: 'document-workflow.index', countKey: 'approvals', icon: FileClock },
+        { key: 'drafts', name: 'Drafts', href: 'drafts.index', countKey: 'drafts', icon: FilePlus2 },
 
     ] },
-    { label: 'Connected systems', items: [{ name: 'Connected systems', href: 'connected-systems.index', icon: Database }] },
+    { label: 'Connected systems', items: [{ key: 'connected_systems', name: 'Connected systems', href: 'connected-systems.index', icon: Database }] },
     { label: 'Archives', items: [
-        { name: 'Archived documents', href: 'archives.index', icon: Archive },
+        { key: 'archived_documents', name: 'Archived documents', href: 'archives.index', icon: Archive },
     ] },
     { label: 'Administration', items: [
-        { name: 'User accounts', href: 'user-accounts.index', icon: UserRound },
-        { name: 'Libraries', href: 'libraries.index', icon: BookOpen },
-        { name: 'Gmail notifications', href: 'gmail-integration.index', icon: Mail },
-        { name: 'Audit trails', href: 'audit-trail.index', icon: History },
+        { key: 'user_accounts', name: 'User accounts', href: 'user-accounts.index', icon: UserRound },
+        { key: 'navigation_access', name: 'Navigation Access', href: 'navigation-access.index', icon: ListChecks },
+        { key: 'libraries', name: 'Libraries', href: 'libraries.index', icon: BookOpen },
+        { key: 'gmail_notifications', name: 'Gmail notifications', href: 'gmail-integration.index', icon: Mail },
+        { key: 'audit_trails', name: 'Audit trails', href: 'audit-trail.index', icon: History },
     ] },
 ];
 
 export default function AuthenticatedLayout({ header, children }: PropsWithChildren<{ header?: ReactNode }>) {
-    const { auth, canManageLibraries, notificationCounts } = usePage().props as any;
+    const { auth, canManageNavigationAccess, navigationVisibility, notificationCounts } = usePage().props as any;
     const user = auth.user;
     const displayName = user.short_name || user.name || 'User';
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -50,15 +51,25 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
         try { localStorage.setItem('dots.sidebar.collapsed', String(!value)); } catch {}
         return !value;
     });
-    const navigation = (compact = false) => <>
-        <Link href={route('dashboard')} className="flex h-20 shrink-0 items-center gap-3 border-b border-sidebar-border px-5" aria-label="DOTS home">
+    const brand = (compact = false) => {
+        const content = <>
             <img src="/images/logo/ncip-logo.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
             {!compact && <span><span className="block text-xl font-bold tracking-tight text-sidebar-foreground">DOTS</span><span className="block text-xs text-sidebar-muted"><span className="font-bold">DO</span>cument <span className="font-bold">T</span>racking <span className="font-bold">S</span>ystem</span></span>}
-        </Link>
+        </>;
+        const className = 'flex h-20 shrink-0 items-center gap-3 border-b border-sidebar-border px-5';
+
+        return navigationVisibility?.dashboard === true
+            ? <Link href={route('dashboard')} className={className} aria-label="DOTS home">{content}</Link>
+            : <div className={className} aria-label="DOTS">{content}</div>;
+    };
+    const navigation = (compact = false) => <>
+        {brand(compact)}
         <nav aria-label="Main navigation" className="flex-1 space-y-5 overflow-y-auto px-3 py-5">
             {groups.map((group, index) => <section key={index}>
                 {group.label && (compact ? <div className="mx-3 mb-3 border-t border-sidebar-border" /> : <h2 className="mb-2 px-3 text-[14px] font-semibold uppercase tracking-wider text-sidebar-muted">{group.label === 'Other information systems' ? 'Connected systems' : group.label}</h2>)}
-                <div className="space-y-1.5">{group.items.filter((item) => !['libraries.index', 'user-accounts.index', 'gmail-integration.index'].includes(item.href) || canManageLibraries === true).map(({name, href, countKey, icon: Icon}) => {
+                <div className="space-y-1.5">{group.items.filter((item) => item.href === 'navigation-access.index'
+                    ? canManageNavigationAccess === true
+                    : navigationVisibility?.[item.key] !== false).map(({name, href, countKey, icon: Icon}) => {
                     const active = href === 'libraries.index'
                         ? route().current('libraries.*') || route().current('setup.index') || libraryLinks.some((item) => route().current(item.href))
                         : href === 'connected-systems.index' ? route().current(href) || connectedSystems.some((item) => route().current(item.href)) : route().current(href);
@@ -101,11 +112,12 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
                         <MenuItems anchor="bottom end" className="dots-workspace z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-surface p-2 shadow-xl">
                             <div className="border-b border-border px-3 py-2"><p className="font-semibold">Notifications</p><p className="text-xs text-muted">Items that may need your attention</p></div>
                             {notificationCounts ? <>
-                                <MenuItem><Link href={`${route('dashboard')}#incoming-documents`} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><Inbox size={17} className="text-primary" /><span className="flex-1">Incoming documents</span><span className="font-semibold tabular-nums">{notificationCounts.incoming}</span></Link></MenuItem>
-                                <MenuItem><Link href={`${route('documents.index')}?status=pending`} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><Folder size={17} className="text-primary" /><span className="flex-1">Pending documents</span><span className="font-semibold tabular-nums">{notificationCounts.pending}</span></Link></MenuItem>
-                                <MenuItem><Link href={route('document-workflow.index')} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><ClipboardCheck size={17} className="text-primary" /><span className="flex-1">Document Workflow</span><span className="font-semibold tabular-nums">{notificationCounts.approvals + notificationCounts.approved}</span></Link></MenuItem>
-                                <MenuItem><Link href={route('drafts.index')} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><FilePlus2 size={17} className="text-primary" /><span className="flex-1">Drafts</span><span className="font-semibold tabular-nums">{notificationCounts.drafts}</span></Link></MenuItem>
+                                {navigationVisibility?.dashboard === true && <MenuItem><Link href={`${route('dashboard')}#incoming-documents`} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><Inbox size={17} className="text-primary" /><span className="flex-1">Incoming documents</span><span className="font-semibold tabular-nums">{notificationCounts.incoming}</span></Link></MenuItem>}
+                                {navigationVisibility?.all_documents === true && <MenuItem><Link href={`${route('documents.index')}?status=pending`} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><Folder size={17} className="text-primary" /><span className="flex-1">Pending documents</span><span className="font-semibold tabular-nums">{notificationCounts.pending}</span></Link></MenuItem>}
+                                {navigationVisibility?.document_workflow === true && <MenuItem><Link href={route('document-workflow.index')} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><ClipboardCheck size={17} className="text-primary" /><span className="flex-1">Document Workflow</span><span className="font-semibold tabular-nums">{notificationCounts.approvals + notificationCounts.approved}</span></Link></MenuItem>}
+                                {navigationVisibility?.drafts === true && <MenuItem><Link href={route('drafts.index')} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><FilePlus2 size={17} className="text-primary" /><span className="flex-1">Drafts</span><span className="font-semibold tabular-nums">{notificationCounts.drafts}</span></Link></MenuItem>}
                                 {notificationCounts.total === 0 && <p className="px-3 py-3 text-sm text-muted">You’re all caught up.</p>}
+                                {notificationCounts.total > 0 && !['dashboard', 'all_documents', 'document_workflow', 'drafts'].some((key) => navigationVisibility?.[key] === true) && <p className="px-3 py-3 text-sm text-muted">No notification links are available for this account.</p>}
                             </> : <p className="px-3 py-3 text-sm text-muted">Notifications will appear here.</p>}
                         </MenuItems>
                     </DropdownMenu>
