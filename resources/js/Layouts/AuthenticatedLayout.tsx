@@ -2,7 +2,7 @@ import { connectedSystems } from '@/Components/ConnectedSystemNavigation';
 import { libraryLinks } from '@/Components/LibraryNavigation';
 import { Head, Link, usePage } from '@inertiajs/react';
 import { Dialog, DialogPanel, DialogTitle, Menu as DropdownMenu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
-import { Archive, Bell, Building2, ChevronDown, ClipboardCheck, Clock3, Database, FileClock, FilePlus2, FileText, Folder, History, Inbox, LayoutGrid, LogOut, Mail, Menu, UserRound, X, BookOpen, PanelLeftClose, PanelLeftOpen, ShieldCheck, ListChecks } from 'lucide-react';
+import { Archive, Bell, Building2, ChevronDown, ClipboardCheck, Clock3, Database, FileClock, FilePlus2, FileText, Folder, History, Inbox, LayoutGrid, LogOut, Mail, Menu, UserRound, X, BookOpen, PanelLeftClose, PanelLeftOpen, ShieldCheck, ListChecks, Wrench } from 'lucide-react';
 import { PropsWithChildren, ReactNode, useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import PrivacyNoticeModal from '@/Components/PrivacyNoticeModal';
@@ -24,6 +24,7 @@ const groups = [
     { label: 'Administration', items: [
         { key: 'user_accounts', name: 'User accounts', href: 'user-accounts.index', icon: UserRound },
         { key: 'navigation_access', name: 'Navigation Access', href: 'navigation-access.index', icon: ListChecks },
+        { key: 'system_maintenance', name: 'System Maintenance', href: 'system-maintenance.index', icon: Wrench },
         { key: 'libraries', name: 'Libraries', href: 'libraries.index', icon: BookOpen },
         { key: 'gmail_notifications', name: 'Gmail notifications', href: 'gmail-integration.index', icon: Mail },
         { key: 'audit_trails', name: 'Audit trails', href: 'audit-trail.index', icon: History },
@@ -31,7 +32,7 @@ const groups = [
 ];
 
 export default function AuthenticatedLayout({ header, children }: PropsWithChildren<{ header?: ReactNode }>) {
-    const { auth, canManageNavigationAccess, navigationVisibility, notificationCounts } = usePage().props as any;
+    const { auth, canManageNavigationAccess, canManageSystemMaintenance, navigationVisibility, notificationCounts, systemMaintenance } = usePage().props as any;
     const user = auth.user;
     const displayName = user.short_name || user.name || 'User';
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -67,9 +68,11 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
         <nav aria-label="Main navigation" className="flex-1 space-y-5 overflow-y-auto px-3 py-5">
             {groups.map((group, index) => <section key={index}>
                 {group.label && (compact ? <div className="mx-3 mb-3 border-t border-sidebar-border" /> : <h2 className="mb-2 px-3 text-[14px] font-semibold uppercase tracking-wider text-sidebar-muted">{group.label === 'Other information systems' ? 'Connected systems' : group.label}</h2>)}
-                <div className="space-y-1.5">{group.items.filter((item) => item.href === 'navigation-access.index'
-                    ? canManageNavigationAccess === true
-                    : navigationVisibility?.[item.key] !== false).map(({name, href, countKey, icon: Icon}) => {
+                <div className="space-y-1.5">{group.items.filter((item) => {
+                    if (item.href === 'navigation-access.index') return canManageNavigationAccess === true;
+                    if (item.href === 'system-maintenance.index') return canManageSystemMaintenance === true;
+                    return navigationVisibility?.[item.key] !== false;
+                }).map(({name, href, countKey, icon: Icon}) => {
                     const active = href === 'libraries.index'
                         ? route().current('libraries.*') || route().current('setup.index') || libraryLinks.some((item) => route().current(item.href))
                         : href === 'connected-systems.index' ? route().current(href) || connectedSystems.some((item) => route().current(item.href)) : route().current(href);
@@ -133,7 +136,15 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
                         </MenuItems>
                     </DropdownMenu>
                 </header>
-                <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-6">{children}</main>
+                <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-6">
+                    {systemMaintenance && <div role={systemMaintenance.mode === 'full' ? 'alert' : 'status'} className={`mx-auto mb-5 flex max-w-[1200px] items-start gap-3 rounded-xl border p-4 ${systemMaintenance.mode === 'full' ? 'border-danger/30 bg-danger-soft text-danger' : 'border-warning/30 bg-warning-soft text-warning'}`}>
+                        <Wrench size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+                        <div><p className="font-semibold">{systemMaintenance.mode === 'full' ? 'Full maintenance is active' : 'Scheduled maintenance'}</p>
+                            <p className="mt-1">{systemMaintenance.message}{systemMaintenance.endsAt ? ` Expected to end ${systemMaintenance.endsAt}.` : ''}</p>
+                        </div>
+                    </div>}
+                    {children}
+                </main>
             </div>
         </div>
         <PrivacyNoticeModal

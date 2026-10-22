@@ -21,6 +21,7 @@ use App\Http\Controllers\PublicDocumentTrackingController;
 use App\Http\Controllers\PurposeTypeController;
 use App\Http\Controllers\RangeController;
 use App\Http\Controllers\SetupController;
+use App\Http\Controllers\SystemMaintenanceController;
 use App\Http\Controllers\UserAccountController;
 use Illuminate\Support\Facades\Route;
 
@@ -30,7 +31,9 @@ Route::get('/track/{trackingNumber}', [PublicDocumentTrackingController::class, 
     ->middleware(['signed', 'throttle:30,1'])
     ->name('documents.track');
 
-Route::middleware(['auth', 'active.user', 'verified', 'navigation.visible'])->group(function () {
+Route::middleware(['auth', 'active.user'])->get('/maintenance', [SystemMaintenanceController::class, 'show'])->name('maintenance.show');
+
+Route::middleware(['auth', 'active.user', 'verified', 'system.maintenance', 'navigation.visible'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::get('/documents', [DocumentController::class, 'index'])->name('documents.index');
@@ -115,6 +118,8 @@ Route::middleware(['auth', 'active.user', 'verified', 'navigation.visible'])->gr
     Route::middleware('super.admin')->group(function () {
         Route::get('/navigation-access', [NavigationAccessController::class, 'index'])->name('navigation-access.index');
         Route::put('/navigation-access', [NavigationAccessController::class, 'update'])->name('navigation-access.update');
+        Route::get('/system-maintenance', [SystemMaintenanceController::class, 'index'])->name('system-maintenance.index');
+        Route::put('/system-maintenance', [SystemMaintenanceController::class, 'update'])->name('system-maintenance.update');
     });
 
     Route::get('/connected-systems', fn () => \Inertia\Inertia::render('ConnectedSystems/Index'))->name('connected-systems.index');

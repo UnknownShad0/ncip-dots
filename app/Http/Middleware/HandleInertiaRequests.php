@@ -64,9 +64,13 @@ class HandleInertiaRequests extends Middleware
             ],
             'canManageLibraries' => $request->user()?->canManageLibraries() ?? false,
             'canManageNavigationAccess' => $authUser?->isSuperAdmin() ?? false,
+            'canManageSystemMaintenance' => $authUser?->isSuperAdmin() ?? false,
             'navigationVisibility' => $authUser
                 ? app(\App\Services\NavigationAccess::class)->forUser($authUser)
                 : [],
+            'systemMaintenance' => $authUser
+                ? app(\App\Services\SystemMaintenance::class)->forLayout()
+                : null,
             'ziggy' => fn () => [
                 ...(new Ziggy)->toArray(),
                 'location' => $request->url(),
