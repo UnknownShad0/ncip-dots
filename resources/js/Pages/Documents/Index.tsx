@@ -1429,7 +1429,7 @@ function DocumentRouteProgress({ document }: { document: DocumentItem }) {
 
             <div className="p-4 sm:p-5">
                 <div className="relative rounded-xl border border-primary/20 bg-surface p-3 sm:p-4">
-                    <span className="absolute -bottom-5 left-6 h-5 w-px bg-primary/30" aria-hidden="true" />
+                    <span className="absolute -bottom-5 left-[7px] h-5 w-px bg-primary/40" aria-hidden="true" />
                     <div className="flex items-center gap-3">
                         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary text-white"><FileText size={19} aria-hidden="true" /></span>
                         <div className="min-w-0">
@@ -1460,8 +1460,8 @@ function RouteTreeGroup({ route, statusLabel, depth, round }: { route: RouteTree
             </div>
             <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${getStatusClasses(route.status)}`}>{statusLabel(route.status)}</span>
         </div>
-        <ol className="relative space-y-3 pl-7" aria-label={isParallel ? 'Parallel office branches' : 'Sequential office steps'}>
-            {route.steps.length > 1 && <span className="absolute bottom-5 left-[11px] top-5 w-px bg-gradient-to-b from-primary/40 via-border to-border" aria-hidden="true" />}
+        <ol className={`relative space-y-3 pl-7 ${depth > 0 ? '-ml-[38px] sm:-ml-[46px]' : ''}`} aria-label={isParallel ? 'Parallel office branches' : 'Sequential office steps'}>
+            {depth === 0 && route.steps.length > 1 && <span className="absolute bottom-5 left-[7px] top-5 w-px bg-gradient-to-b from-primary/40 via-border to-border" aria-hidden="true" />}
             {route.steps.map((step) => {
                 const isActive = ['in_progress', 'available', 'waiting_on_branch'].includes(step.status);
                 const markerClass = step.status === 'approved'
@@ -1474,11 +1474,11 @@ function RouteTreeGroup({ route, statusLabel, depth, round }: { route: RouteTree
 
                 return <li key={step.id} className="relative">
                     <span className={`absolute -left-[28px] top-5 z-[1] h-3.5 w-3.5 rounded-full border-2 ${markerClass}`} aria-hidden="true" />
-                    <span className="absolute -left-3.5 top-[26px] w-3.5 border-t border-border" aria-hidden="true" />
-                    <RouteOfficeCard step={step} statusLabel={statusLabel} branch={isParallel} compact={depth > 0} />
-                    {step.child_routes?.length ? <div className="relative ml-5 mt-3 border-l-2 border-dashed border-primary/35 pl-4 sm:ml-6 sm:pl-5">
-                        <span className="absolute -left-[2px] -top-3 h-3 border-l-2 border-dashed border-primary/35" aria-hidden="true" />
-                        <span className="absolute -left-5 top-0 w-5 border-t-2 border-dashed border-primary/35 sm:-left-6 sm:w-6" aria-hidden="true" />
+                    <span className={`absolute -left-[21px] top-[26px] border-t border-border ${depth > 0 ? 'w-[59px] sm:w-[67px]' : 'w-[21px]'}`} aria-hidden="true" />
+                    <div className={depth > 0 ? 'ml-[38px] sm:ml-[46px]' : ''}><RouteOfficeCard step={step} statusLabel={statusLabel} branch={isParallel} compact={depth > 0} /></div>
+                    {step.child_routes?.length ? <div className="relative ml-5 mt-3 border-l-2 border-primary/55 pl-4 sm:ml-6 sm:pl-5">
+                        <span className="absolute -left-[2px] -top-3 h-3 border-l-2 border-primary/55" aria-hidden="true" />
+                        <span className="absolute -left-[41px] top-0 w-[41px] border-t-2 border-primary/55 sm:-left-[45px] sm:w-[45px]" aria-hidden="true" />
                         <p className="mb-2 inline-flex rounded-full bg-primary/5 px-2.5 py-1 text-[11px] font-semibold text-primary">Forwarded by {step.office}</p>
                         <div className="space-y-3">{step.child_routes.map((child) => <RouteTreeGroup key={child.id} route={child} statusLabel={statusLabel} depth={depth + 1} />)}</div>
                     </div> : null}
@@ -1543,9 +1543,11 @@ function DocumentTransactionHistory({ transactions, loading = false }: { transac
                         const toOffice = transaction.to_office_short_name || transaction.to_office;
                         const holder = transaction.holder_short_name || transaction.holder;
                         const actor = transaction.created_by_short_name || transaction.created_by;
+                        const movedBetweenOffices = Boolean(fromOffice && toOffice && fromOffice !== toOffice);
+                        const eventOffice = toOffice || fromOffice;
 
                         return <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="relative pl-7">
-                            {index < transactions.length - 1 && <span className="absolute bottom-[-14px] left-[9px] top-3 w-px bg-border" aria-hidden="true" />}
+                            {index < transactions.length - 1 && <span className="absolute bottom-[-14px] left-[9px] top-3 w-0.5 bg-gradient-to-b from-primary/40 to-border" aria-hidden="true" />}
                             <span className={`absolute left-0 top-3 h-[19px] w-[19px] rounded-full border-[5px] border-surface ring-1 ring-border ${transaction.status === 'approved' ? 'bg-success' : ['rejected', 'changes_requested'].includes(transaction.status ?? '') ? 'bg-danger' : 'bg-primary'}`} aria-hidden="true" />
                             <article className="rounded-xl border border-border bg-surface p-3.5 sm:p-4">
                                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1556,14 +1558,13 @@ function DocumentTransactionHistory({ transactions, loading = false }: { transac
                                     <time className="shrink-0 text-xs text-muted">{transaction.created_at || 'Date unavailable'}</time>
                                 </div>
                                 {(fromOffice || toOffice || holder) && <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-background px-3 py-2 text-xs">
-                                    {fromOffice && <span className="font-medium text-foreground">{fromOffice}</span>}
-                                    {fromOffice && toOffice && <span className="text-primary" aria-label="to">→</span>}
-                                    {toOffice && <span className="font-medium text-foreground">{toOffice}</span>}
-                                    {!fromOffice && !toOffice && holder && <span className="text-muted">Held by <strong className="font-medium text-foreground">{holder}</strong></span>}
+                                    {movedBetweenOffices ? <span className="font-medium text-foreground"><span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-muted">From</span>{fromOffice}</span> : eventOffice ? <span className="font-medium text-foreground"><span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-muted">At</span>{eventOffice}</span> : holder && <span className="text-muted">Current holder: <strong className="font-medium text-foreground">{holder}</strong></span>}
+                                    {movedBetweenOffices && <span className="text-primary" aria-label="to">→</span>}
+                                    {movedBetweenOffices && toOffice && <span className="font-medium text-foreground"><span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-muted">To</span>{toOffice}</span>}
                                 </div>}
                                 {(actor || transaction.remarks) && <div className="mt-3 space-y-2 text-xs text-muted">
-                                    {actor && <p>Recorded by <strong className="font-medium text-foreground">{actor}</strong></p>}
-                                    {transaction.remarks && <p className="whitespace-pre-wrap break-words rounded-lg border border-border bg-background px-3 py-2 leading-relaxed text-foreground">{transaction.remarks}</p>}
+                                    {actor && <p>Action recorded by <strong className="font-medium text-foreground">{actor}</strong></p>}
+                                    {transaction.remarks && <div className="rounded-lg border border-border bg-background px-3 py-2"><p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted">Remark</p><p className="whitespace-pre-wrap break-words leading-relaxed text-foreground">{transaction.remarks}</p></div>}
                                 </div>}
                             </article>
                         </li>;
