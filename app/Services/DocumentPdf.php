@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\DocumentCreationDraft;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\URL;
 use Symfony\Component\Process\ExecutableFinder;
 use Symfony\Component\Process\Process;
 
@@ -22,6 +23,9 @@ class DocumentPdf
         $content = $this->approvedContent($draft);
         if ($trackingNumber !== null) {
             $content['tracking_number'] = $trackingNumber;
+            $content['tracking_url'] = URL::signedRoute('documents.track', [
+                'trackingNumber' => $trackingNumber,
+            ]);
         }
 
         return $this->pdf($draft->title, $content);

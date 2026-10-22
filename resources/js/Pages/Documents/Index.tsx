@@ -88,6 +88,34 @@ type DocumentItem = {
 type LibraryOption = { id: number | string; name: string; source?: string; disabled?: boolean };
 type ApprovedDocument = { id: number; title: string; document_type_id: number; document_type?: string; status?: string; disabled?: boolean };
 type CrudAlert = { variant?: WorkspaceAlertVariant; title: string; message: string; onConfirm?: () => void; confirmLabel?: string; isDestructive?: boolean };
+type RoutingForm = {
+    title: string;
+    document_source: string;
+    approved_draft_id: string;
+    tracking_number: string;
+    origin_type: string;
+    remarks: string;
+    document_type_id: string;
+    other_document_type: string;
+    action_type_id: string;
+    other_action: string;
+    purpose_type_id: string;
+    other_purpose: string;
+    urgent: boolean;
+    notify_by_email: boolean;
+    signature_required: boolean;
+    file: File | null;
+    supporting_files: File[];
+};
+
+const formFingerprint = (form: RoutingForm) => {
+    const fingerprintFile = (file: File | null) => file ? [file.name, file.size, file.lastModified] : null;
+    return JSON.stringify({
+        ...form,
+        file: fingerprintFile(form.file),
+        supporting_files: form.supporting_files.map((file) => fingerprintFile(file)),
+    });
+};
 
 type SortKey = 'tracking_number' | 'title' | 'document_type' | 'origin_type' | 'status' | 'office_name' | 'last_transaction';
 
@@ -103,6 +131,15 @@ const validateDocumentFile = (file: File | null, maxSizeKb: number): string | nu
     if (!file) return null;
     if (maxSizeKb > 0 && file.size > maxSizeKb * 1024) return `The selected file must be ${maxSizeKb / 1024} MB or smaller.`;
     if (!/\.(pdf|jpe?g|png|docx?)$/i.test(file.name)) return 'Choose a PDF, JPG, PNG, DOC, or DOCX file.';
+    return null;
+};
+
+const validateSupportingFiles = (files: File[], maxSizeKb: number, maxCount: number): string | null => {
+    if (files.length > maxCount) return `Choose no more than ${maxCount} supporting files.`;
+    for (const file of files) {
+        const error = validateDocumentFile(file, maxSizeKb);
+        if (error) return `${file.name}: ${error}`;
+    }
     return null;
 };
 
@@ -150,6 +187,7 @@ export default function DocumentsIndex({
     officeRangeLabel = null,
     approvedDocuments = [],
     maxUploadSizeKb,
+    maxSupportingFiles = 5,
     editDraftId = null,
     openDocumentId = null,
     createRoutingDraftId = null,
@@ -165,6 +203,7 @@ export default function DocumentsIndex({
     officeRangeLabel?: string | null;
     approvedDocuments?: ApprovedDocument[];
     maxUploadSizeKb: number;
+    maxSupportingFiles?: number;
     editDraftId?: number | string | null;
     openDocumentId?: number | string | null;
     createRoutingDraftId?: number | string | null;
@@ -196,7 +235,7 @@ export default function DocumentsIndex({
     const [showListUpdating, setShowListUpdating] = useState(false);
     const listLoadingTimer = useRef<number | null>(null);
     const firstQueryRender = useRef(true);
-    const [form, setForm] = useState({
+    const [form, setForm] = useState<RoutingForm>({
         title: '',
         document_source: 'upload',
         approved_draft_id: '',
@@ -213,6 +252,7 @@ export default function DocumentsIndex({
         notify_by_email: false,
         signature_required: false,
         file: null as File | null,
+        supporting_files: [],
     });
 
     const beginListUpdate = () => {
@@ -225,7 +265,7 @@ export default function DocumentsIndex({
         setShowListUpdating(false);
     };
 
-    useEffect(() => { formBaseline.current = JSON.stringify(form); }, [isCreateOpen, editingRow]);
+    useEffect(() => { formBaseline.current = formFingerprint(form); }, [isCreateOpen, editingRow]);
 
     const closeRelease = () => {
         if (processing) return;
@@ -235,7 +275,7 @@ export default function DocumentsIndex({
     };
     const requestCloseForm = () => {
         if (processing) return;
-        if (JSON.stringify(form) === formBaseline.current && !form.file) { closeModal(); return; }
+        if (formFingerprint(form) === formBaseline.current) { closeModal(); return; }
         setCrudAlert({ title: 'Discard unsaved changes?', message: 'Close this form without saving your changes?', confirmLabel: 'Discard changes', isDestructive: true, onConfirm: () => { setCrudAlert(null); closeModal(); } });
     };
     const closeModal = () => {
@@ -258,6 +298,7 @@ export default function DocumentsIndex({
             notify_by_email: false,
             signature_required: false,
             file: null,
+            supporting_files: [],
         });
     };
 
@@ -286,6 +327,7 @@ export default function DocumentsIndex({
             notify_by_email: Boolean(row.notify_by_email),
             signature_required: false,
             file: null,
+            supporting_files: [],
         });
     };
 
@@ -321,6 +363,7 @@ export default function DocumentsIndex({
             notify_by_email: false,
             signature_required: false,
             file: null,
+            supporting_files: [],
         });
     };
 
@@ -345,14 +388,19 @@ export default function DocumentsIndex({
         if (processing) return;
         const fileError = validateDocumentFile(form.file, uploadLimitKb);
         if (fileError) { setUploadError(fileError); return; }
+        const supportingFilesError = validateSupportingFiles(form.supporting_files, uploadLimitKb, maxSupportingFiles);
+        if (supportingFilesError) { setUploadError(supportingFilesError); return; }
         if (finalize && form.document_source === 'upload' && !form.file) { setUploadError('Attach the source file before creating the routing record.'); return; }
         if (finalize && form.signature_required && !form.file && form.document_source !== 'approved') { setUploadError('Choose a PDF file before marking it as needing a signature.'); return; }
         if (form.signature_required && form.file && !/\.pdf$/i.test(form.file.name)) { setUploadError('Only PDF attachments can be marked as needing a signature.'); return; }
 
         const data = new FormData();
-        Object.entries({ ...form, is_finalized: finalize ? '1' : '0' }).forEach(([key, value]) => {
-            if (value !== null && value !== undefined) data.append(key, value instanceof File ? value : typeof value === 'boolean' ? (value ? '1' : '0') : String(value));
+        const { file, supporting_files, ...fields } = form;
+        Object.entries({ ...fields, is_finalized: finalize ? '1' : '0' }).forEach(([key, value]) => {
+            if (value !== null && value !== undefined) data.append(key, typeof value === 'boolean' ? (value ? '1' : '0') : String(value));
         });
+        if (file) data.append('file', file);
+        supporting_files.forEach((supportingFile) => data.append('supporting_files[]', supportingFile));
         setProcessing(true);
         setFormError('');
         router.post('/documents', data, {
@@ -522,10 +570,6 @@ export default function DocumentsIndex({
         setCrudAlert({ title, message, confirmLabel, isDestructive, onConfirm: action });
     };
 
-    const handlePrint = () => {
-        window.print();
-    };
-
     const handleSort = (key: SortKey) => {
         if (sortKey === key) {
             setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
@@ -677,15 +721,6 @@ export default function DocumentsIndex({
                             <option value="archived">Archived</option>
                             <option value="rejected">Rejected</option>
                         </select>
-
-                        <button
-                            type="button"
-                            onClick={handlePrint}
-                            className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border bg-surface px-3 text-sm font-semibold text-foreground transition hover:bg-secondary sm:px-4"
-                        >
-                            <Printer size={17} />
-                            Print
-                        </button>
 
                         <button
                             type="button"
@@ -881,7 +916,7 @@ export default function DocumentsIndex({
 
                             {viewingRow.approval_status && viewingRow.approval_status !== 'not_required' && <section className="rounded-xl border border-border bg-background p-4" aria-label="Approval and signing status">
                                 <div className="flex flex-wrap items-start justify-between gap-3">
-                                    <div><h3 className="font-semibold text-foreground">Approval and signing</h3><p className="mt-1 text-sm text-muted">Approval follows the routing record. Signing is tracked separately for the attached PDF.</p></div>
+                                    <div><h3 className="font-semibold text-foreground">Approval and signing</h3><p className="mt-1 text-sm text-muted">Approval follows the routing record. Signing applies only to the primary PDF; iPluma submission is not connected yet.</p></div>
                                     <div className="flex flex-wrap gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${getStatusClasses(viewingRow.approval_status)}`}>{viewingRow.approval_status.replaceAll('_', ' ')}</span><span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold capitalize text-foreground">{(viewingRow.signature_status || 'not_required').replaceAll('_', ' ')}</span></div>
                                 </div>
                                 {viewingRow.can_approve && <form className="mt-4 space-y-3" onSubmit={(event) => event.preventDefault()}>
@@ -894,16 +929,9 @@ export default function DocumentsIndex({
                                         <button type="button" disabled={processing} onClick={() => decideDocument('approved')} className="dots-button-primary disabled:opacity-50">Approve</button>
                                     </div>
                                 </form>}
-                                {viewingRow.signature_status === 'needs_signature' && viewingRow.approval_status !== 'approved' && <p className="mt-3 text-xs text-muted">The signing action becomes available after this office approves the file.</p>}
+                                {viewingRow.signature_status === 'needs_signature' && viewingRow.approval_status !== 'approved' && <p className="mt-3 text-xs text-muted">Only the primary PDF is eligible; iPluma submission is not connected yet.</p>}
                             </section>}
-
-                            <section aria-labelledby="transaction-history-title">
-                                <div className="mb-3 flex items-center justify-between gap-3">
-                                    <div><h3 id="transaction-history-title" className="font-semibold text-foreground">Transaction history</h3></div>
-                                    <span className="text-xs text-muted">{viewingRow.transactions?.length ?? 0} transactions</span>
-                                </div>
-                                {viewingRow.transactions?.length ? <ol className="divide-y divide-border">{viewingRow.transactions.map((transaction, index) => <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="py-4"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-foreground">{transaction.action || transaction.status || 'Transaction'}</span><span className="text-xs font-medium capitalize text-muted">{transaction.status || '—'}</span></div><p className="mt-1 text-sm text-muted">{[transaction.from_office_short_name || transaction.from_office, transaction.to_office_short_name || transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder_short_name || transaction.holder ? `Held by ${transaction.holder_short_name || transaction.holder}` : 'Office details unavailable')}</p><p className="mt-1 text-xs text-muted">{[transaction.created_by_short_name || transaction.created_by, transaction.created_at].filter(Boolean).join(' · ') || 'Date and user unavailable'}</p></li>)}</ol> : viewingRow.details_loading ? null : <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">No transactions recorded.</p>}
-                        </section>
+                            <DocumentTransactionHistory transactions={viewingRow.transactions} loading={viewingRow.details_loading} />
                         </div>
                         <div className="sticky bottom-0 flex justify-end border-t border-border bg-surface px-5 py-4 sm:px-6">
                             <button type="button" onClick={closeDocumentDetails} className="dots-button-secondary">Close</button>
@@ -931,6 +959,7 @@ export default function DocumentsIndex({
                         <div className="space-y-6 p-5 sm:p-6">
                             {releasingRow.details_loading && <p role="status" className="inline-flex items-center gap-2 rounded-lg bg-background p-3 text-sm text-muted"><LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading attachments…</p>}
                             <DocumentReferenceDetails document={releasingRow} loading={releasingRow.details_loading} />
+                            <DocumentTransactionHistory transactions={releasingRow.transactions} loading={releasingRow.details_loading} />
 
                             <section className="grid gap-4 sm:grid-cols-2" aria-label="Release details">
                                 <div>
@@ -1105,12 +1134,40 @@ export default function DocumentsIndex({
                                 <label className="mb-1 block text-sm font-medium text-foreground">Source file</label>
                                 <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => { const file = e.target.files?.[0] ?? null; setForm({ ...form, file, signature_required: file && !/\.pdf$/i.test(file.name) ? false : form.signature_required }); setUploadError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
                                 <p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Uploaded PDFs receive a DOTS tracking-number stamp when attached to the routing record; other file types remain unchanged. A source file is required to create a routing record. Maximum file size: {uploadLimitKb / 1024} MB.</p>
-                                {uploadError && <p role="alert" className="mt-1 text-sm text-danger">{uploadError}</p>}
                             </div>}
+                            {!editingRow && <div>
+                                <label htmlFor="supporting-files" className="mb-1 block text-sm font-medium text-foreground">Supporting files <span className="font-normal text-muted">(optional)</span></label>
+                                <input
+                                    id="supporting-files"
+                                    type="file"
+                                    multiple
+                                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                    onChange={(event) => {
+                                        const files = Array.from(event.currentTarget.files ?? []);
+                                        const error = validateSupportingFiles(files, uploadLimitKb, maxSupportingFiles);
+                                        if (error) {
+                                            setUploadError(error);
+                                            event.currentTarget.value = '';
+                                            return;
+                                        }
+                                        setForm((current) => ({ ...current, supporting_files: files }));
+                                        setUploadError('');
+                                    }}
+                                    className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                                />
+                                <p className="mt-1 text-xs text-muted">Add up to {maxSupportingFiles} PDF, JPG, PNG, DOC, or DOCX files. Each can be up to {uploadLimitKb / 1024} MB. They are stored separately and are not sent through iPluma signing.</p>
+                                {form.supporting_files.length > 0 && <ul className="mt-3 space-y-2" aria-label="Selected supporting files">
+                                    {form.supporting_files.map((file, index) => <li key={`${file.name}-${file.lastModified}-${index}`} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                                        <span className="min-w-0 break-all text-foreground">{file.name}<span className="ml-2 text-xs text-muted">{(file.size / 1024 / 1024).toFixed(1)} MB</span></span>
+                                        <button type="button" onClick={() => setForm((current) => ({ ...current, supporting_files: current.supporting_files.filter((_, fileIndex) => fileIndex !== index) }))} className="shrink-0 rounded-md p-1 text-muted hover:bg-secondary hover:text-foreground" aria-label={`Remove ${file.name}`} title="Remove file"><X size={16} aria-hidden="true" /></button>
+                                    </li>)}
+                                </ul>}
+                            </div>}
+                            {uploadError && <p role="alert" className="text-sm text-danger">{uploadError}</p>}
                             {!editingRow && <div className="rounded-lg border border-border bg-background p-3">
                                 <label className={`flex items-start gap-3 text-sm ${form.document_source === 'approved' || form.file?.name.toLowerCase().endsWith('.pdf') ? 'text-foreground' : 'text-muted'}`}>
                                     <input type="checkbox" checked={form.signature_required} disabled={form.document_source !== 'approved' && !form.file?.name.toLowerCase().endsWith('.pdf')} onChange={(event) => setForm({ ...form, signature_required: event.target.checked })} className="mt-0.5 rounded border-border" />
-                                    <span><span className="font-medium">Needs iPluma signing after approval</span><span className="mt-0.5 block text-xs text-muted">PDF files only. Signing status will appear on the tracking record.</span></span>
+                                    <span><span className="font-medium">Needs iPluma signing after approval</span><span className="mt-0.5 block text-xs text-muted">Applies to the primary PDF only. iPluma submission is not connected yet.</span></span>
                                 </label>
                             </div>}
                             <div className="flex flex-wrap gap-5">
@@ -1163,11 +1220,36 @@ function LibrarySelect({
     );
 }
 
+function DocumentTransactionHistory({ transactions, loading = false }: { transactions?: DocumentItem['transactions']; loading?: boolean }) {
+    return (
+        <section aria-label="Transaction history">
+            <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="font-semibold text-foreground">Transaction history</h3>
+                <span className="text-xs text-muted">{transactions?.length ?? 0} transactions</span>
+            </div>
+            {transactions?.length ? (
+                <div className="overflow-x-auto rounded-xl border border-border" tabIndex={0} role="region" aria-label="Transaction history table; scroll horizontally for more columns">
+                    <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+                        <thead className="bg-background text-xs uppercase tracking-wide text-muted"><tr><th className="px-3 py-3 font-semibold">Action</th><th className="px-3 py-3 font-semibold">Status</th><th className="px-3 py-3 font-semibold">Office movement</th><th className="px-3 py-3 font-semibold">User</th><th className="px-3 py-3 font-semibold">Date</th></tr></thead>
+                        <tbody className="divide-y divide-border">{transactions.map((transaction, index) => <tr key={`${transaction.created_at ?? 'transaction'}-${index}`}>
+                            <td className="px-3 py-3 font-medium text-foreground">{transaction.action || transaction.status || 'Transaction'}</td>
+                            <td className="px-3 py-3 capitalize text-foreground">{transaction.status || '—'}</td>
+                            <td className="px-3 py-3 text-foreground">{[transaction.from_office_short_name || transaction.from_office, transaction.to_office_short_name || transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder_short_name || transaction.holder ? `Held by ${transaction.holder_short_name || transaction.holder}` : 'Office details unavailable')}</td>
+                            <td className="px-3 py-3 text-foreground">{transaction.created_by_short_name || transaction.created_by || '—'}</td>
+                            <td className="px-3 py-3 whitespace-nowrap text-foreground">{transaction.created_at || '—'}</td>
+                        </tr>)}</tbody>
+                    </table>
+                </div>
+            ) : loading ? null : <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">No transactions recorded.</p>}
+        </section>
+    );
+}
+
 function ReadOnlyDetail({ label, value }: { label: string; value?: string | null }) {
     return (
-        <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase text-muted">{label}</p>
-            <p className="mt-1 break-words text-sm font-medium text-foreground">{value || '—'}</p>
+        <div role="row" className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-3 py-2 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-4">
+            <p role="rowheader" className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</p>
+            <p role="cell" className="break-words text-sm font-medium text-foreground">{value || '—'}</p>
         </div>
     );
 }
@@ -1176,29 +1258,30 @@ function DocumentReferenceDetails({ document, loading = false }: { document: Doc
     return (
         <section className="rounded-xl border border-border bg-surface p-4 sm:p-5">
             <h3 className="text-sm font-semibold text-foreground">Document details and attachments</h3>
-            <section aria-label="Selected document details" className="mt-3 grid gap-x-5 gap-y-4 rounded-xl border border-border bg-background p-4 sm:grid-cols-2">
+            <section role="table" aria-label="Selected document details" className="mt-3 divide-y divide-border rounded-xl border border-border bg-background px-3 py-1 sm:px-4">
                 <ReadOnlyDetail label="Tracking number" value={document.tracking_number} />
                 <ReadOnlyDetail label="Title" value={document.title} />
                 <ReadOnlyDetail label="Type" value={getDocumentTypeName(document)} />
                 <ReadOnlyDetail label="Purpose" value={getPurposeTypeName(document)} />
                 <ReadOnlyDetail label="Origin" value={document.origin_type} />
                 <ReadOnlyDetail label="Office" value={document.office_short_name || document.office?.short_name || document.office_name || document.office?.name} />
-                <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase text-muted">Status</p>
-                    <span className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(document.status)}`}>{(document.status || 'draft').toUpperCase()}</span>
+                <div role="row" className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 py-2 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-4">
+                    <p role="rowheader" className="text-xs font-semibold uppercase tracking-wide text-muted">Status</p>
+                    <span role="cell" className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(document.status)}`}>{(document.status || 'draft').toUpperCase()}</span>
                 </div>
                 <ReadOnlyDetail label="Approval" value={(document.approval_status || 'not_required').replaceAll('_', ' ')} />
                 <ReadOnlyDetail label="Signing" value={(document.signature_status || 'not_required').replaceAll('_', ' ')} />
                 <ReadOnlyDetail label="Created by" value={document.created_by_short_name || document.created_by_name} />
                 <ReadOnlyDetail label="Date created" value={document.created_at} />
-                <div className="sm:col-span-2">
-                    <p className="text-xs font-semibold uppercase text-muted">Remarks</p>
-                    <p className="mt-1 whitespace-pre-wrap break-words text-sm text-foreground">{document.remarks || '—'}</p>
+                <div role="row" className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-3 py-2 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-4">
+                    <p role="rowheader" className="text-xs font-semibold uppercase tracking-wide text-muted">Remarks</p>
+                    <p role="cell" className="whitespace-pre-wrap break-words text-sm text-foreground">{document.remarks || '—'}</p>
                 </div>
-                <div className="sm:col-span-2">
+                </section>
+                <div className="mt-5">
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                         <p className="text-sm font-semibold text-foreground">Attached files</p>
-                        {document.signature_status && <p className="text-xs text-muted">Signing: {document.signature_status.replaceAll('_', ' ')}. iPluma PDF submission is not connected yet.</p>}
+                        {document.signature_status && document.signature_status !== 'not_required' && <p className="text-xs text-muted">Signing applies to the primary document only. iPluma PDF submission is not connected yet.</p>}
                     </div>
                     {document.files?.length ? (
                         <ul className="mt-3 space-y-2">
@@ -1210,7 +1293,7 @@ function DocumentReferenceDetails({ document, loading = false }: { document: Doc
                                             <div className="min-w-0">
                                                 <p className="break-words text-sm font-semibold text-foreground">{file.name}</p>
                                                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
-                                                    <span className="capitalize">{file.type}</span>
+                                                    <span>{file.type === 'original' ? 'Primary document' : file.type === 'supporting' ? 'Supporting file' : file.type}</span>
                                                     {file.is_pdf && <><span aria-hidden="true">·</span><span>PDF</span></>}
                                                     {file.uploaded_at && <><span aria-hidden="true">·</span><span>{file.uploaded_at}</span></>}
                                                     {!file.url && !file.view_url && <span className="text-warning">File not available</span>}
@@ -1220,9 +1303,9 @@ function DocumentReferenceDetails({ document, loading = false }: { document: Doc
                                         <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                                             {file.view_url && <a href={file.view_url} target="_blank" rel="noopener noreferrer" className="dots-button-secondary min-h-9 px-3 py-1.5 text-xs"><Eye size={14} aria-hidden="true" />View</a>}
                                             {file.url && <a href={file.url} className="dots-button-secondary min-h-9 px-3 py-1.5 text-xs"><Download size={14} aria-hidden="true" />Download</a>}
-                                            {file.is_pdf && document.signature_status === 'needs_signature' && <button type="button" disabled title={document.approval_status === 'approved' ? 'iPluma file submission is not connected yet.' : 'Available after approval.'} className="dots-button-secondary min-h-9 px-3 py-1.5 text-xs"><FileSignature size={14} aria-hidden="true" />Sign with iPluma</button>}
-                                            {file.is_pdf && document.signature_status === 'sent_to_ipluma' && <span className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-warning-soft px-3 py-1.5 text-xs font-medium text-warning"><FileSignature size={14} aria-hidden="true" />Sent to iPluma</span>}
-                                            {file.is_pdf && document.signature_status === 'signed' && <span className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-success-soft px-3 py-1.5 text-xs font-medium text-success"><FileSignature size={14} aria-hidden="true" />Signed</span>}
+                                            {file.type === 'original' && file.is_pdf && document.signature_status === 'needs_signature' && <button type="button" disabled title={document.approval_status === 'approved' ? 'iPluma file submission is not connected yet.' : 'Available after approval.'} className="dots-button-secondary min-h-9 px-3 py-1.5 text-xs"><FileSignature size={14} aria-hidden="true" />Sign with iPluma</button>}
+                                            {file.type === 'original' && file.is_pdf && document.signature_status === 'sent_to_ipluma' && <span className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-warning-soft px-3 py-1.5 text-xs font-medium text-warning"><FileSignature size={14} aria-hidden="true" />Sent to iPluma</span>}
+                                            {file.type === 'original' && file.is_pdf && document.signature_status === 'signed' && <span className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-success-soft px-3 py-1.5 text-xs font-medium text-success"><FileSignature size={14} aria-hidden="true" />Signed</span>}
                                         </div>
                                     </div>
                                 </li>
@@ -1235,7 +1318,6 @@ function DocumentReferenceDetails({ document, loading = false }: { document: Doc
                         </div>
                     ) : <p className="mt-1 text-sm text-foreground">No file attached.</p>}
                 </div>
-            </section>
         </section>
     );
 }

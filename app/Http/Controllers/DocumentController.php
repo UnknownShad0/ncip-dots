@@ -30,6 +30,7 @@ use Inertia\Inertia;
 class DocumentController extends Controller
 {
     private const MAX_DOCUMENT_UPLOAD_KB = 102400;
+    private const MAX_SUPPORTING_FILES = 5;
 
     private bool $userRangeResolved = false;
 
@@ -690,6 +691,8 @@ class DocumentController extends Controller
             'signature_required' => ['sometimes', 'boolean'],
             'is_finalized' => ['required', 'accepted'],
             'file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:'.self::MAX_DOCUMENT_UPLOAD_KB],
+            'supporting_files' => ['sometimes', 'array', 'max:'.self::MAX_SUPPORTING_FILES],
+            'supporting_files.*' => ['file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:'.self::MAX_DOCUMENT_UPLOAD_KB],
         ]);
         if (($validated['approved_draft_id'] ?? null) && $request->hasFile('file')) {
             throw ValidationException::withMessages([
@@ -722,9 +725,9 @@ class DocumentController extends Controller
 
         $document = null;
         $initialTrail = null;
-        $storedPath = null;
+        $storedPaths = [];
         try {
-            DB::transaction(function () use ($request, $validated, $approvedDraft, &$document, &$initialTrail, &$storedPath) {
+            DB::transaction(function () use ($request, $validated, $approvedDraft, &$document, &$initialTrail, &$storedPaths) {
             $user = auth()->user();
             $access = app(DocumentAccess::class);
             $officeId = $access->currentOfficeId($user);
@@ -784,17 +787,18 @@ class DocumentController extends Controller
             }
 
             if ($file = $request->file('file')) {
-                $storedPath = $this->storeRoutedDocumentFile($document, $file, 'original', $initialTrail);
+                $storedPaths[] = $this->storeRoutedDocumentFile($document, $file, 'original', $initialTrail);
             } elseif ($approvedDraft) {
-                $storedPath = 'documents/'.$document->tracking_number.'.pdf';
+                $generatedPath = 'documents/'.$document->tracking_number.'.pdf';
                 $pdf = $this->approvedDraftPdf($approvedDraft, $document->tracking_number)->output();
-                if (! Storage::disk('document_private')->put($storedPath, $pdf)) {
+                if (! Storage::disk('document_private')->put($generatedPath, $pdf)) {
                     throw new \RuntimeException('Could not save the generated PDF.');
                 }
+                $storedPaths[] = $generatedPath;
                 $document->files()->create([
-                    'file_name' => basename($storedPath),
+                    'file_name' => basename($generatedPath),
                     'original_name' => $document->title.'.pdf',
-                    'file_path' => $storedPath,
+                    'file_path' => $generatedPath,
                     'mime_type' => 'application/pdf',
                     'size_bytes' => strlen($pdf),
                     'uploaded_by' => auth()->id(),
@@ -808,9 +812,13 @@ class DocumentController extends Controller
                 ]);
             }
 
+            foreach ($request->file('supporting_files', []) as $supportingFile) {
+                $storedPaths[] = $this->storeDocumentFile($document, $supportingFile, 'supporting', $initialTrail);
+            }
+
             });
         } catch (\Throwable $exception) {
-            if ($storedPath) {
+            foreach ($storedPaths as $storedPath) {
                 Storage::disk('document_private')->delete($storedPath);
             }
             throw $exception;
@@ -1240,6 +1248,7 @@ class DocumentController extends Controller
 
         return [
             'maxUploadSizeKb' => self::MAX_DOCUMENT_UPLOAD_KB,
+            'maxSupportingFiles' => self::MAX_SUPPORTING_FILES,
             'approvedDocuments' => DocumentCreationDraft::query()
                 ->with('documentType:id,name')
                 ->whereNull('archived_at')
