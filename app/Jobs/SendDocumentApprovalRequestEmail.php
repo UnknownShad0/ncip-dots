@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Services\GmailApiMailer;
+use App\Services\EmailNotificationMailer;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -27,8 +27,18 @@ class SendDocumentApprovalRequestEmail implements ShouldQueue
         public int $versionNumber,
     ) {}
 
-    public function handle(GmailApiMailer $mailer): void
+    public function handle(EmailNotificationMailer $mailer): void
     {
+        if (($deliveryIssue = $mailer->automatedDeliveryIssue()) !== null) {
+            Log::notice('Email document approval notification skipped.', [
+                'recipient' => $this->recipientHint(),
+                'version' => $this->versionNumber,
+                'reason' => $deliveryIssue,
+            ]);
+
+            return;
+        }
+
         $body = implode("\n", [
             'Hello '.$this->recipientName.',',
             '',
@@ -49,7 +59,7 @@ class SendDocumentApprovalRequestEmail implements ShouldQueue
                 $body,
             );
         } catch (Throwable $exception) {
-            Log::warning('Gmail document approval notification attempt failed.', [
+            Log::warning('Email document approval notification attempt failed.', [
                 'recipient' => $this->recipientHint(),
                 'version' => $this->versionNumber,
                 'attempt' => $this->attempts(),
@@ -60,7 +70,7 @@ class SendDocumentApprovalRequestEmail implements ShouldQueue
             throw $exception;
         }
 
-        Log::info('Gmail document approval notification sent.', [
+        Log::info('Email document approval notification sent.', [
             'recipient' => $this->recipientHint(),
             'version' => $this->versionNumber,
         ]);
@@ -68,7 +78,7 @@ class SendDocumentApprovalRequestEmail implements ShouldQueue
 
     public function failed(Throwable $exception): void
     {
-        Log::error('Gmail document approval notification failed after retries.', [
+        Log::error('Email document approval notification failed after retries.', [
             'recipient' => $this->recipientHint(),
             'version' => $this->versionNumber,
             'exception' => $exception::class,

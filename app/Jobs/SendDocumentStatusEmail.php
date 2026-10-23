@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Services\GmailApiMailer;
+use App\Services\EmailNotificationMailer;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -29,8 +29,19 @@ class SendDocumentStatusEmail implements ShouldQueue
         public ?string $trackingNumber = null,
     ) {}
 
-    public function handle(GmailApiMailer $mailer): void
+    public function handle(EmailNotificationMailer $mailer): void
     {
+        if (($deliveryIssue = $mailer->automatedDeliveryIssue()) !== null) {
+            Log::notice('Email document status notification skipped.', [
+                'recipient' => $this->recipientHint(),
+                'status' => $this->status,
+                'version' => $this->versionNumber,
+                'reason' => $deliveryIssue,
+            ]);
+
+            return;
+        }
+
         $statusLabel = match ($this->status) {
             'approved' => 'Approved',
             'revision_requested' => 'Changes requested',
@@ -69,7 +80,7 @@ class SendDocumentStatusEmail implements ShouldQueue
                 implode("\n", $lines),
             );
         } catch (Throwable $exception) {
-            Log::warning('Gmail document status notification attempt failed.', [
+            Log::warning('Email document status notification attempt failed.', [
                 'recipient' => $this->recipientHint(),
                 'status' => $this->status,
                 'version' => $this->versionNumber,
@@ -81,7 +92,7 @@ class SendDocumentStatusEmail implements ShouldQueue
             throw $exception;
         }
 
-        Log::info('Gmail document status notification sent.', [
+        Log::info('Email document status notification sent.', [
             'recipient' => $this->recipientHint(),
             'status' => $this->status,
             'version' => $this->versionNumber,
@@ -90,7 +101,7 @@ class SendDocumentStatusEmail implements ShouldQueue
 
     public function failed(Throwable $exception): void
     {
-        Log::error('Gmail document status notification failed after retries.', [
+        Log::error('Email document status notification failed after retries.', [
             'recipient' => $this->recipientHint(),
             'status' => $this->status,
             'version' => $this->versionNumber,

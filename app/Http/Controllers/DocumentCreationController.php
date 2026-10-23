@@ -2,34 +2,34 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\SendDocumentApprovalRequestEmail;
+use App\Jobs\SendDocumentRouteNotification;
+use App\Jobs\SendDocumentStatusEmail;
 use App\Models\Document;
 use App\Models\DocumentCreationDraft;
+use App\Models\DocumentCreationVersion;
 use App\Models\DocumentRoute;
 use App\Models\DocumentRouteStep;
-use App\Models\GmailConnection;
-use App\Models\DocumentCreationVersion;
 use App\Models\DocumentType;
 use App\Models\Office;
 use App\Models\User;
 use App\Services\AuditTrailWriter;
-use App\Services\DocumentTemplates;
-use App\Jobs\SendDocumentStatusEmail;
-use App\Jobs\SendDocumentApprovalRequestEmail;
-use App\Jobs\SendDocumentRouteNotification;
-use App\Services\DocumentPdf;
 use App\Services\DocumentMetadata;
+use App\Services\DocumentPdf;
+use App\Services\DocumentTemplates;
+use App\Services\EmailNotificationMailer;
 use App\Services\RichDocumentContent;
 use App\Services\TrackingNumberPdfStamper;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
-use Illuminate\Support\Arr;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -375,7 +375,7 @@ class DocumentCreationController extends Controller
 
     private function notifyRouteApprovers(Document $document, DocumentRoute $route, Office $office): void
     {
-        if (! GmailConnection::query()->exists()) {
+        if (! app(EmailNotificationMailer::class)->canSendAutomated()) {
             return;
         }
 
@@ -600,10 +600,11 @@ class DocumentCreationController extends Controller
     private function queueStatusEmail(DocumentCreationDraft $draft, string $status, ?string $remarks, ?string $trackingNumber = null): void
     {
         $creator = $draft->creator;
+        $deliveryIssue = app(EmailNotificationMailer::class)->automatedDeliveryIssue();
         $reason = match (true) {
             ! $creator => 'creator_missing',
             ! filter_var($creator->email, FILTER_VALIDATE_EMAIL) => 'creator_email_invalid',
-            ! GmailConnection::query()->exists() => 'sender_not_connected',
+            $deliveryIssue !== null => $deliveryIssue,
             default => null,
         };
 
@@ -646,11 +647,12 @@ class DocumentCreationController extends Controller
             return;
         }
 
-        if (! GmailConnection::query()->exists()) {
+        $mailer = app(EmailNotificationMailer::class);
+        if (! $mailer->canSendAutomated()) {
             Log::notice('Document approval request emails were not queued.', [
                 'draft_id' => $draft->id,
                 'approver_office_id' => $approverOffice->id,
-                'reason' => 'sender_not_connected',
+                'reason' => $mailer->automatedDeliveryIssue(),
             ]);
 
             return;

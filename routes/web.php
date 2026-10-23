@@ -10,7 +10,7 @@ use App\Http\Controllers\DocumentFontController;
 use App\Http\Controllers\DocumentTypeController;
 use App\Http\Controllers\DocumentWorkflowController;
 use App\Http\Controllers\DraftsController;
-use App\Http\Controllers\GmailIntegrationController;
+use App\Http\Controllers\EmailIntegrationController;
 use App\Http\Controllers\HrisEmployeeController;
 use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\IplumaController;
@@ -77,10 +77,18 @@ Route::middleware(['auth', 'active.user', 'verified', 'system.maintenance', 'nav
     Route::get('/audit-trail', [AuditTrailController::class, 'index'])->name('audit-trail.index');
 
     Route::middleware('administrator')->group(function () {
-        Route::get('/admin/gmail', [GmailIntegrationController::class, 'index'])->name('gmail-integration.index');
-        Route::get('/admin/gmail/connect', [GmailIntegrationController::class, 'connect'])->name('gmail-integration.connect');
-        Route::get('/admin/gmail/callback', [GmailIntegrationController::class, 'callback'])->name('gmail-integration.callback');
-        Route::post('/admin/gmail/disconnect', [GmailIntegrationController::class, 'disconnect'])->name('gmail-integration.disconnect');
+        Route::get('/admin/email', [EmailIntegrationController::class, 'index'])->name('email-integration.index');
+        Route::patch('/admin/email/automation', [EmailIntegrationController::class, 'updateAutomation'])
+            ->name('email-integration.automation.update');
+        Route::post('/admin/email/test', [EmailIntegrationController::class, 'sendTest'])
+            ->middleware('throttle:5,1')->name('email-integration.test');
+
+        // Keep old bookmarks working after the Gmail-specific integration was replaced by SMTP.
+        Route::redirect('/admin/gmail', '/admin/email')->name('gmail-integration.index');
+        Route::redirect('/admin/gmail/connect', '/admin/email')->name('gmail-integration.connect');
+        Route::redirect('/admin/gmail/callback', '/admin/email')->name('gmail-integration.callback');
+        Route::post('/admin/gmail/disconnect', fn () => redirect()->route('email-integration.index'))
+            ->name('gmail-integration.disconnect');
 
         Route::get('/setup', [SetupController::class, 'index'])->name('setup.index');
         Route::get('/libraries', [SetupController::class, 'libraries'])->name('libraries.index');

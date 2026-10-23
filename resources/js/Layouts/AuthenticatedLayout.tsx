@@ -26,7 +26,7 @@ const groups = [
         { key: 'navigation_access', name: 'Navigation Access', href: 'navigation-access.index', icon: ListChecks },
         { key: 'system_maintenance', name: 'System Maintenance', href: 'system-maintenance.index', icon: Wrench },
         { key: 'libraries', name: 'Libraries', href: 'libraries.index', icon: BookOpen },
-        { key: 'gmail_notifications', name: 'Gmail notifications', href: 'gmail-integration.index', icon: Mail },
+        { key: 'email_notifications', name: 'Email notifications', href: 'email-integration.index', icon: Mail },
         { key: 'audit_trails', name: 'Audit trails', href: 'audit-trail.index', icon: History },
     ] },
 ];

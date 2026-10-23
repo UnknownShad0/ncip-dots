@@ -18,7 +18,7 @@ class NavigationAccess
     private const RESTRICTED_NAVIGATION_KEYS = [
         'user_accounts',
         'libraries',
-        'gmail_notifications',
+        'email_notifications',
     ];
 
     private const LANDING_ROUTES = [
@@ -32,7 +32,7 @@ class NavigationAccess
         'archived_documents' => ['route' => 'archives.index'],
         'user_accounts' => ['route' => 'user-accounts.index', 'requires_administrator' => true],
         'libraries' => ['route' => 'libraries.index', 'requires_administrator' => true],
-        'gmail_notifications' => ['route' => 'gmail-integration.index', 'requires_administrator' => true],
+        'email_notifications' => ['route' => 'email-integration.index', 'requires_administrator' => true],
         'audit_trails' => ['route' => 'audit-trail.index'],
     ];
 
@@ -72,7 +72,8 @@ class NavigationAccess
         'action-types.' => ['libraries'],
         'purpose-types.' => ['libraries'],
         'hris-employees.' => ['libraries'],
-        'gmail-integration.' => ['gmail_notifications'],
+        'email-integration.' => ['email_notifications'],
+        'gmail-integration.' => ['email_notifications'],
         'audit-trail.' => ['audit_trails'],
     ];
 
@@ -98,7 +99,7 @@ class NavigationAccess
             ['label' => 'Administration', 'items' => [
                 ['key' => 'user_accounts', 'name' => 'User accounts'],
                 ['key' => 'libraries', 'name' => 'Libraries'],
-                ['key' => 'gmail_notifications', 'name' => 'Gmail notifications'],
+                ['key' => 'email_notifications', 'name' => 'Email notifications'],
                 ['key' => 'audit_trails', 'name' => 'Audit trails'],
             ]],
         ];

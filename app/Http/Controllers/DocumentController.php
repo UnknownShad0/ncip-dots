@@ -11,13 +11,13 @@ use App\Models\DocumentRoute;
 use App\Models\DocumentRouteStep;
 use App\Models\DocumentTrail;
 use App\Models\DocumentType;
-use App\Models\GmailConnection;
 use App\Models\Office;
 use App\Models\PurposeType;
 use App\Models\User;
 use App\Services\AuditTrailWriter;
 use App\Services\DocumentAccess;
 use App\Services\DocumentPdf;
+use App\Services\EmailNotificationMailer;
 use App\Services\RenderedDocumentPdf;
 use App\Services\TrackingNumberPdfStamper;
 use Illuminate\Http\Request;
@@ -1726,10 +1726,11 @@ class DocumentController extends Controller
 
         if ($document->notify_by_email) {
             $creator = $document->creator;
+            $deliveryIssue = app(EmailNotificationMailer::class)->automatedDeliveryIssue();
             $reason = match (true) {
                 ! $creator => 'creator_missing',
                 ! filter_var($creator->email, FILTER_VALIDATE_EMAIL) => 'creator_email_invalid',
-                ! GmailConnection::query()->exists() => 'sender_not_connected',
+                $deliveryIssue !== null => $deliveryIssue,
                 default => null,
             };
 
@@ -2344,7 +2345,7 @@ class DocumentController extends Controller
 
     private function notifyRouteOffice(Document $document, DocumentRoute $route, Office $office): void
     {
-        if (! GmailConnection::query()->exists()) {
+        if (! app(EmailNotificationMailer::class)->canSendAutomated()) {
             return;
         }
 
@@ -2369,7 +2370,7 @@ class DocumentController extends Controller
 
     private function notifyRouteCreator(Document $document, DocumentRoute $route, Office $office, string $event, ?string $remarks = null): void
     {
-        if (! $document->notify_by_email || ! GmailConnection::query()->exists()) {
+        if (! $document->notify_by_email || ! app(EmailNotificationMailer::class)->canSendAutomated()) {
             return;
         }
 

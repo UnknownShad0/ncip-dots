@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Services\GmailApiMailer;
+use App\Services\EmailNotificationMailer;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -31,8 +31,19 @@ class SendDocumentRouteNotification implements ShouldQueue
         public ?string $remarks = null,
     ) {}
 
-    public function handle(GmailApiMailer $mailer): void
+    public function handle(EmailNotificationMailer $mailer): void
     {
+        if (($deliveryIssue = $mailer->automatedDeliveryIssue()) !== null) {
+            Log::notice('Email document route notification skipped.', [
+                'recipient' => $this->recipientHint(),
+                'tracking_number' => $this->trackingNumber,
+                'event' => $this->event,
+                'reason' => $deliveryIssue,
+            ]);
+
+            return;
+        }
+
         $eventLabel = match ($this->event) {
             'approval_required' => 'Your office has a document to review and approve.',
             'approved' => 'An office approved the document.',
@@ -67,7 +78,7 @@ class SendDocumentRouteNotification implements ShouldQueue
                 implode("\n", $lines),
             );
         } catch (Throwable $exception) {
-            Log::warning('Gmail document route notification attempt failed.', [
+            Log::warning('Email document route notification attempt failed.', [
                 'recipient' => $this->recipientHint(),
                 'tracking_number' => $this->trackingNumber,
                 'event' => $this->event,
@@ -82,7 +93,7 @@ class SendDocumentRouteNotification implements ShouldQueue
 
     public function failed(Throwable $exception): void
     {
-        Log::error('Gmail document route notification failed after retries.', [
+        Log::error('Email document route notification failed after retries.', [
             'recipient' => $this->recipientHint(),
             'tracking_number' => $this->trackingNumber,
             'event' => $this->event,

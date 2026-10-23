@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Services\GmailApiMailer;
+use App\Services\EmailNotificationMailer;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -27,8 +27,18 @@ class SendDocumentTrackingReceivedEmail implements ShouldQueue
         public string $receivingOfficeName,
     ) {}
 
-    public function handle(GmailApiMailer $mailer): void
+    public function handle(EmailNotificationMailer $mailer): void
     {
+        if (($deliveryIssue = $mailer->automatedDeliveryIssue()) !== null) {
+            Log::notice('Email document tracking notification skipped.', [
+                'recipient' => $this->recipientHint(),
+                'tracking_number' => $this->trackingNumber,
+                'reason' => $deliveryIssue,
+            ]);
+
+            return;
+        }
+
         $body = implode("\n", [
             'Hello '.$this->recipientName.',',
             '',
@@ -47,7 +57,7 @@ class SendDocumentTrackingReceivedEmail implements ShouldQueue
                 $body,
             );
         } catch (Throwable $exception) {
-            Log::warning('Gmail document tracking notification attempt failed.', [
+            Log::warning('Email document tracking notification attempt failed.', [
                 'recipient' => $this->recipientHint(),
                 'tracking_number' => $this->trackingNumber,
                 'attempt' => $this->attempts(),
@@ -58,7 +68,7 @@ class SendDocumentTrackingReceivedEmail implements ShouldQueue
             throw $exception;
         }
 
-        Log::info('Gmail document tracking notification sent.', [
+        Log::info('Email document tracking notification sent.', [
             'recipient' => $this->recipientHint(),
             'tracking_number' => $this->trackingNumber,
         ]);
@@ -66,7 +76,7 @@ class SendDocumentTrackingReceivedEmail implements ShouldQueue
 
     public function failed(Throwable $exception): void
     {
-        Log::error('Gmail document tracking notification failed after retries.', [
+        Log::error('Email document tracking notification failed after retries.', [
             'recipient' => $this->recipientHint(),
             'tracking_number' => $this->trackingNumber,
             'exception' => $exception::class,

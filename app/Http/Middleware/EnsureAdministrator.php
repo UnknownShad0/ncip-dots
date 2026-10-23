@@ -14,8 +14,8 @@ class EnsureAdministrator
         $user = $request->user();
 
         if (! $user?->canManageLibraries()) {
-            if (str_starts_with($request->path(), 'admin/gmail')) {
-                Log::warning('Gmail integration access was denied by administrator middleware.', [
+            if (str_starts_with($request->path(), 'admin/email') || str_starts_with($request->path(), 'admin/gmail')) {
+                Log::warning('Email integration access was denied by administrator middleware.', [
                     'path' => $request->path(),
                     'route' => $request->route()?->getName(),
                     'user_id' => $user?->id,
