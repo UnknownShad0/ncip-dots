@@ -64,8 +64,8 @@ const emptyForm: FormState = {
 };
 
 export default function UserAccountsIndex({
-    users = [], offices = [], officeTableOptions = [], roles = [], flash = {},
-}: { users?: UserRow[]; offices?: OfficeOption[]; officeTableOptions?: OfficeTableOption[]; roles?: RoleOption[]; flash?: { success?: string; warning?: string } }) {
+    users = [], offices = [], officeTableOptions = [], roles = [], usesRelaxedPasswordValidation = false, flash = {},
+}: { users?: UserRow[]; offices?: OfficeOption[]; officeTableOptions?: OfficeTableOption[]; roles?: RoleOption[]; usesRelaxedPasswordValidation?: boolean; flash?: { success?: string; warning?: string } }) {
     const [search, setSearch] = useState('');
     const [sortKey, setSortKey] = useState<SortKey>('name');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -334,7 +334,7 @@ export default function UserAccountsIndex({
                         {editingRow && <Field label="Account Status" error={errors.account_status}><select value={form.account_status} onChange={(e) => setForm({ ...form, account_status: e.target.value as FormState['account_status'] })} className="w-full rounded-lg border-border bg-surface"><option value="Active">Active</option><option value="Inactive">Inactive</option><option value="Locked">Locked</option></select></Field>}
                         {editingRow && <><Field label="New password (optional)" error={errors.password}><input type="password" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full rounded-lg border-border bg-surface" /></Field>
                         <Field label="Confirm password" error={errors.password_confirmation}><input type="password" value={form.password_confirmation} onChange={(e) => setForm({ ...form, password_confirmation: e.target.value })} className="w-full rounded-lg border-border bg-surface" /></Field>
-                        <p className="text-xs text-muted sm:col-span-2">Use at least 8 characters, including uppercase and lowercase letters, a number, and a symbol.</p></>}
+                        <p className="text-xs text-muted sm:col-span-2">{usesRelaxedPasswordValidation ? 'Use at least 8 characters.' : 'Use at least 8 characters, including uppercase and lowercase letters, a number, and a symbol.'}</p></>}
                     </div>}
                     {Object.entries(errors).filter(([key]) => !['firstname', 'lastname', 'role_id', 'officeId', 'office_table_id', 'password', 'password_confirmation', 'account_status', 'user'].includes(key)).map(([key, message]) => <p key={key} className="text-sm text-danger">{message}</p>)}
                     {errors.user && <p className="text-sm text-danger">{errors.user}</p>}

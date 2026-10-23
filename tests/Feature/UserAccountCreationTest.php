@@ -24,6 +24,7 @@ class UserAccountCreationTest extends TestCase
         (require database_path('migrations/2026_10_11_000001_prepare_legacy_audit_import.php'))->up();
         (require database_path('migrations/2026_10_11_000002_add_native_audit_snapshots.php'))->up();
         (require database_path('migrations/2026_10_06_000001_add_hris_fields_to_users_table.php'))->up();
+        (require database_path('migrations/2026_10_22_000002_create_system_maintenance_settings_table.php'))->up();
         Schema::connection('legacy')->create('bureau', function ($table) {
             $table->integer('bureauId')->primary();
             $table->string('longName');
@@ -45,6 +46,7 @@ class UserAccountCreationTest extends TestCase
         ]);
         $this->actingAs(User::create([
             'name' => 'Administrator', 'email' => 'admin@example.test', 'password' => 'password', 'role_id' => 1,
+            'is_active' => true,
         ]));
         Notification::fake();
     }
@@ -62,8 +64,75 @@ class UserAccountCreationTest extends TestCase
         Notification::assertSentTo($user, UserAccountCreated::class, function ($notification) use ($user) {
             $lines = $notification->toMail($user)->introLines;
             $passwordLine = collect($lines)->first(fn ($line) => str_starts_with($line, 'Password: '));
+
             return Hash::check(substr($passwordLine, 10), $user->password);
         });
+    }
+
+    public function test_admin_can_update_an_account_password_without_a_symbol(): void
+    {
+        config(['app.is_testing' => true]);
+
+        $user = User::create([
+            'name' => 'Existing Account',
+            'firstname' => 'Existing',
+            'lastname' => 'Account',
+            'username' => 'existing.account',
+            'email' => 'existing@example.test',
+            'password' => 'OldPassword1!',
+            'role' => 'System Admin',
+            'role_id' => 1,
+            'office_id' => 7,
+            'office_code' => 'OFF-7',
+        ]);
+
+        $this->put('/user-accounts/'.$user->id, [
+            'operation' => 'update',
+            'username' => $user->username,
+            'email' => $user->email,
+            'firstname' => $user->firstname,
+            'lastname' => $user->lastname,
+            'role_id' => 1,
+            'officeId' => 7,
+            'account_status' => 'Active',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+        ])->assertSessionHasNoErrors()->assertRedirect('/user-accounts');
+
+        $this->assertTrue(Hash::check('password', $user->fresh()->password));
+    }
+
+    public function test_admin_account_password_requires_a_symbol_outside_testing(): void
+    {
+        config(['app.is_testing' => false]);
+
+        $user = User::create([
+            'name' => 'Existing Account',
+            'firstname' => 'Existing',
+            'lastname' => 'Account',
+            'username' => 'existing.account',
+            'email' => 'existing@example.test',
+            'password' => 'OldPassword1!',
+            'role' => 'System Admin',
+            'role_id' => 1,
+            'office_id' => 7,
+            'office_code' => 'OFF-7',
+        ]);
+
+        $this->put('/user-accounts/'.$user->id, [
+            'operation' => 'update',
+            'username' => $user->username,
+            'email' => $user->email,
+            'firstname' => $user->firstname,
+            'lastname' => $user->lastname,
+            'role_id' => 1,
+            'officeId' => 7,
+            'account_status' => 'Active',
+            'password' => 'Password1',
+            'password_confirmation' => 'Password1',
+        ])->assertSessionHasErrors('password');
+
+        $this->assertTrue(Hash::check('OldPassword1!', $user->fresh()->password));
     }
 
     public function test_employee_lookup_maps_fixture_office_and_saves_verified_names(): void

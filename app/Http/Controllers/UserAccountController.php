@@ -130,6 +130,7 @@ class UserAccountController extends Controller
             'offices' => $offices,
             'officeTableOptions' => $officeTableOptions,
             'roles' => $roleOptions,
+            'usesRelaxedPasswordValidation' => (bool) config('app.is_testing'),
         ]);
     }
 
@@ -239,6 +240,10 @@ class UserAccountController extends Controller
     public function update(Request $request, int $id)
     {
         $user = User::query()->findOrFail($id);
+        $passwordRule = config('app.is_testing')
+            ? PasswordRule::min(8)
+            : PasswordRule::defaults();
+
         $validated = $request->validate([
             'operation' => ['required', 'in:update'],
             'username' => ['required', 'string', 'max:50', Rule::unique('users', 'username')->ignore($user->id)],
@@ -249,7 +254,7 @@ class UserAccountController extends Controller
             'employee_role' => [Rule::requiredIf((bool) $user->employee_code), 'nullable', Rule::in(['Super Admin', 'Executive', 'Admin Staff'])],
             'officeId' => [Rule::requiredIf(! $user->employee_code), 'nullable', 'integer', 'exists:offices,id'],
             'account_status' => ['required', Rule::in(['Active', 'Inactive', 'Locked'])],
-            'password' => ['nullable', 'confirmed', PasswordRule::defaults()],
+            'password' => ['nullable', 'confirmed', $passwordRule],
         ]);
 
         $roleId = $user->employee_code ? $this->employeeRoleId($validated['employee_role']) : (int) $validated['role_id'];
