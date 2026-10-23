@@ -2,9 +2,10 @@ import DocumentLifecycleAction from "@/Components/DocumentLifecycleAction";
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import DocumentDispositionPrint from '@/Components/DocumentDispositionPrint';
 import WorkspaceDialog from '@/Components/WorkspaceDialog';
+import { DocumentRouteProgress, type RouteTree, type RouteTreeStep } from '@/Pages/Documents/Index';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
-import { Eye, FileText, LoaderCircle, Printer, Search, X } from 'lucide-react';
+import { Download, Eye, FileSignature, FileText, LoaderCircle, Printer, Search, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 type ArchiveDocument = {
@@ -21,11 +22,24 @@ type ArchiveDocument = {
     document_type?: string;
     other_document_type?: string | null;
     purpose_type?: string;
+    other_purpose?: string | null;
     origin_type?: string;
     status?: string;
     remarks?: string;
     is_finalized?: boolean;
     created_at?: string;
+    created_by_name?: string | null;
+    created_by_short_name?: string | null;
+    approval_status?: string | null;
+    signature_status?: string | null;
+    file_name?: string | null;
+    file_url?: string | null;
+    files?: Array<{ id: number; name: string; type: string; url?: string | null; view_url?: string | null; is_pdf?: boolean; uploaded_at?: string | null }>;
+    route_mode?: 'sequential' | 'parallel';
+    route_status?: string | null;
+    route_from_office?: string | null;
+    route_steps?: RouteTreeStep[];
+    route_tree?: RouteTree[];
     details_loading?: boolean;
     details_error?: string;
     transactions?: Array<{
@@ -241,8 +255,7 @@ export default function ArchivesIndex({ source = 'tracking', documents, canFilte
                                         <span className="rounded-md bg-sidebar/10 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-sidebar">{(document.status || 'archived').replace(/[_-]+/g, ' ')}</span>
                                         {document.can_restore && <DocumentLifecycleAction action="restore" iconOnly title={document.title}
                                             url={route(source === 'generation' ? 'document-creation.restore' : 'archives.restore', document.id)} />}
-                                        {source === 'generation' ? <a href={document.preview_url} target="_blank" rel="noopener noreferrer" title="View / download PDF" aria-label={`View PDF: ${document.title}`} className="rounded-md bg-slate-100 p-2 text-foreground hover:bg-slate-200"><Eye size={15} aria-hidden="true" /></a> : <button type="button" aria-label="View document" title="View document" onClick={() => openDocumentDetails(document)} className="rounded-md bg-slate-100 p-2 text-foreground hover:bg-slate-200"><Eye size={15} aria-hidden="true" /></button>}
-                                        {document.is_finalized && <button type="button" aria-label="Print disposition form" title="Print disposition form" disabled={printLoadingId === document.id} onClick={() => printDisposition(document)} className="rounded-md bg-secondary p-2 text-primary hover:bg-primary/10 disabled:cursor-wait disabled:opacity-60">{printLoadingId === document.id ? <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Printer size={15} aria-hidden="true" />}</button>}
+                                        {source === 'generation' ? <a href={document.preview_url} target="_blank" rel="noopener noreferrer" title="View / download PDF" aria-label={`View PDF: ${document.title}`} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-foreground transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Eye size={17} aria-hidden="true" /></a> : <button type="button" aria-label="View document details" title="View details" onClick={() => openDocumentDetails(document)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-foreground transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Eye size={17} aria-hidden="true" /></button>}
                                     </div>
                                 </article>
                             ))
@@ -272,31 +285,29 @@ export default function ArchivesIndex({ source = 'tracking', documents, canFilte
                 </section>
             </div>
 
-            <WorkspaceDialog open={Boolean(viewingDocument)} onClose={() => setViewingDocument(null)} labelledBy="archive-document-details-title" width="max-w-4xl">
+            <WorkspaceDialog open={Boolean(viewingDocument)} onClose={() => setViewingDocument(null)} labelledBy="archive-document-details-title" width="max-w-3xl">
                 {viewingDocument && <section>
                     <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
-                        <div className="flex min-w-0 items-start gap-3">
-                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary"><FileText size={20} aria-hidden="true" /></span>
-                            <div className="min-w-0"><h2 id="archive-document-details-title" className="text-lg font-semibold text-foreground">Document details</h2><p className="mt-1 break-words text-sm text-muted">Review document information and transaction history.</p></div>
+                        <div className="min-w-0">
+                            <h2 id="archive-document-details-title" className="break-words text-lg font-semibold text-foreground">{viewingDocument.title || 'Document details'}</h2>
+                            <p className="mt-1 break-all font-mono text-sm text-muted">{viewingDocument.tracking_number || 'Tracking number unavailable'}</p>
                         </div>
-                        <button type="button" onClick={() => setViewingDocument(null)} aria-label="Close document details" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground"><X size={19} aria-hidden="true" /></button>
+                        <div className="flex shrink-0 items-center gap-2">
+                            {viewingDocument.is_finalized && <button type="button" onClick={() => printDisposition(viewingDocument)} disabled={printLoadingId === viewingDocument.id} className="dots-button-secondary px-3" aria-label="Print disposition form">{printLoadingId === viewingDocument.id ? <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Printer size={16} aria-hidden="true" />} Print disposition</button>}
+                            <button type="button" onClick={() => setViewingDocument(null)} aria-label="Close document details" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground"><X size={19} aria-hidden="true" /></button>
+                        </div>
                     </div>
                     <div className="space-y-6 p-5 sm:p-6" aria-busy={viewingDocument.details_loading}>
-                        {viewingDocument.details_loading && <p role="status" className="inline-flex items-center gap-2 rounded-lg bg-background p-3 text-sm text-muted"><LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading transaction history and attachments…</p>}
+                        {viewingDocument.details_loading && <p role="status" className="inline-flex items-center gap-2 rounded-lg bg-background p-3 text-sm text-muted"><LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading document details and attachments…</p>}
                         {viewingDocument.details_error && <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{viewingDocument.details_error}</p>}
-                        <section aria-label="Document information" className="grid gap-4 rounded-xl border border-border bg-background p-4 sm:grid-cols-2 lg:grid-cols-3">
-                            <ArchiveDetail label="Tracking number" value={viewingDocument.tracking_number || '—'} />
-                            <ArchiveDetail label="Title" value={viewingDocument.title || 'Untitled'} />
-                            <ArchiveDetail label="Document type" value={`${viewingDocument.document_type || '—'}${viewingDocument.other_document_type ? ` (${viewingDocument.other_document_type})` : ''}`} />
-                            <ArchiveDetail label="Origin" value={viewingDocument.origin_type || '—'} />
-                            <ArchiveDetail label="Office" value={viewingDocument.office_short_name || viewingDocument.office?.short_name || viewingDocument.office_name || viewingDocument.office?.name || '—'} />
-                            <div><p className="text-xs font-semibold uppercase text-muted">Status</p><span className="mt-1 inline-flex rounded-full bg-sidebar/10 px-2.5 py-1 text-xs font-semibold text-sidebar">{archiveStatusLabel(viewingDocument.status)}</span></div>
-                            <div className="sm:col-span-2 lg:col-span-3"><p className="text-xs font-semibold uppercase text-muted">Remarks</p><p className="mt-1 whitespace-pre-wrap break-words text-sm text-foreground">{viewingDocument.remarks || '—'}</p></div>
-                        </section>
-                        <section aria-labelledby="archive-transaction-history-title">
-                            <div className="mb-3 flex items-center justify-between gap-3"><div><h3 id="archive-transaction-history-title" className="font-semibold text-foreground">Transaction history</h3><p className="mt-1 text-sm text-muted">Document activity in workflow order.</p></div><span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold text-muted">{viewingDocument.transactions?.length ?? 0} transactions</span></div>
-                            {viewingDocument.transactions?.length ? <ol className="space-y-3 border-l-2 border-border pl-4">{viewingDocument.transactions.map((transaction, index) => <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="relative rounded-xl border border-border bg-background p-3 before:absolute before:-left-[22px] before:top-4 before:h-2.5 before:w-2.5 before:rounded-full before:bg-primary"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-semibold text-foreground">{transaction.action || transaction.status || 'Transaction'}</span><span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium uppercase text-muted">{transaction.status || '—'}</span></div><p className="mt-1 text-sm text-muted">{[transaction.from_office_short_name || transaction.from_office, transaction.to_office_short_name || transaction.to_office].filter(Boolean).join(' → ') || (transaction.holder_short_name || transaction.holder ? `Held by ${transaction.holder_short_name || transaction.holder}` : 'Office details unavailable')}</p><p className="mt-1 text-xs text-muted">{[transaction.created_by_short_name || transaction.created_by, transaction.created_at].filter(Boolean).join(' · ') || 'Date and user unavailable'}</p></li>)}</ol> : viewingDocument.details_loading ? null : <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">No transactions recorded.</p>}
-                        </section>
+                        <ArchiveDocumentReferenceDetails document={viewingDocument} loading={viewingDocument.details_loading} />
+                        {viewingDocument.approval_status && viewingDocument.approval_status !== 'not_required' && <section className="rounded-xl border border-border bg-background p-4" aria-label="Approval and signing status">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div><h3 className="font-semibold text-foreground">Approval and signing</h3><p className="mt-1 text-sm text-muted">Approval follows the routing record. Signing applies only to the primary PDF; iPluma submission is not connected yet.</p></div>
+                                <div className="flex flex-wrap gap-2"><span className={'rounded-full px-2.5 py-1 text-xs font-semibold capitalize ' + archiveStatusClasses(viewingDocument.approval_status)}>{viewingDocument.approval_status.replaceAll('_', ' ')}</span><span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold capitalize text-foreground">{(viewingDocument.signature_status || 'not_required').replaceAll('_', ' ')}</span></div>
+                            </div>
+                        </section>}
+                        <DocumentRouteProgress document={viewingDocument} />
                     </div>
                     <div className="sticky bottom-0 flex justify-end border-t border-border bg-surface px-5 py-4 sm:px-6"><button type="button" onClick={() => setViewingDocument(null)} className="dots-button-secondary">Close</button></div>
                 </section>}
@@ -306,10 +317,78 @@ export default function ArchivesIndex({ source = 'tracking', documents, canFilte
     );
 }
 
-function ArchiveDetail({ label, value }: { label: string; value: string }) {
-    return <div><p className="text-xs font-semibold uppercase text-muted">{label}</p><p className="mt-1 break-words text-sm font-medium text-foreground">{value}</p></div>;
+function ArchiveReadOnlyDetail({ label, value }: { label: string; value?: string | null }) {
+    return <div role="row" className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-3 py-2 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-4"><p role="rowheader" className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</p><p role="cell" className="break-words text-sm font-medium text-foreground">{value || '—'}</p></div>;
 }
 
-function archiveStatusLabel(status?: string) {
-    return (status || 'archived').replace(/[_-]+/g, ' ').toUpperCase();
+function archiveDocumentTypeName(document: ArchiveDocument) {
+    const name = document.document_type || '';
+    return name.trim().toLowerCase() === 'others' && document.other_document_type ? name + ' (' + document.other_document_type + ')' : name;
+}
+
+function archivePurposeName(document: ArchiveDocument) {
+    const name = document.purpose_type || '';
+    return name.trim().toLowerCase() === 'others' && document.other_purpose ? 'Others (' + document.other_purpose + ')' : name;
+}
+
+function ArchiveDocumentReferenceDetails({ document, loading = false }: { document: ArchiveDocument; loading?: boolean }) {
+    return <section className="rounded-xl border border-border bg-surface p-4 sm:p-5">
+        <h3 className="text-sm font-semibold text-foreground">Document details and attachments</h3>
+        <section role="table" aria-label="Archived document details" className="mt-3 divide-y divide-border rounded-xl border border-border bg-background px-3 py-1 sm:px-4">
+            <ArchiveReadOnlyDetail label="Tracking number" value={document.tracking_number} />
+            <ArchiveReadOnlyDetail label="Title" value={document.title} />
+            <ArchiveReadOnlyDetail label="Type" value={archiveDocumentTypeName(document)} />
+            <ArchiveReadOnlyDetail label="Purpose" value={archivePurposeName(document)} />
+            <ArchiveReadOnlyDetail label="Origin" value={document.origin_type} />
+            <ArchiveReadOnlyDetail label="Office" value={document.office_short_name || document.office?.short_name || document.office_name || document.office?.name} />
+            <div role="row" className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 py-2 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-4">
+                <p role="rowheader" className="text-xs font-semibold uppercase tracking-wide text-muted">Status</p>
+                <span role="cell" className={'inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ' + archiveStatusClasses(document.status)}>{(document.status || 'archived').replaceAll('_', ' ').toUpperCase()}</span>
+            </div>
+            <ArchiveReadOnlyDetail label="Approval" value={(document.approval_status || 'not_required').replaceAll('_', ' ')} />
+            <ArchiveReadOnlyDetail label="Signing" value={(document.signature_status || 'not_required').replaceAll('_', ' ')} />
+            <ArchiveReadOnlyDetail label="Created by" value={document.created_by_short_name || document.created_by_name} />
+            <ArchiveReadOnlyDetail label="Date created" value={document.created_at} />
+            <div role="row" className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-3 py-2 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-4"><p role="rowheader" className="text-xs font-semibold uppercase tracking-wide text-muted">Remarks</p><p role="cell" className="whitespace-pre-wrap break-words text-sm text-foreground">{document.remarks || '—'}</p></div>
+        </section>
+        <div className="mt-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <p className="text-sm font-semibold text-foreground">Attached files</p>
+                {document.signature_status && document.signature_status !== 'not_required' && <p className="text-xs text-muted">Signing applies to the primary document only. iPluma PDF submission is not connected yet.</p>}
+            </div>
+            {document.files?.length ? <ul className="mt-3 space-y-2">{document.files.map(file => <li key={file.id} className="rounded-xl border border-border bg-surface p-3 sm:p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-3"><span className="mt-0.5 rounded-lg bg-secondary p-2 text-primary"><FileText size={17} aria-hidden="true" /></span><div className="min-w-0"><p className="break-words text-sm font-semibold text-foreground">{file.name}</p><div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted"><span>{file.type === 'original' ? 'Primary document' : file.type === 'supporting' ? 'Supporting file' : file.type}</span>{file.is_pdf && <><span aria-hidden="true">·</span><span>PDF</span></>}{file.uploaded_at && <><span aria-hidden="true">·</span><span>{file.uploaded_at}</span></>}{!file.url && !file.view_url && <span className="text-warning">File not available</span>}</div></div></div>
+                    <div className="flex flex-wrap items-center gap-2 sm:shrink-0">{file.view_url && <a href={file.view_url} target="_blank" rel="noopener noreferrer" className="dots-button-secondary min-h-9 px-3 py-1.5 text-xs"><Eye size={14} aria-hidden="true" />View</a>}{file.url && <a href={file.url} className="dots-button-secondary min-h-9 px-3 py-1.5 text-xs"><Download size={14} aria-hidden="true" />Download</a>}{file.type === 'original' && file.is_pdf && document.signature_status === 'needs_signature' && <button type="button" disabled title={document.approval_status === 'approved' ? 'iPluma file submission is not connected yet.' : 'Available after approval.'} className="dots-button-secondary min-h-9 px-3 py-1.5 text-xs"><FileSignature size={14} aria-hidden="true" />Sign with iPluma</button>}{file.type === 'original' && file.is_pdf && document.signature_status === 'signed' && <span className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-success-soft px-3 py-1.5 text-xs font-medium text-success"><FileSignature size={14} aria-hidden="true" />Signed</span>}</div>
+                </div>
+            </li>)}</ul> : loading ? null : document.file_url ? <div className="mt-2 flex flex-wrap items-center gap-2"><span className="break-all text-sm font-medium text-foreground">{document.file_name || 'Attached file'}</span><a href={document.file_url} className="dots-button-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs"><Download size={14} aria-hidden="true" />Download</a></div> : <p className="mt-1 text-sm text-foreground">No file attached.</p>}
+        </div>
+    </section>;
+}
+
+function archiveStatusClasses(status?: string | null) {
+    switch ((status || 'pending').toLowerCase()) {
+        case 'approved':
+        case 'completed':
+        case 'released':
+        case 'processed':
+        case 'done':
+            return 'bg-success-soft text-success';
+        case 'rejected':
+        case 'cancelled':
+            return 'bg-danger-soft text-danger';
+        case 'archived':
+        case 'terminal':
+            return 'bg-sidebar/10 text-sidebar';
+        case 'pending':
+        case 'ongoing':
+        case 'available':
+        case 'waiting':
+        case 'in_progress':
+        case 'waiting_on_branch':
+        case 'changes_requested':
+            return 'bg-warning-soft text-warning';
+        default:
+            return 'bg-slate-100 text-foreground';
+    }
 }

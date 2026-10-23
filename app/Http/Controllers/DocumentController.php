@@ -461,7 +461,8 @@ class DocumentController extends Controller
             'page' => ['nullable', 'integer', 'min:1'],
         ]);
         $search = trim((string) ($filters['search'] ?? ''));
-        $statusFilter = $filters['status'] ?? 'all';
+        $requestedStatus = $filters['status'] ?? 'all';
+        $statusFilter = $requestedStatus === 'archived' ? 'all' : $requestedStatus;
         $sortKey = $filters['sort'] ?? null;
         $sortDirection = $filters['direction'] ?? 'asc';
         $perPage = (int) ($filters['per_page'] ?? 10);
@@ -470,7 +471,8 @@ class DocumentController extends Controller
         $access = app(DocumentAccess::class);
         $currentOfficeId = $access->currentOfficeId($user);
         $isAdministrator = $access->canViewAllDocuments($user);
-        $newDocumentQuery = $access->scope(Document::query(), $user);
+        $newDocumentQuery = $access->scope(Document::query(), $user)
+            ->where('documents.is_archived', false);
         $editDraftId = request()->integer('edit_draft_id');
 
         if ($editDraftId > 0) {
@@ -530,9 +532,6 @@ class DocumentController extends Controller
                     $query->orWhereIn(DB::raw($latestStatusValue), ['pending', 'ongoing']);
                 } elseif (mb_strtolower($search) === 'released') {
                     $query->orWhereIn(DB::raw($latestStatusValue), ['available', 'processed', 'released']);
-                } elseif (mb_strtolower($search) === 'archived') {
-                    $query->orWhere('documents.is_archived', true)
-                        ->orWhereIn(DB::raw($latestStatusValue), ['terminal', 'archived']);
                 }
             });
         }
@@ -559,19 +558,12 @@ class DocumentController extends Controller
                 });
             }
         } elseif ($statusFilter !== 'all') {
-            if ($statusFilter === 'archived') {
-                $newDocumentQuery->where(function ($query) {
-                    $query->where('documents.is_archived', true)
-                        ->orWhereIn(DB::raw('COALESCE((SELECT latest_status.status FROM document_trails AS latest_status WHERE latest_status.document_id = documents.id ORDER BY latest_status.id DESC LIMIT 1), documents.status)'), ['terminal', 'archived']);
-                });
-            } else {
-                $statusValues = match ($statusFilter) {
-                    'ongoing' => ['pending', 'ongoing'],
-                    'released' => ['available', 'processed', 'released'],
-                    default => [$statusFilter],
-                };
-                $newDocumentQuery->whereIn(DB::raw($latestStatusValue), $statusValues);
-            }
+            $statusValues = match ($statusFilter) {
+                'ongoing' => ['pending', 'ongoing'],
+                'released' => ['available', 'processed', 'released'],
+                default => [$statusFilter],
+            };
+            $newDocumentQuery->whereIn(DB::raw($latestStatusValue), $statusValues);
         }
         $newDocuments = $newDocumentQuery
             ->with([
@@ -1219,6 +1211,7 @@ class DocumentController extends Controller
         $document = app(DocumentAccess::class)->scope(Document::query(), $request->user())
             ->with(['latestTrail', 'latestRoute'])
             ->findOrFail($id);
+        abort_unless($this->canForwardDocument($document, $request->user()), 403, 'This document is not available for forwarding.');
         $parentStep = $this->authorizeCurrentHolder($document, allowBranch: true);
         $officeId = app(DocumentAccess::class)->currentOfficeId($request->user());
         if (in_array((int) $officeId, $officeIds, true)) {
@@ -1250,6 +1243,7 @@ class DocumentController extends Controller
         try {
             $trail = DB::transaction(function () use ($request, $document, $validated, $officeIds, $targetOffices, $officeId, $sourceOfficeName, $hasReplacementFile, &$storedPath) {
             $lockedDocument = Document::query()->with(['latestTrail', 'latestRoute'])->lockForUpdate()->findOrFail($document->id);
+            abort_unless($this->canForwardDocument($lockedDocument, $request->user()), 403, 'This document is not available for forwarding.');
             $parentStep = $this->authorizeCurrentHolder($lockedDocument, allowBranch: true);
             if ($parentStep && array_intersect($officeIds, $this->branchAncestorOfficeIds($parentStep)) !== []) {
                 throw ValidationException::withMessages([
@@ -1769,7 +1763,8 @@ class DocumentController extends Controller
 
     private function canForwardDocument(Document $document, User $user): bool
     {
-        if (! $user->is_active || $document->is_archived || $document->legacy_needs_review) {
+        if (! $user->is_active || $document->is_archived || $document->legacy_needs_review
+            || ($document->approval_status ?? null) === 'approved') {
             return false;
         }
         $officeId = app(DocumentAccess::class)->currentOfficeId($user);

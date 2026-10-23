@@ -2,6 +2,21 @@ import QRCode from 'react-qr-code';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+type PrintRouteStep = {
+    id?: number;
+    office?: string | null;
+    position: number;
+    status: string;
+    child_routes?: PrintRoute[];
+};
+
+type PrintRoute = {
+    id: number;
+    mode?: 'sequential' | 'parallel' | null;
+    status?: string | null;
+    steps: PrintRouteStep[];
+};
+
 type DocumentItem = {
     tracking_number?: string;
     tracking_url?: string | null;
@@ -17,6 +32,7 @@ type DocumentItem = {
     route_mode?: 'sequential' | 'parallel' | null;
     route_status?: string | null;
     route_steps?: Array<{ office?: string | null; position: number; status: string }>;
+    route_tree?: PrintRoute[];
     transactions?: Array<{
         id?: number;
         action?: string | null;
@@ -42,19 +58,68 @@ const getDocumentTypeName = (document: any): string => {
         ? name + ' (' + document.other_document_type + ')'
         : name;
 };
+
+// ---------------------------------------------------------------------------
+// "Journey line" on paper
+//   - One thin vertical line. Filled dot = done, hollow dot = still to do.
+//   - Offices that forward the document appear as an indented branch.
+//   - Geometry (px): each lane is LANE_W wide, the dot is 9px at top 3px (center y = 7.5px).
+//   - Rows use padding (never margin) so the line stays continuous across blocks and pages.
+// ---------------------------------------------------------------------------
+const LANE_W = 22;
+const DOT_CENTER_Y = 7.5;
+const PENDING_STATUSES = ['waiting', 'available', 'in_progress', 'waiting_on_branch', 'paused'];
+
+const modeWords = (mode?: string | null) => mode === 'parallel' ? 'at the same time' : 'one after another';
+
+const pendingStatusText = (status: string) => ({
+    waiting: 'Waiting for its turn',
+    available: 'Waiting to receive the document',
+    in_progress: 'Reviewing now',
+    waiting_on_branch: 'Waiting for the offices it forwarded to',
+    paused: 'On hold',
+}[status] ?? status.replaceAll('_', ' '));
+
+const routeStatusText = (status?: string | null) => {
+    if (!status) return 'Still in progress';
+    if (status === 'approved') return 'Approved by all offices';
+    if (['pending', 'in_progress', 'ongoing'].includes(status)) return 'Still in progress';
+    return status.replaceAll('_', ' ');
+};
+
+type Rail = { lane: number; from: 'top' | 'dot'; to: 'bottom' | 'dot'; dashed: boolean };
+
+type JourneyRow = {
+    kind: 'event' | 'label' | 'todo';
+    depth: number;
+    // event
+    date?: string;
+    headline?: string;
+    detail?: string;
+    handledBy?: string;
+    remarks?: string;
+    latest?: boolean;
+    // label
+    labelText?: string;
+    // todo
+    office?: string;
+    statusText?: string;
+    note?: string;
+    branchStart?: boolean;
+    // computed layout
+    rails?: Rail[];
+    elbowFrom?: number;
+};
+
 type DispositionPrintBlock = {
     key: string;
-    type: 'title' | 'fields' | 'remarks-value' | 'route-history-heading' | 'route-history-row' | 'pending-office-heading' | 'pending-office-row';
+    type: 'title' | 'fields' | 'remarks-value' | 'journey-heading' | 'journey-row' | 'journey-empty';
     text?: string;
     start?: number;
     end?: number;
-    date?: string;
-    office?: string;
-    action?: string;
-    handledBy?: string;
-    status?: string;
-    remarks?: string;
+    row?: JourneyRow;
 };
+
 const DISPOSITION_PAGE_BODY_HEIGHT = 700;
 
 export default function DocumentDispositionPrint({ document }: { document: DocumentItem }) {
@@ -67,52 +132,128 @@ export default function DocumentDispositionPrint({ document }: { document: Docum
     const measure = useRef<HTMLDivElement>(null);
     const [pages, setPages] = useState<DispositionPrintBlock[][]>([]);
     const [portalRoot, setPortalRoot] = useState<HTMLDivElement | null>(null);
-    const routeHistoryBlocks: DispositionPrintBlock[] = transactions.map((entry, index) => {
-        const actionType = (entry.action || entry.status || '').toLowerCase();
+
+    // ----- Done: what already happened, oldest first, in plain words -----
+    const eventRows: JourneyRow[] = transactions.map((entry, index) => {
+        const action = (entry.action || '').toLowerCase();
+        const status = (entry.status || '').toLowerCase();
         const fromOffice = entry.from_office_short_name || entry.from_office;
         const toOffice = entry.to_office_short_name || entry.to_office;
         const holder = entry.holder_short_name || entry.holder;
-        const office = actionType.includes('releas')
-            ? fromOffice || holder || toOffice
-            : actionType.includes('receiv')
-                ? toOffice || holder || fromOffice
-                : holder || fromOffice || toOffice;
+        const anyOffice = toOffice || holder || fromOffice;
+        let headline = entry.action || entry.status || 'Processed';
+        let detail = anyOffice ? `at ${anyOffice}` : '';
+
+        if (action.includes('releas') || action.includes('forward')) {
+            headline = 'Forwarded';
+            detail = fromOffice && toOffice && fromOffice !== toOffice
+                ? `from ${fromOffice} to ${toOffice}`
+                : toOffice ? `to ${toOffice}` : fromOffice ? `by ${fromOffice}` : '';
+        } else if (action.includes('receiv')) {
+            headline = 'Received';
+            detail = anyOffice ? `by ${toOffice || holder || fromOffice}` : '';
+        } else if (action.includes('change') || status.includes('change')) {
+            headline = 'Changes requested';
+            detail = anyOffice ? `by ${holder || fromOffice || toOffice}` : '';
+        } else if (action.includes('reject') || status.includes('reject')) {
+            headline = 'Rejected';
+            detail = anyOffice ? `by ${holder || fromOffice || toOffice}` : '';
+        } else if (action.includes('approv') || status.includes('approv')) {
+            headline = 'Approved';
+            detail = anyOffice ? `by ${holder || fromOffice || toOffice}` : '';
+        } else if (action.includes('terminal')) {
+            headline = 'Marked as finished';
+        } else if (action.includes('creat') || action.includes('regist') || action.includes('draft')) {
+            headline = 'Document created';
+        }
 
         return {
-            key: `chronological-trail-${entry.id ?? index}`,
-            type: 'route-history-row',
+            kind: 'event',
+            depth: 0,
             date: entry.created_at || 'Date unavailable',
-            office: office || 'Office unavailable',
-            action: entry.action || 'Processed',
-            status: entry.status || '',
-            handledBy: entry.created_by_short_name || entry.created_by || 'Unknown user',
+            headline,
+            detail,
+            handledBy: entry.created_by_short_name || entry.created_by || '',
             remarks: entry.remarks || '',
+            latest: index === transactions.length - 1,
         };
     });
-    const pendingOfficeSteps = (document.route_steps ?? []).filter((step) => ['waiting', 'available', 'in_progress', 'paused'].includes(step.status));
-    const pendingOfficeBlocks: DispositionPrintBlock[] = pendingOfficeSteps.length
-        ? pendingOfficeSteps.map((step) => ({
-            key: `pending-office-${step.position}`,
-            type: 'pending-office-row',
-            office: step.office || 'Office unavailable',
-            status: step.status.replaceAll('_', ' '),
-        }))
-        : [{
-            key: 'pending-office-none',
-            type: 'pending-office-row',
-            office: 'No offices waiting',
-            status: document.route_status === 'approved' ? 'All offices approved' : 'No multi-office route',
-        }];
+
+    // ----- Still to do: offices that have not finished, with forwarded branches indented -----
+    const routeTree: PrintRoute[] = document.route_tree?.length
+        ? document.route_tree
+        : document.route_steps?.length
+            ? [{
+                id: 0,
+                mode: document.route_mode || 'sequential',
+                status: document.route_status || 'pending',
+                steps: document.route_steps.map((step, index) => ({ ...step, id: index + 1, child_routes: [] })),
+            }]
+            : [];
+    const collectTodo = (routes: PrintRoute[], depth: number, ownerOffice?: string | null): JourneyRow[] => routes.flatMap((route) => {
+        let first = true;
+        return route.steps.filter((step) => PENDING_STATUSES.includes(step.status)).flatMap((step): JourneyRow[] => {
+            const row: JourneyRow = {
+                kind: 'todo',
+                depth,
+                office: step.office || 'Office unavailable',
+                statusText: pendingStatusText(step.status),
+                note: depth > 0 && first ? `Forwarded by ${ownerOffice || 'the office above'} · offices review ${modeWords(route.mode)}` : undefined,
+                branchStart: depth > 0 && first,
+            };
+            first = false;
+            return [row, ...collectTodo(step.child_routes ?? [], depth + 1, step.office)];
+        });
+    });
+    const todoRows = collectTodo(routeTree, 0);
+    const modes = Array.from(new Set(routeTree.map((route) => route.mode || 'sequential')));
+    const labelText = `STILL TO DO${modes.length === 1 ? ` · offices review ${modeWords(modes[0])}` : ''}`;
+
+    const rows: JourneyRow[] = [
+        ...eventRows,
+        ...(todoRows.length ? [{ kind: 'label', depth: 0, labelText } as JourneyRow] : []),
+        ...todoRows,
+    ];
+
+    // Work out which line pieces each row draws, so the line connects from the first dot to the last.
+    rows.forEach((row, index) => {
+        const previous = rows[index - 1];
+        const next = rows[index + 1];
+        const depth = row.depth;
+        const dashed = row.kind !== 'event'; // "dashed" now only means the lighter "still to do" color
+        const firstInBranch = Boolean(row.branchStart);
+        const from: 'top' | 'dot' = firstInBranch || index === 0 ? 'dot' : 'top';
+        // This row's own line ends at its dot when the next row leaves this lane,
+        // or when the next row starts a different branch on this same lane.
+        const endsHere = !next || next.depth < depth || (next.branchStart === true && next.depth === depth);
+        const to: 'bottom' | 'dot' = row.kind !== 'label' && endsHere ? 'dot' : 'bottom';
+        const rails: Rail[] = [];
+
+        if (!(from === 'dot' && to === 'dot')) rails.push({ lane: depth, from, to, dashed });
+        // Lines of the lanes to the left (parents). A parent's line only keeps going while something
+        // still attaches to it further down: a later row on that same lane, or another branch starting from it.
+        // (Rows on shallower lanes that come after the branch are NOT a reason to keep a deeper lane going.)
+        for (let lane = 0; lane < depth; lane++) {
+            let continues = false;
+            for (let j = index + 1; j < rows.length; j++) {
+                if (rows[j].depth <= lane) { continues = rows[j].depth === lane; break; }
+                if (rows[j].branchStart && rows[j].depth === lane + 1) { continues = true; break; }
+            }
+            if (continues) rails.push({ lane, from: 'top', to: 'bottom', dashed: true });
+            else if (firstInBranch && lane === depth - 1) rails.push({ lane, from: 'top', to: 'dot', dashed: true });
+        }
+        row.rails = rails;
+        row.elbowFrom = firstInBranch ? depth - 1 : undefined;
+    });
+
     const blocks: DispositionPrintBlock[] = [
         { key: 'title', type: 'title' },
         { key: 'fields', type: 'fields' },
         ...(document.remarks ? [{ key: 'remarks-value', type: 'remarks-value' as const, text: document.remarks }] : []),
-        { key: 'route-history-heading', type: 'route-history-heading' },
-        ...(routeHistoryBlocks.length ? routeHistoryBlocks : [{ key: 'route-history-empty', type: 'route-history-row' as const, action: 'No routing activity recorded' }]),
-        ...(document.route_steps?.length ? [
-            { key: 'pending-office-heading', type: 'pending-office-heading' as const },
-            ...pendingOfficeBlocks,
-        ] : []),
+        { key: 'journey-heading', type: 'journey-heading' },
+        ...(rows.length
+            ? rows.map((row, index): DispositionPrintBlock => ({ key: `journey-${index}`, type: 'journey-row', row }))
+            : [{ key: 'journey-empty', type: 'journey-empty' as const }]),
     ];
     const serialized = JSON.stringify(blocks);
     const image = (name: string) => `/images/${name}`;
@@ -205,6 +346,35 @@ export default function DocumentDispositionPrint({ document }: { document: Docum
         setPages(next);
     }, [portalRoot, serialized]);
 
+    const renderJourneyRow = (row: JourneyRow) => {
+        const dotLeft = row.depth * LANE_W;
+
+        return <div className="journey-row" style={{ paddingLeft: (row.depth + 1) * LANE_W + 4 }}>
+            {row.rails?.map((rail, index) => {
+                const top = rail.from === 'dot' ? DOT_CENTER_Y : 0;
+                const style: React.CSSProperties = { left: rail.lane * LANE_W + 4, top };
+                if (rail.to === 'bottom') style.bottom = 0;
+                else style.height = DOT_CENTER_Y - top;
+                return <span key={index} className={`journey-rail${rail.dashed ? ' is-dashed' : ''}`} style={style} aria-hidden="true" />;
+            })}
+            {row.elbowFrom !== undefined && <span className="journey-elbow" style={{ left: row.elbowFrom * LANE_W + 4, width: LANE_W, top: DOT_CENTER_Y }} aria-hidden="true" />}
+            {row.kind === 'event' && <span className="journey-dot-done" style={{ left: dotLeft }} aria-hidden="true" />}
+            {row.kind === 'todo' && <span className="journey-dot-todo" style={{ left: dotLeft }} aria-hidden="true" />}
+
+            {row.kind === 'event' && <>
+                <div className="journey-date"><strong>{row.date}</strong>{row.latest && <span className="journey-latest"> · Latest update</span>}</div>
+                <div><strong>{row.headline}</strong>{row.detail ? ` ${row.detail}` : ''}</div>
+                {row.handledBy && <div className="journey-meta">Recorded by {row.handledBy}</div>}
+                {row.remarks && <div className="journey-remarks">Note: {row.remarks}</div>}
+            </>}
+            {row.kind === 'label' && <div className="journey-label">{row.labelText}</div>}
+            {row.kind === 'todo' && <>
+                {row.note && <div className="journey-meta">{row.note}</div>}
+                <div><strong>{row.office}</strong> · {row.statusText}</div>
+            </>}
+        </div>;
+    };
+
     const renderBlock = (block: DispositionPrintBlock) => {
         if (block.type === 'title') return <h1 className="disposition-title">DISPOSITION FORM</h1>;
         if (block.type === 'fields') return <table className="disposition-fields">
@@ -222,29 +392,15 @@ export default function DocumentDispositionPrint({ document }: { document: Docum
                 <tr><td className="field-label">PURPOSE:</td><td className="field-value">{document.purpose_type || 'For Appropriate Action'}</td></tr>
                 <tr><td className="field-label">DOCUMENT:</td><td className="field-value">{getDocumentTypeName(document) || 'No document attached'}</td></tr>
                 <tr><td className="field-label">DATE CREATED:</td><td className="field-value">{document.created_at || '—'}</td></tr>
-                <tr><td className="field-label">ROUTING:</td><td className="field-value">{document.route_mode ? `${document.route_mode} · ${document.route_status || 'pending'}` : 'Standard office routing'}</td></tr>
+                <tr><td className="field-label">ROUTING:</td><td className="field-value">{document.route_mode ? `Offices review ${modeWords(document.route_mode)}. ${routeStatusText(document.route_status)}.` : 'Standard office routing'}</td></tr>
             </tbody>
         </table>;
-        if (block.type === 'route-history-heading') return <>
-            <h2 className="disposition-section-heading">ROUTING HISTORY</h2>
-            <div className="disposition-history-heading" role="row">
-                <strong>Date and time</strong><strong>Office</strong><strong>Action / status</strong><strong>Handled by</strong><strong>Remarks</strong>
-            </div>
+        if (block.type === 'journey-heading') return <>
+            <h2 className="disposition-section-heading">WHERE THIS DOCUMENT HAS BEEN</h2>
+            <p className="journey-legend">● Done &nbsp;&nbsp; ○ Still to do &nbsp;&nbsp; Newest at the bottom of the done list</p>
         </>;
-        if (block.type === 'route-history-row') return <div className="disposition-history-row" role="row">
-            <span>{block.date || '—'}</span>
-            <span>{block.office || '—'}</span>
-            <span>{block.action || 'Processed'}{block.status ? ` (${block.status})` : ''}</span>
-            <span>{block.handledBy || '—'}</span>
-            <span>{block.remarks || '—'}</span>
-        </div>;
-        if (block.type === 'pending-office-heading') return <>
-            <h2 className="disposition-section-heading">PENDING OFFICES</h2>
-            <div className="disposition-pending-heading" role="row"><strong>Office</strong><strong>Status</strong></div>
-        </>;
-        if (block.type === 'pending-office-row') return <div className="disposition-pending-row" role="row">
-            <span>{block.office || '—'}</span><span>{block.status || 'Pending'}</span>
-        </div>;
+        if (block.type === 'journey-empty') return <p className="journey-empty">No activity has been recorded yet.</p>;
+        if (block.type === 'journey-row' && block.row) return renderJourneyRow(block.row);
         const start = block.start ?? 0;
         const end = block.end ?? block.text?.length ?? 0;
         const text = block.text?.slice(start, end);
@@ -296,19 +452,20 @@ export default function DocumentDispositionPrint({ document }: { document: Docum
                 .disposition-remarks-heading { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 8px; line-height: 1.4; }
                 .disposition-remarks-label { flex: 0 0 .8in; font-size: 7.4pt; font-weight: bold; text-transform: uppercase; }
                 .disposition-remarks-value { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-                .disposition-section-heading { margin: 12px 0 4px; border-bottom: 1px solid #777; padding-bottom: 3px; font-size: 8pt; font-weight: bold; letter-spacing: .04em; break-after: avoid; }
-                .disposition-history-heading, .disposition-history-row { display: grid; grid-template-columns: .95in 1.05in 1.35in 1.05in minmax(0, 1fr); gap: 5px; padding: 5px 4px; font-size: 6.8pt; line-height: 1.3; }
-                .disposition-history-heading { border-bottom: 1px solid #777; background: #f2f2f2; }
-                .disposition-history-row { border-bottom: 1px solid #d0d0d0; break-inside: avoid; }
-                .disposition-history-heading strong, .disposition-history-row span, .disposition-pending-heading strong, .disposition-pending-row span { min-width: 0; overflow-wrap: anywhere; }
-                .disposition-pending-heading, .disposition-pending-row { display: grid; grid-template-columns: 2fr 1fr; gap: 6px; padding: 4px; font-size: 7pt; line-height: 1.3; }
-                .disposition-pending-heading { border-bottom: 1px solid #777; background: #f2f2f2; }
-                .disposition-pending-row { border-bottom: 1px solid #d0d0d0; break-inside: avoid; }
-                .disposition-trail-remarks { margin: 4px 0 12px .3in; line-height: 1.45; overflow-wrap: anywhere; }
-                .disposition-trail-remarks:not(.disposition-trail-first-piece) { margin-top: 0; }
-                .disposition-trail-remarks:not(.disposition-trail-last-piece) { margin-bottom: 0; }
-                .disposition-trail-action { margin: 0; padding-left: .35in; line-height: 1.45; overflow-wrap: anywhere; break-inside: avoid; }
-                .disposition-trail-action.disposition-trail-last-piece { margin-bottom: 8px; }
+                .disposition-section-heading { margin: 12px 0 3px; border-bottom: 1px solid #777; padding-bottom: 3px; font-size: 8pt; font-weight: bold; letter-spacing: .04em; break-after: avoid; }
+                .journey-legend { margin: 0 0 8px; font-size: 7.4pt; color: #333; }
+                .journey-empty { margin: 6px 0; font-size: 8.5pt; }
+                .journey-row { position: relative; box-sizing: border-box; padding-bottom: 9px; font-size: 8.5pt; line-height: 1.4; overflow-wrap: anywhere; break-inside: avoid; }
+                .journey-rail { position: absolute; width: 0; border-left: 1px solid #111; }
+                .journey-rail.is-dashed { border-left: 1px dashed #444; }
+                .journey-elbow { position: absolute; height: 0; border-top: 1px dashed #444; }
+                .journey-dot-done { position: absolute; top: 3px; width: 0; height: 0; border: 4.5px solid #111; border-radius: 50%; }
+                .journey-dot-todo { position: absolute; top: 3px; box-sizing: content-box; width: 6px; height: 6px; border: 1.5px solid #111; border-radius: 50%; background: #fff; }
+                .journey-date { font-size: 7.6pt; color: #333; }
+                .journey-latest { font-weight: bold; color: #111; }
+                .journey-meta { font-size: 7.6pt; color: #444; }
+                .journey-remarks { margin-top: 2px; white-space: pre-wrap; }
+                .journey-label { font-size: 7.6pt; font-weight: bold; letter-spacing: .04em; color: #333; }
                 .disposition-footer { box-sizing: border-box; border-top: 1px solid #aaa; padding-top: 10px; position: relative; font: 8px/1.4 Arial, sans-serif; }
                 .disposition-footer-main { display: flex; align-items: center; gap: 10px; width: 100%; }
                 .disposition-logo { flex: 0 0 .55in; width: .60in; height: .60in; object-fit: contain; }
@@ -333,6 +490,7 @@ export default function DocumentDispositionPrint({ document }: { document: Docum
                     .disposition-sheet:last-of-type { break-after: auto; }
                     .disposition-body { overflow: hidden; }
                     .disposition-print-root img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    .disposition-print-root .journey-dot-done, .disposition-print-root .journey-dot-todo { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                     .disposition-measure { display: none !important; }
                 }
                 @media screen { .disposition-print-root { position: fixed; top: 0; left: -10000px; display: block; visibility: hidden; } }
@@ -359,4 +517,3 @@ export default function DocumentDispositionPrint({ document }: { document: Docum
         portalRoot,
     );
 }
-

@@ -3,14 +3,13 @@ import DocumentDispositionPrint from '@/Components/DocumentDispositionPrint';
 import InfoTip from '@/Components/InfoTip';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import CrudAlertModal, { type WorkspaceAlertVariant } from '@/Components/WorkspaceAlert';
-import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
-import { Archive, ArrowDown, ArrowDownUp, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, FilePlus2, FileSignature, FileText, GripVertical, Inbox, LoaderCircle, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
+import { Archive, ArrowDown, ArrowDownUp, ArrowUp, ChevronLeft, ChevronRight, Download, Eye, FilePlus2, FileSignature, FileText, GripVertical, Inbox, LoaderCircle, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 
-type RouteTreeStep = {
+export type RouteTreeStep = {
     id: number;
     office_id: number;
     office: string;
@@ -25,13 +24,38 @@ type RouteTreeStep = {
     child_routes?: RouteTree[];
 };
 
-type RouteTree = {
+export type RouteTree = {
     id: number;
     mode: 'sequential' | 'parallel';
     status: string;
     from_office?: string | null;
     parent_step_id?: number | null;
     steps: RouteTreeStep[];
+};
+
+export type DocumentRouteProgressData = {
+    route_tree?: RouteTree[];
+    route_steps?: RouteTreeStep[];
+    route_mode?: 'sequential' | 'parallel' | null;
+    route_status?: string | null;
+    route_from_office?: string | null;
+    office_short_name?: string | null;
+    office_name?: string;
+    tracking_number?: string;
+    title?: string;
+    status?: string;
+    transactions?: Array<{
+        action?: string | null;
+        status?: string | null;
+        remarks?: string | null;
+        from_office?: string | null;
+        from_office_short_name?: string | null;
+        holder?: string | null;
+        holder_short_name?: string | null;
+        created_by?: string | null;
+        created_by_short_name?: string | null;
+        created_at?: string | null;
+    }>;
 };
 
 type DocumentItem = {
@@ -274,6 +298,7 @@ export default function DocumentsIndex({
     const [releasingRow, setReleasingRow] = useState<DocumentItem | null>(null);
     const [releaseForm, setReleaseForm] = useState({ actionTypeId: '', otherAction: '', routingMode: 'sequential' as 'sequential' | 'parallel', officeIds: [] as string[], remarks: '', source: 'current', approvedDraftId: '', file: null as File | null });
     const [releaseError, setReleaseError] = useState('');
+    const [releaseOfficeSearch, setReleaseOfficeSearch] = useState('');
     const [draggedOfficeId, setDraggedOfficeId] = useState<string | null>(null);
     const [uploadError, setUploadError] = useState('');
     const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -322,8 +347,8 @@ export default function DocumentsIndex({
         if (processing) return;
         const dirty = releaseForm.source !== 'current' || releaseForm.officeIds.length > 0 || releaseForm.remarks.length > 0
             || Boolean(releaseForm.actionTypeId || releaseForm.otherAction || releaseForm.file);
-        if (!dirty) { setReleasingRow(null); return; }
-        setCrudAlert({ title: 'Discard forwarding details?', message: 'Your unsaved changes will be lost.', confirmLabel: 'Discard changes', isDestructive: true, onConfirm: () => { setCrudAlert(null); setReleasingRow(null); } });
+        if (!dirty) { setReleasingRow(null); setReleaseOfficeSearch(''); return; }
+        setCrudAlert({ title: 'Discard forwarding details?', message: 'Your unsaved changes will be lost.', confirmLabel: 'Discard changes', isDestructive: true, onConfirm: () => { setCrudAlert(null); setReleasingRow(null); setReleaseOfficeSearch(''); } });
     };
     const requestCloseForm = () => {
         if (processing) return;
@@ -511,6 +536,7 @@ export default function DocumentsIndex({
                 setReleasingRow(null);
                 setReleaseForm({ actionTypeId: '', otherAction: '', routingMode: 'sequential', officeIds: [], remarks: '', source: 'current', approvedDraftId: '', file: null });
                 setReleaseError('');
+                setReleaseOfficeSearch('');
                 setCrudAlert({
                     title: 'Document routed',
                     message: `${documentReference} was sent for ${releaseForm.routingMode} approval to ${selectedOffices.join(', ')}. Every listed office must approve.`,
@@ -625,6 +651,7 @@ export default function DocumentsIndex({
         setReleasingRow({ ...document, details_loading: true });
         setReleaseForm({ actionTypeId: '', otherAction: '', routingMode: 'sequential', officeIds: [], remarks: '', source: 'current', approvedDraftId: '', file: null });
         setReleaseError('');
+        setReleaseOfficeSearch('');
         try {
             const details = await fetchDocumentDetails(document);
             setReleasingRow((current) => current?.id === document.id ? details : current);
@@ -746,6 +773,10 @@ export default function DocumentsIndex({
     const totalPages = Math.max(1, pagination?.last_page ?? 1);
     const totalDocuments = pagination?.total ?? documents.length;
     const isOtherAction = (actionTypeId: string) => actionTypes.find((action) => String(action.id) === actionTypeId)?.name.trim().toLowerCase() === 'others';
+    const normalizedReleaseOfficeSearch = releaseOfficeSearch.trim().toLocaleLowerCase();
+    const filteredReleaseOffices = normalizedReleaseOfficeSearch
+        ? offices.filter((office) => office.name.toLocaleLowerCase().includes(normalizedReleaseOfficeSearch))
+        : offices;
 
     return (
         <AuthenticatedLayout
@@ -811,7 +842,6 @@ export default function DocumentsIndex({
                             <option value="ongoing">Ongoing</option>
                             <option value="approved">Approved</option>
                             <option value="released">Released</option>
-                            <option value="archived">Archived</option>
                             <option value="changes_requested">Changes requested</option>
                             <option value="rejected">Rejected</option>
                         </select>
@@ -870,7 +900,7 @@ export default function DocumentsIndex({
                                         Last activity <ArrowDownUp size={14} />
                                     </button>
                                 </th>
-                                <th className="sticky right-0 z-10 border-l border-border bg-background px-3 py-3 font-semibold no-print">Actions</th>
+                                <th className="sticky right-0 z-10 border-l border-border bg-background px-3 py-3 text-center font-semibold no-print">Actions</th>
                             </tr>
                         </thead>
 
@@ -923,19 +953,14 @@ export default function DocumentsIndex({
                                                 </div> : <span className="text-sm text-muted">No transactions</span>}
                                             </td>
                                             <td className="sticky right-0 z-10 border-l border-border bg-surface px-3 py-3 no-print">
-                                                <div className="flex flex-col gap-2">
-                                                    {document.can_receive && <button type="button" disabled={processing} aria-label="Receive document" title="Receive document" onClick={() => requestDocumentAction('Receive document?', `Confirm receipt of ${document.tracking_number || 'this document'}?`, 'Receive', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/receive`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ variant: 'error', title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document received', message: 'Document received successfully.' }) }); })} className="dots-button-secondary w-full px-2 text-primary"><Inbox size={15} /> Receive</button>}
-                                                    {document.can_release && <button type="button" disabled={processing} aria-label="Forward document" title="Forward document" onClick={() => openRelease(document)} className="dots-button-secondary w-full px-2 text-primary"><Send size={15} /> Forward</button>}
-                                                    <Menu as="div" className="relative">
-                                                        <MenuButton disabled={processing} className="dots-button-secondary w-full gap-1 px-2" aria-label={`More actions for ${document.tracking_number || document.title || 'document'}`}>More <ChevronDown size={14} aria-hidden="true" /></MenuButton>
-                                                        <MenuItems anchor="bottom end" className="dots-workspace z-50 w-60 rounded-lg border border-border bg-surface p-1 text-foreground shadow-lg">
-                                                            <MenuItem><button type="button" disabled={processing} aria-label="View document" title="View document" onClick={() => openDocumentDetails(document)} className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm data-[focus]:bg-secondary"><Eye size={15} /> View details</button></MenuItem>
-                                                            {document.is_finalized && <MenuItem><button type="button" disabled={processing} aria-label="Print disposition form" title="Print disposition form" onClick={() => printDisposition(document)} className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm data-[focus]:bg-secondary"><Printer size={15} /> Print disposition</button></MenuItem>}
-                                                            {document.can_update && <MenuItem><button type="button" disabled={processing} aria-label="Update draft" title="Update draft" onClick={() => openEdit(document)} className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm data-[focus]:bg-secondary"><Pencil size={15} /> Update draft</button></MenuItem>}
-                                                            {document.can_terminal && <MenuItem><button type="button" disabled={processing} aria-label="Tag as terminal" title="Tag as terminal" onClick={() => requestDocumentAction('Tag document as terminal?', `Mark ${document.tracking_number || 'this document'} as terminal?`, 'Tag as terminal', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/terminal`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ variant: 'error', title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document updated', message: 'Document tagged as terminal.' }) }); })} className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm data-[focus]:bg-secondary"><Archive size={15} /> Tag as terminal</button></MenuItem>}
-                                                            {document.can_delete && <MenuItem><button type="button" disabled={processing} aria-label="Delete draft" title="Delete draft" onClick={() => requestDocumentAction('Delete draft?', `Remove ${document.tracking_number || 'this draft'} from the active list?`, 'Delete draft', () => { setCrudAlert(null); setProcessing(true); router.delete(`/documents/${document.id}`, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ variant: 'error', title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Draft deleted', message: 'Document draft deleted successfully.' }) }); }, true)} className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm data-[focus]:bg-secondary text-danger"><Trash2 size={15} /> Delete draft</button></MenuItem>}
-                                                        </MenuItems>
-                                                    </Menu>
+                                                <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
+                                                    {document.can_receive && <button type="button" disabled={processing} aria-label="Receive document" title="Receive document" onClick={() => requestDocumentAction('Receive document?', `Confirm receipt of ${document.tracking_number || 'this document'}?`, 'Receive', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/receive`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ variant: 'error', title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document received', message: 'Document received successfully.' }) }); })} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-primary transition hover:border-primary/40 hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Inbox size={17} aria-hidden="true" /></button>}
+                                                    {document.can_approve && <button type="button" disabled={processing} aria-label="Review and decide document" title="Review and decide" onClick={() => openDocumentDetails(document)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"><FileSignature size={17} aria-hidden="true" /></button>}
+                                                    {document.can_release && <button type="button" disabled={processing} aria-label="Forward document" title="Forward document" onClick={() => openRelease(document)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-primary transition hover:border-primary/40 hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Send size={17} aria-hidden="true" /></button>}
+                                                    {!document.can_approve && !document.can_update && <button type="button" disabled={processing} aria-label="View document details" title="View details" onClick={() => openDocumentDetails(document)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-foreground transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Eye size={17} aria-hidden="true" /></button>}
+                                                    {document.can_update && <button type="button" disabled={processing} aria-label="Update draft" title="Update draft" onClick={() => openEdit(document)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-foreground transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Pencil size={17} aria-hidden="true" /></button>}
+                                                    {document.can_terminal && <button type="button" disabled={processing} aria-label="Tag as terminal" title="Tag as terminal" onClick={() => requestDocumentAction('Tag document as terminal?', `Mark ${document.tracking_number || 'this document'} as terminal?`, 'Tag as terminal', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/terminal`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ variant: 'error', title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document updated', message: 'Document tagged as terminal.' }) }); })} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-muted transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Archive size={17} aria-hidden="true" /></button>}
+                                                    {document.can_delete && <button type="button" disabled={processing} aria-label="Delete draft" title="Delete draft" onClick={() => requestDocumentAction('Delete draft?', `Remove ${document.tracking_number || 'this draft'} from the active list?`, 'Delete draft', () => { setCrudAlert(null); setProcessing(true); router.delete(`/documents/${document.id}`, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ variant: 'error', title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Draft deleted', message: 'Document draft deleted successfully.' }) }); }, true)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-danger/25 bg-danger-soft text-danger transition hover:border-danger/40 hover:bg-danger/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:cursor-not-allowed disabled:opacity-50"><Trash2 size={17} aria-hidden="true" /></button>}
                                                 </div>
                                             </td>
                                         </tr>
@@ -998,17 +1023,18 @@ export default function DocumentsIndex({
                                 <h2 id="document-details-title" className="break-words text-lg font-semibold text-foreground">{viewingRow.title || 'Document details'}</h2>
                                 <p className="mt-1 break-words text-sm text-muted">{viewingRow.tracking_number || 'Tracking number unavailable'}</p>
                             </div>
-                            <button type="button" onClick={closeDocumentDetails} aria-label="Close document details" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
-                                <X size={19} aria-hidden="true" />
-                            </button>
+                            <div className="flex shrink-0 items-center gap-2">
+                                {viewingRow.is_finalized && <button type="button" onClick={() => printDisposition(viewingRow)} className="dots-button-secondary px-3" aria-label="Print disposition form"><Printer size={16} aria-hidden="true" /> Print disposition</button>}
+                                <button type="button" onClick={closeDocumentDetails} aria-label="Close document details" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
+                                    <X size={19} aria-hidden="true" />
+                                </button>
+                            </div>
                         </div>
 
                         <div className="space-y-6 p-5 sm:p-6" aria-busy={viewingRow.details_loading}>
-                            {viewingRow.details_loading && <p role="status" className="inline-flex items-center gap-2 rounded-lg bg-background p-3 text-sm text-muted"><LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading transaction history and attachments…</p>}
+                            {viewingRow.details_loading && <p role="status" className="inline-flex items-center gap-2 rounded-lg bg-background p-3 text-sm text-muted"><LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading document details and attachments…</p>}
                             {viewingRow.details_error && <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{viewingRow.details_error}</p>}
                             <DocumentReferenceDetails document={viewingRow} loading={viewingRow.details_loading} />
-                            <DocumentRouteProgress document={viewingRow} />
-
                             {viewingRow.approval_status && viewingRow.approval_status !== 'not_required' && <section className="rounded-xl border border-border bg-background p-4" aria-label="Approval and signing status">
                                 <div className="flex flex-wrap items-start justify-between gap-3">
                                     <div><h3 className="font-semibold text-foreground">Approval and signing</h3><p className="mt-1 text-sm text-muted">Approval follows the routing record. Signing applies only to the primary PDF; iPluma submission is not connected yet.</p></div>
@@ -1026,7 +1052,7 @@ export default function DocumentsIndex({
                                 </form>}
                                 {viewingRow.signature_status === 'needs_signature' && viewingRow.approval_status !== 'approved' && <p className="mt-3 text-xs text-muted">Only the primary PDF is eligible; iPluma submission is not connected yet.</p>}
                             </section>}
-                            <DocumentTransactionHistory transactions={viewingRow.transactions} loading={viewingRow.details_loading} />
+                            <DocumentRouteProgress document={viewingRow} />
                         </div>
                         <div className="sticky bottom-0 flex justify-end border-t border-border bg-surface px-5 py-4 sm:px-6">
                             <button type="button" onClick={closeDocumentDetails} className="dots-button-secondary">Close</button>
@@ -1046,17 +1072,18 @@ export default function DocumentsIndex({
                                 <h2 id="release-document-title" className="text-lg font-semibold text-foreground">Forward document</h2>
                                 <p className="mt-1 text-sm text-muted">Choose where this document should go next.</p>
                             </div>
-                            <button type="button" onClick={closeRelease} aria-label="Close forwarding dialog" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
-                                <X size={19} aria-hidden="true" />
-                            </button>
+                            <div className="flex shrink-0 items-center gap-2">
+                                {releasingRow.is_finalized && <button type="button" onClick={() => printDisposition(releasingRow)} className="dots-button-secondary px-3" aria-label="Print disposition form"><Printer size={16} aria-hidden="true" /> Print disposition</button>}
+                                <button type="button" onClick={closeRelease} aria-label="Close forwarding dialog" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
+                                    <X size={19} aria-hidden="true" />
+                                </button>
+                            </div>
                         </div>
 
                         <div className="space-y-6 p-5 sm:p-6">
-                            {releasingRow.details_loading && <p role="status" className="inline-flex items-center gap-2 rounded-lg bg-background p-3 text-sm text-muted"><LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading attachments…</p>}
-                            <DocumentReferenceDetails document={releasingRow} loading={releasingRow.details_loading} />
+                            {releasingRow.details_loading && <p role="status" className="inline-flex items-center gap-2 rounded-lg bg-background p-3 text-sm text-muted"><LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading forwarding details…</p>}
                             <DocumentRouteProgress document={releasingRow} />
                             {releasingRow.forwarding_under && <p className="rounded-xl border border-primary/20 bg-secondary/50 px-4 py-3 text-sm text-foreground"><strong>{releasingRow.forwarding_under}</strong> will remain responsible for its own approval after this branch finishes. Offices already above this branch are disabled; use Request changes to return the document for adjustments.</p>}
-                            <DocumentTransactionHistory transactions={releasingRow.transactions} loading={releasingRow.details_loading} />
 
                             <section className="grid gap-4 sm:grid-cols-2" aria-label="Release details">
                                 <div>
@@ -1089,8 +1116,14 @@ export default function DocumentsIndex({
                                 </div>
                                 <div className="sm:col-span-2">
                                     <p className="mb-2 text-sm font-medium text-foreground">Required offices <span className="text-danger">*</span><span className="ml-2 text-xs font-normal text-muted">Choose up to 30; every selected office must approve.</span></p>
+                                    <div className="mb-2 flex h-11 items-center gap-2 rounded-xl border border-border bg-surface px-3 text-muted focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
+                                        <Search size={17} className="shrink-0" aria-hidden="true" />
+                                        <label htmlFor="release-office-search" className="sr-only">Search required offices</label>
+                                        <input id="release-office-search" type="search" value={releaseOfficeSearch} onChange={(event) => setReleaseOfficeSearch(event.target.value)} placeholder="Search offices…" className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-foreground placeholder:text-muted focus:ring-0" />
+                                        {releaseOfficeSearch && <button type="button" onClick={() => setReleaseOfficeSearch('')} className="rounded-md p-1 text-muted hover:bg-secondary hover:text-foreground" aria-label="Clear office search"><X size={15} aria-hidden="true" /></button>}
+                                    </div>
                                     <div className="grid max-h-52 gap-2 overflow-y-auto rounded-xl border border-border bg-background p-2 sm:grid-cols-2">
-                                        {offices.map((office) => {
+                                        {filteredReleaseOffices.map((office) => {
                                             const blockedByParentRoute = releasingRow.forwarding_blocked_office_ids?.includes(Number(office.id)) ?? false;
                                             const unavailable = office.disabled || blockedByParentRoute;
 
@@ -1100,7 +1133,9 @@ export default function DocumentsIndex({
                                             </label>;
                                         })}
                                         {offices.length === 0 && <p className="p-2 text-sm text-muted">No receiving offices are available{officeRangeLabel ? ` in ${officeRangeLabel}` : ' in your range'}.</p>}
+                                        {offices.length > 0 && filteredReleaseOffices.length === 0 && <p className="p-2 text-sm text-muted sm:col-span-2">No offices match “{releaseOfficeSearch.trim()}”.</p>}
                                     </div>
+                                    <p className="mt-2 text-xs text-muted">{releaseForm.officeIds.length}/30 offices selected</p>
                                 </div>
                                 {releaseForm.officeIds.length > 0 && (
                                     <div className="sm:col-span-2">
@@ -1379,7 +1414,7 @@ function LibrarySelect({
     );
 }
 
-function DocumentRouteProgress({ document }: { document: DocumentItem }) {
+export function DocumentRouteProgress({ document }: { document: DocumentRouteProgressData }) {
     const routes: RouteTree[] = document.route_tree?.length
         ? document.route_tree
         : document.route_steps?.length
@@ -1391,7 +1426,8 @@ function DocumentRouteProgress({ document }: { document: DocumentItem }) {
                 steps: document.route_steps.map((step) => ({ ...step, child_routes: [] })),
             }]
             : [];
-    if (routes.length === 0) return null;
+    const terminalTransaction = document.transactions?.find((transaction) => transaction.status?.toLowerCase() === 'terminal');
+    if (routes.length === 0 && !terminalTransaction) return null;
 
     const statusLabel = (status: string) => ({
         waiting: 'Waiting',
@@ -1408,6 +1444,20 @@ function DocumentRouteProgress({ document }: { document: DocumentItem }) {
     const approvedCount = allSteps.filter((step) => step.status === 'approved').length;
     const rootRoute = routes[routes.length - 1];
     const originOffice = document.route_from_office || rootRoute?.from_office || document.office_short_name || document.office_name || 'Originating office';
+    const terminalStep: RouteTreeStep | null = terminalTransaction ? {
+        id: -1,
+        office_id: 0,
+        office: terminalTransaction.from_office_short_name || terminalTransaction.from_office || terminalTransaction.holder_short_name || terminalTransaction.holder || originOffice,
+        position: allSteps.length + 1,
+        status: 'terminal',
+        decision: terminalTransaction.action || 'Tagged as Terminal',
+        remarks: terminalTransaction.remarks,
+        received_by: terminalTransaction.created_by_short_name || terminalTransaction.created_by,
+        received_at: terminalTransaction.created_at,
+    } : null;
+    // When there are routes above the terminal card, the main rail must run
+    // continuously from the last route's last step down into the terminal dot.
+    const terminalConnected = Boolean(terminalStep) && routes.length > 0;
 
     return (
         <section className="overflow-hidden rounded-2xl border border-border bg-background" aria-label="Office approval route">
@@ -1416,7 +1466,7 @@ function DocumentRouteProgress({ document }: { document: DocumentItem }) {
                     <div>
                         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">Route map</p>
                         <h3 className="mt-1 text-base font-semibold text-foreground">Office approval route</h3>
-                        <p className="mt-1 text-sm text-muted">Every listed office must approve. Forwarded offices appear as smaller branches, and the parent office still makes its own decision.</p>
+                        <p className="mt-1 text-sm text-muted">Every listed office must approve. Forwarded offices branch off to the side, and the parent office still makes its own decision.</p>
                     </div>
                     <span className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${getStatusClasses(document.status || 'pending')}`}>{statusLabel(document.status || 'pending')}</span>
                 </div>
@@ -1425,11 +1475,17 @@ function DocumentRouteProgress({ document }: { document: DocumentItem }) {
                     <span><strong className="text-success">{approvedCount}</strong> approved</span>
                     <span><strong className="text-foreground">{allSteps.length - approvedCount}</strong> remaining</span>
                 </div>
+                {/* Small legend so the lines are easy to read */}
+                <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-muted" aria-label="Legend">
+                    <span className="inline-flex items-center gap-2"><span className="h-4 w-0 border-l-2 border-solid border-primary/60" aria-hidden="true" />Step by step</span>
+                    <span className="inline-flex items-center gap-2"><span className="h-4 w-0 border-l-2 border-dashed border-primary/60" aria-hidden="true" />Parallel</span>
+                    <span className="inline-flex items-center gap-2"><span className="h-3.5 w-3.5 rounded-full border-2 border-primary bg-primary ring-4 ring-primary/10" aria-hidden="true" />Current</span>
+                    <span className="inline-flex items-center gap-2"><span className="h-3.5 w-3.5 rounded-full border-2 border-success bg-success" aria-hidden="true" />Approved</span>
+                </div>
             </div>
 
             <div className="p-4 sm:p-5">
-                <div className="relative rounded-xl border border-primary/20 bg-surface p-3 sm:p-4">
-                    <span className="absolute -bottom-5 left-[7px] h-5 w-px bg-primary/40" aria-hidden="true" />
+                <div className="rounded-xl border border-primary/20 bg-surface p-3 sm:p-4">
                     <div className="flex items-center gap-3">
                         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary text-white"><FileText size={19} aria-hidden="true" /></span>
                         <div className="min-w-0">
@@ -1441,28 +1497,80 @@ function DocumentRouteProgress({ document }: { document: DocumentItem }) {
                     </div>
                 </div>
 
-                <div className="mt-6 space-y-4">
-                    {routes.map((route, index) => <RouteTreeGroup key={route.id} route={route} statusLabel={statusLabel} depth={0} round={index + 1} />)}
+                <div className="mt-5">
+                    {routes.length > 0 && <div className="space-y-6">
+                        {routes.map((route, index) => <RouteTreeGroup key={route.id} route={route} statusLabel={statusLabel} depth={0} round={index + 1} continues={terminalConnected && index === routes.length - 1} />)}
+                    </div>}
+                    {terminalStep && <ol className="relative" aria-label="Terminal transaction">
+                        <li className={`relative pl-8 ${terminalConnected ? 'pt-3' : ''}`}>
+                            {/* Rail from the previous step straight into the terminal dot (12px padding + 23px dot center = 35px) */}
+                            {terminalConnected && <span className="absolute left-[6px] top-0 h-[35px] w-0 border-l-2 border-solid border-primary/60" aria-hidden="true" />}
+                            <span className={`absolute left-0 h-3.5 w-3.5 rounded-full border-2 border-sidebar bg-sidebar ring-4 ring-sidebar/10 ${terminalConnected ? 'top-7' : 'top-4'}`} aria-hidden="true" />
+                            <span className={`absolute left-3.5 h-0.5 w-[18px] bg-border ${terminalConnected ? 'top-[34px]' : 'top-[22px]'}`} aria-hidden="true" />
+                            <RouteOfficeCard step={terminalStep} statusLabel={statusLabel} />
+                        </li>
+                    </ol>}
                 </div>
             </div>
         </section>
     );
 }
+// Git-graph style route tree.
+//
+// Geometry (keep these in sync if you change sizes):
+//   - Every lane has a rail at x = 7px (the `left-[6px]` + 2px border).
+//   - Every step dot is 14px (h-3.5 w-3.5) at top-4, so its center is y = 23px.
+//   - Cards start at x = 32px (pl-8).
+//   - A forwarded branch is rendered INSIDE its parent step's <li>, right under the
+//     parent card. It is indented 32px (ml-8), so its rail sits at x = 39px, which is
+//     under the parent card. The branch header is 8px top padding + 24px label row
+//     + 8px gap = 40px, and a connector rail covers it so the child lane visually
+//     drops out of the parent card's bottom edge.
+//   - The terminal card (if any) sits right below the last route with 12px top padding;
+//     its dot center is at y = 12 + 23 = 35px, and the main rail of the last route
+//     continues (`continues`) all the way down to it.
+//
+// Rows are separated with padding (never margin) so the rail stays continuous.
 
-function RouteTreeGroup({ route, statusLabel, depth, round }: { route: RouteTree; statusLabel: (status: string) => string; depth: number; round?: number }) {
+type RouteStep = RouteTree['steps'][number];
+
+// One color per depth, like colored git lanes. Full class names so Tailwind can see them.
+const LANE_BORDER = ['border-primary/60', 'border-sky-500/70', 'border-violet-500/70', 'border-amber-500/70'];
+const LANE_TEXT = ['text-primary', 'text-sky-600', 'text-violet-600', 'text-amber-600'];
+const LANE_BG = ['bg-primary/5', 'bg-sky-500/10', 'bg-violet-500/10', 'bg-amber-500/10'];
+
+function RouteTreeGroup({ route, statusLabel, depth, round, continues = false }: { route: RouteTree; statusLabel: (status: string) => string; depth: number; round?: number; continues?: boolean }) {
     const isParallel = route.mode === 'parallel';
+    const lane = depth % 4;
+    const childLane = (depth + 1) % 4;
 
-    return <section className={depth > 0 ? 'rounded-xl border border-border bg-background p-3 sm:p-4' : ''} aria-label={depth > 0 ? `Forwarded route from ${route.from_office || 'office'}` : `Route round ${round}`}>
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+    return <section aria-label={depth > 0 ? `Forwarded route from ${route.from_office || 'office'}` : `Route round ${round}`}>
+        {depth === 0 && <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
-                <p className="text-xs font-semibold text-foreground">{depth > 0 ? `${isParallel ? 'Parallel branch' : 'Step by step branch'}` : `Route ${round}`}</p>
+                <p className="text-xs font-semibold text-foreground">Route {round}</p>
                 <p className="text-[11px] text-muted">{isParallel ? 'Parallel · offices can act independently' : 'Step by step · next office waits for approval'}</p>
             </div>
             <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${getStatusClasses(route.status)}`}>{statusLabel(route.status)}</span>
-        </div>
-        <ol className={`relative space-y-3 pl-7 ${depth > 0 ? '-ml-[38px] sm:-ml-[46px]' : ''}`} aria-label={isParallel ? 'Parallel office branches' : 'Sequential office steps'}>
-            {depth === 0 && route.steps.length > 1 && <span className="absolute bottom-5 left-[7px] top-5 w-px bg-gradient-to-b from-primary/40 via-border to-border" aria-hidden="true" />}
-            {route.steps.map((step) => {
+        </div>}
+
+        <ol className="relative" aria-label={isParallel ? 'Parallel office branches' : 'Sequential office steps'}>
+            {route.steps.map((step, index) => {
+                const isFirst = index === 0;
+                const isLast = index === route.steps.length - 1;
+                const startsAtDot = isFirst && depth === 0;
+                // The last step keeps its rail going to the bottom when something (the terminal card) follows this route.
+                const runsThrough = isLast && continues;
+
+                // Rail segment for this step. Solid = step by step, dashed = parallel.
+                // The rail ends at the dot on the last step, even if that step has children,
+                // because the children hang off their own (indented) lane.
+                const start = startsAtDot ? 'top-[23px]' : 'top-0';
+                const end = isLast && !runsThrough ? 'h-[23px]' : 'bottom-0';
+                const rail = startsAtDot && isLast && !runsThrough ? null : <span
+                    className={`absolute left-[6px] w-0 border-l-2 ${LANE_BORDER[lane]} ${isParallel ? 'border-dashed' : 'border-solid'} ${start} ${end}`}
+                    aria-hidden="true"
+                />;
+
                 const isActive = ['in_progress', 'available', 'waiting_on_branch'].includes(step.status);
                 const markerClass = step.status === 'approved'
                     ? 'border-success bg-success'
@@ -1472,21 +1580,39 @@ function RouteTreeGroup({ route, statusLabel, depth, round }: { route: RouteTree
                             ? 'border-primary bg-primary ring-4 ring-primary/10'
                             : 'border-border bg-surface';
 
-                return <li key={step.id} className="relative">
-                    <span className={`absolute -left-[28px] top-5 z-[1] h-3.5 w-3.5 rounded-full border-2 ${markerClass}`} aria-hidden="true" />
-                    <span className={`absolute -left-[21px] top-[26px] border-t border-border ${depth > 0 ? 'w-[59px] sm:w-[67px]' : 'w-[21px]'}`} aria-hidden="true" />
-                    <div className={depth > 0 ? 'ml-[38px] sm:ml-[46px]' : ''}><RouteOfficeCard step={step} statusLabel={statusLabel} branch={isParallel} compact={depth > 0} /></div>
-                    {step.child_routes?.length ? <div className="relative ml-5 mt-3 border-l-2 border-primary/55 pl-4 sm:ml-6 sm:pl-5">
-                        <span className="absolute -left-[2px] -top-3 h-3 border-l-2 border-primary/55" aria-hidden="true" />
-                        <span className="absolute -left-[41px] top-0 w-[41px] border-t-2 border-primary/55 sm:-left-[45px] sm:w-[45px]" aria-hidden="true" />
-                        <p className="mb-2 inline-flex rounded-full bg-primary/5 px-2.5 py-1 text-[11px] font-semibold text-primary">Forwarded by {step.office}</p>
-                        <div className="space-y-3">{step.child_routes.map((child) => <RouteTreeGroup key={child.id} route={child} statusLabel={statusLabel} depth={depth + 1} />)}</div>
-                    </div> : null}
+                const children = step.child_routes ?? [];
+
+                return <li key={step.id} className={`relative pl-8 ${isLast ? '' : 'pb-3'}`}>
+                    {rail}
+                    <span className={`absolute left-0 top-4 h-3.5 w-3.5 rounded-full border-2 ${markerClass}`} aria-hidden="true" />
+                    <span className="absolute left-3.5 top-[22px] h-0.5 w-[18px] bg-border" aria-hidden="true" />
+                    <RouteOfficeCard step={step} statusLabel={statusLabel} branch={isParallel} compact={depth > 0} />
+
+                    {/* Forwarded routes: nested under the parent card so they visibly branch from it */}
+                    {children.map((child) => {
+                        const childParallel = child.mode === 'parallel';
+                        const childStyle = `${LANE_BORDER[childLane]} ${childParallel ? 'border-dashed' : 'border-solid'}`;
+
+                        return <div key={child.id} className="relative ml-8 pt-2">
+                            {/* Connector: drops from the parent card's bottom edge to the child lane (8 + 24 + 8 = 40px) */}
+                            <span className={`absolute left-[6px] top-0 h-10 w-0 border-l-2 ${childStyle}`} aria-hidden="true" />
+                            {/* Elbow into the label pill, at the pill's vertical center (8 + 12 = 20px) */}
+                            <span className={`absolute left-[7px] top-[19px] w-[25px] border-t-2 ${childStyle}`} aria-hidden="true" />
+                            <div className="flex h-8 items-center gap-2 overflow-hidden pb-2 pl-8">
+                                <span className={`min-w-0 truncate rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none ${LANE_BG[childLane]} ${LANE_TEXT[childLane]}`}>
+                                    Forwarded by {step.office} · {childParallel ? 'Parallel' : 'Step by step'}
+                                </span>
+                                <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold capitalize leading-none ${getStatusClasses(child.status)}`}>{statusLabel(child.status)}</span>
+                            </div>
+                            <RouteTreeGroup route={child} statusLabel={statusLabel} depth={depth + 1} />
+                        </div>;
+                    })}
                 </li>;
             })}
         </ol>
     </section>;
 }
+
 
 function RouteOfficeCard({
     step,
@@ -1501,16 +1627,17 @@ function RouteOfficeCard({
 }) {
     const isActive = ['available', 'in_progress', 'waiting_on_branch'].includes(step.status);
     const isDecision = ['approved', 'changes_requested', 'rejected'].includes(step.status);
+    const isTerminal = step.status === 'terminal';
     const childBranchApproved = step.child_routes?.some((route) => route.status === 'approved');
 
     return (
-        <div className={`rounded-xl border transition-colors ${compact ? 'p-3' : 'p-3.5 sm:p-4'} ${isActive ? 'border-primary/40 bg-primary/5 shadow-sm' : step.status === 'approved' ? 'border-success/25 bg-success-soft/30' : 'border-border bg-surface'}`}>
+        <div className={`rounded-xl border transition-colors ${compact ? 'p-3' : 'p-3.5 sm:p-4'} ${isTerminal ? 'border-sidebar/20 bg-sidebar/5' : isActive ? 'border-primary/40 bg-primary/5 shadow-sm' : step.status === 'approved' ? 'border-success/25 bg-success-soft/30' : 'border-border bg-surface'}`}>
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-3">
-                    <span className={`grid shrink-0 place-items-center rounded-lg font-bold ${compact ? 'h-7 w-7 text-[11px]' : 'h-8 w-8 text-xs'} ${isDecision && step.status === 'approved' ? 'bg-success-soft text-success' : isActive ? 'bg-primary text-white' : 'bg-background text-muted'}`}>{step.position}</span>
+                    <span className={`grid shrink-0 place-items-center rounded-lg font-bold ${compact ? 'h-7 w-7 text-[11px]' : 'h-8 w-8 text-xs'} ${isTerminal ? 'bg-sidebar text-white' : isDecision && step.status === 'approved' ? 'bg-success-soft text-success' : isActive ? 'bg-primary text-white' : 'bg-background text-muted'}`}>{step.position}</span>
                     <div className="min-w-0">
                         <p className={`break-words font-semibold text-foreground ${compact ? 'text-xs' : 'text-sm'}`}>{step.office || 'Office unavailable'}</p>
-                        <p className="mt-0.5 text-xs text-muted">{branch ? `Branch ${step.position}` : `Step ${step.position}`}</p>
+                        <p className="mt-0.5 text-xs text-muted">{isTerminal ? step.decision || 'Workflow closed' : branch ? `Branch ${step.position}` : `Step ${step.position}`}</p>
                     </div>
                 </div>
                 <span className={`shrink-0 rounded-full font-semibold capitalize ${compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'} ${getStatusClasses(step.status)}`}>{statusLabel(step.status)}</span>
@@ -1518,60 +1645,11 @@ function RouteOfficeCard({
             {step.status === 'waiting_on_branch' && <p className="mt-3 text-xs text-muted">This office is waiting for its forwarded offices to finish.</p>}
             {childBranchApproved && step.status === 'in_progress' && <p className="mt-3 rounded-lg bg-success-soft/50 px-3 py-2 text-xs font-medium text-success">Forwarded branch complete. This office still needs to approve.</p>}
             {(step.decided_by || step.received_by || step.decided_at || step.received_at) && <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-border/70 pt-2.5 text-xs text-muted">
-                {(step.decided_by || step.received_by) && <span>{isDecision ? 'Decision by' : 'Received by'} <strong className="font-medium text-foreground">{step.decided_by || step.received_by}</strong></span>}
-                {(step.decided_at || step.received_at) && <span>{isDecision ? 'Decided' : 'Received'} {step.decided_at || step.received_at}</span>}
+                {(step.decided_by || step.received_by) && <span>{isTerminal ? 'Recorded by' : isDecision ? 'Decision by' : 'Received by'} <strong className="font-medium text-foreground">{step.decided_by || step.received_by}</strong></span>}
+                {(step.decided_at || step.received_at) && <span>{isTerminal ? 'Recorded' : isDecision ? 'Decided' : 'Received'} {step.decided_at || step.received_at}</span>}
             </div>}
             {step.remarks && <p className="mt-3 whitespace-pre-wrap break-words rounded-lg border border-border bg-background px-3 py-2 text-xs leading-relaxed text-foreground">{step.remarks}</p>}
         </div>
-    );
-}
-
-function DocumentTransactionHistory({ transactions, loading = false }: { transactions?: DocumentItem['transactions']; loading?: boolean }) {
-    return (
-        <section aria-label="Transaction history">
-            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-                <div>
-                    <h3 className="font-semibold text-foreground">Activity timeline</h3>
-                    <p className="mt-0.5 text-xs text-muted">Newest activity appears first.</p>
-                </div>
-                <span className="rounded-full bg-background px-2.5 py-1 text-xs font-medium text-muted">{transactions?.length ?? 0} events</span>
-            </div>
-            {transactions?.length ? (
-                <ol className="relative space-y-3" aria-label="Document activity, newest first">
-                    {transactions.map((transaction, index) => {
-                        const fromOffice = transaction.from_office_short_name || transaction.from_office;
-                        const toOffice = transaction.to_office_short_name || transaction.to_office;
-                        const holder = transaction.holder_short_name || transaction.holder;
-                        const actor = transaction.created_by_short_name || transaction.created_by;
-                        const movedBetweenOffices = Boolean(fromOffice && toOffice && fromOffice !== toOffice);
-                        const eventOffice = toOffice || fromOffice;
-
-                        return <li key={`${transaction.created_at ?? 'transaction'}-${index}`} className="relative pl-7">
-                            {index < transactions.length - 1 && <span className="absolute bottom-[-14px] left-[9px] top-3 w-0.5 bg-gradient-to-b from-primary/40 to-border" aria-hidden="true" />}
-                            <span className={`absolute left-0 top-3 h-[19px] w-[19px] rounded-full border-[5px] border-surface ring-1 ring-border ${transaction.status === 'approved' ? 'bg-success' : ['rejected', 'changes_requested'].includes(transaction.status ?? '') ? 'bg-danger' : 'bg-primary'}`} aria-hidden="true" />
-                            <article className="rounded-xl border border-border bg-surface p-3.5 sm:p-4">
-                                <div className="flex flex-wrap items-start justify-between gap-2">
-                                    <div className="min-w-0">
-                                        <h4 className="break-words text-sm font-semibold text-foreground">{transaction.action || transaction.status || 'Document activity'}</h4>
-                                        {transaction.status && <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${getStatusClasses(transaction.status)}`}>{transaction.status.replaceAll('_', ' ')}</span>}
-                                    </div>
-                                    <time className="shrink-0 text-xs text-muted">{transaction.created_at || 'Date unavailable'}</time>
-                                </div>
-                                {(fromOffice || toOffice || holder) && <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-background px-3 py-2 text-xs">
-                                    {movedBetweenOffices ? <span className="font-medium text-foreground"><span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-muted">From</span>{fromOffice}</span> : eventOffice ? <span className="font-medium text-foreground"><span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-muted">At</span>{eventOffice}</span> : holder && <span className="text-muted">Current holder: <strong className="font-medium text-foreground">{holder}</strong></span>}
-                                    {movedBetweenOffices && <span className="text-primary" aria-label="to">→</span>}
-                                    {movedBetweenOffices && toOffice && <span className="font-medium text-foreground"><span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-muted">To</span>{toOffice}</span>}
-                                </div>}
-                                {(actor || transaction.remarks) && <div className="mt-3 space-y-2 text-xs text-muted">
-                                    {actor && <p>Action recorded by <strong className="font-medium text-foreground">{actor}</strong></p>}
-                                    {transaction.remarks && <div className="rounded-lg border border-border bg-background px-3 py-2"><p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted">Remark</p><p className="whitespace-pre-wrap break-words leading-relaxed text-foreground">{transaction.remarks}</p></div>}
-                                </div>}
-                            </article>
-                        </li>;
-                    })}
-                </ol>
-            ) : loading ? null : <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">No transactions recorded.</p>}
-        </section>
     );
 }
 
