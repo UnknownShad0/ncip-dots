@@ -870,7 +870,12 @@ class DocumentController extends Controller
                     $storedPaths[] = $this->storeRoutedDocumentFile($document, $file, 'original', $initialTrail);
                 } elseif ($approvedDraft) {
                     $generatedPath = 'documents/'.$document->tracking_number.'.pdf';
-                    $pdf = $this->approvedDraftPdf($approvedDraft, $document->tracking_number)->output();
+                    $basePdf = $this->approvedDraftPdf($approvedDraft)->output();
+                    $pdf = app(TrackingNumberPdfStamper::class)->stampBytes(
+                        $basePdf,
+                        (string) $document->tracking_number,
+                        URL::signedRoute('documents.track', ['trackingNumber' => $document->tracking_number]),
+                    );
                     if (! Storage::disk('document_private')->put($generatedPath, $pdf)) {
                         throw new \RuntimeException('Could not save the generated PDF.');
                     }
@@ -893,7 +898,13 @@ class DocumentController extends Controller
                 }
 
                 foreach ($request->file('supporting_files', []) as $supportingFile) {
-                    $storedPaths[] = $this->storeDocumentFile($document, $supportingFile, 'supporting', $initialTrail);
+                    $storedPaths[] = $this->storeRoutedDocumentFile(
+                        $document,
+                        $supportingFile,
+                        'supporting',
+                        $initialTrail,
+                        'supporting_files',
+                    );
                 }
 
             });
@@ -1958,9 +1969,9 @@ class DocumentController extends Controller
         ];
     }
 
-    private function approvedDraftPdf(DocumentCreationDraft $draft, ?string $trackingNumber = null): RenderedDocumentPdf
+    private function approvedDraftPdf(DocumentCreationDraft $draft): RenderedDocumentPdf
     {
-        return app(DocumentPdf::class)->renderDraft($draft, $trackingNumber);
+        return app(DocumentPdf::class)->renderDraft($draft);
     }
 
     private function canApproveDocument(Document $document, User $user): bool
@@ -2424,8 +2435,13 @@ class DocumentController extends Controller
         return $path;
     }
 
-    private function storeRoutedDocumentFile(Document $document, UploadedFile $file, string $type, ?DocumentTrail $trail = null): string
-    {
+    private function storeRoutedDocumentFile(
+        Document $document,
+        UploadedFile $file,
+        string $type,
+        ?DocumentTrail $trail = null,
+        string $validationKey = 'file',
+    ): string {
         if (strtolower($file->getClientOriginalExtension()) !== 'pdf') {
             return $this->storeDocumentFile($document, $file, $type, $trail);
         }
@@ -2440,11 +2456,15 @@ class DocumentController extends Controller
                 $stampedPdf = app(TrackingNumberPdfStamper::class)->stamp(
                     (string) $file->getRealPath(),
                     (string) $document->tracking_number,
+                    URL::signedRoute('documents.track', ['trackingNumber' => $document->tracking_number]),
                 );
             } catch (\Throwable $exception) {
                 report($exception);
+                $message = $validationKey === 'supporting_files'
+                    ? 'DOTS could not stamp supporting PDF "'.$file->getClientOriginalName().'". Upload a standard, unprotected PDF and try again.'
+                    : 'DOTS could not stamp this PDF. Upload a standard, unprotected PDF and try again.';
                 throw ValidationException::withMessages([
-                    'file' => 'DOTS could not stamp this PDF. Upload a standard, unprotected PDF and try again.',
+                    $validationKey => $message,
                 ]);
             }
 

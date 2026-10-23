@@ -4,7 +4,6 @@ import './document-fonts.css';
 import { documentFontsReady } from './documentFonts';
 import { displayDocumentDate } from './documentMetadata';
 import { PAGE_HEIGHT, PAGE_STEP, PAGE_GAP, PAGE_TOP } from './documentPaginationLayout';
-import QRCode from 'react-qr-code';
 
 export type DocumentTemplate = {
     name: string; version: number; version_id: number | null;
@@ -77,7 +76,6 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
     const footer = <footer className="sheet-footer">
             <img className="sheet-seal" src={template?.footer_seal.src || '/images/bagong-pilipinas.png'} alt="Bagong Pilipinas" />
             <div><strong>{content.footer_office_name || 'NATIONAL COMMISSION ON INDIGENOUS PEOPLES'}</strong><p>6th and 7th Floors, Sunnymede IT Center, 1614 Quezon Avenue,<br />South Triangle, Quezon City 1103</p><p>(02) 875 1200 · ncip.gov.ph · csc@ncip.gov.ph</p><img className="sheet-tagline" src={template?.footer_tagline.src || '/images/ncip-footer.png'} alt="Masaganang Katutubong Pamayanan: Sandigan ng Pambansang Kaunlaran" /></div>
-            {output && content.tracking_number && <span className="sheet-footer-tracking">DOTS Tracking No.: {String(content.tracking_number)}</span>}
         </footer>;
     return <div className="document-editor-workspace">
         <div ref={setToolbarTarget} className="document-editor-tools sticky top-0 z-20 mb-6 rounded-lg bg-background p-2 print:hidden" />
@@ -146,16 +144,12 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
             .document-editor-sheet .sheet-footer strong { font-size:10px; }
             .document-editor-sheet .sheet-seal { width:55px; height:55px; object-fit:contain; }
             .document-editor-sheet .sheet-tagline { height:17px; max-width:100%; object-fit:contain; object-position:left; margin-top:5px; }
-            .document-editor-sheet .sheet-footer-tracking { position:absolute; left:.65in; bottom:8px; color:#111; font:700 9px/1.2 'Document Arial',sans-serif; }
-            .document-editor-sheet .document-tracking-qr { display:flex; justify-content:flex-end; align-items:center; gap:8px; margin:0 0 12px; color:#000; font:9pt/1.2 'Document Arial',sans-serif; }
-            .document-editor-sheet .document-tracking-qr svg { display:block; flex:0 0 96px; width:96px; height:96px; padding:8px; background:#fff; shape-rendering:crispEdges; }
         `}</style>
         {Array.from({ length: pages }, (_, index) => <div key={index} className="document-page" data-page-number={index + 1} aria-hidden="true" style={{ top: index * PAGE_STEP, height: PAGE_HEIGHT }}>
             <div className="document-page-top">{header}</div>
             <div className="document-page-bottom">{footer}<span className="document-page-number">{index + 1} / {pages}</span></div>
         </div>)}
         <div className="document-page-flow">
-        {output && content.tracking_url && <div className="document-tracking-qr" aria-label="Scan the QR code to view public document tracking"><span>Scan to track this document</span><QRCode value={String(content.tracking_url)} size={88} bgColor="#ffffff" fgColor="#000000" level="M" /></div>}
         {pageTemplate === 'letter' && <div className="sheet-letter-date" data-page-field><AutoText readOnly={disabled || output} label="Date" value={displayDocumentDate(String(content.date ?? ''))} placeholder={FIELD_PLACEHOLDERS.date} onChange={value => onChange('date', value)} className="sheet-value" /></div>}
         {(pageTemplate === 'memo'
             ? (['for', ...(renderThru ? ['thru'] : []), ...(renderAttention ? ['attention'] : []), 'from', 'subject', 'date'] as const)

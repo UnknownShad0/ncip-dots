@@ -1609,7 +1609,7 @@ export default function DocumentsIndex({
                             {form.document_source === 'upload' && <div>
                                 <label className="mb-1 block text-sm font-medium text-foreground">Source file</label>
                                 <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => { const file = e.target.files?.[0] ?? null; setForm({ ...form, file, signature_required: file && !/\.pdf$/i.test(file.name) ? false : form.signature_required }); setUploadError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
-                                <p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Uploaded PDFs receive a DOTS tracking-number stamp when attached to the routing record; other file types remain unchanged. A source file is required to create a routing record. Maximum file size: {uploadLimitKb / 1024} MB.</p>
+                                <p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Uploaded PDFs receive a QR code and DOTS No. when attached to the routing record; other file types remain unchanged. A source file is required to create a routing record. Maximum file size: {uploadLimitKb / 1024} MB.</p>
                             </div>}
                             {!editingRow && <div>
                                 <label htmlFor="supporting-files" className="mb-1 block text-sm font-medium text-foreground">Supporting files <span className="font-normal text-muted">(optional)</span></label>
@@ -1631,7 +1631,7 @@ export default function DocumentsIndex({
                                     }}
                                     className="w-full rounded-lg border border-border px-3 py-2 text-sm"
                                 />
-                                <p className="mt-1 text-xs text-muted">Add up to {maxSupportingFiles} PDF, JPG, PNG, DOC, or DOCX files. Each can be up to {uploadLimitKb / 1024} MB. They are stored separately and are not sent through iPluma signing.</p>
+                                <p className="mt-1 text-xs text-muted">Add up to {maxSupportingFiles} PDF, JPG, PNG, DOC, or DOCX files. Each can be up to {uploadLimitKb / 1024} MB. Supporting PDFs receive the same QR code and DOTS No.; other file types remain unchanged. They are stored separately and are not sent through iPluma signing.</p>
                                 {form.supporting_files.length > 0 && <ul className="mt-3 space-y-2" aria-label="Selected supporting files">
                                     {form.supporting_files.map((file, index) => <li key={`${file.name}-${file.lastModified}-${index}`} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm">
                                         <span className="min-w-0 break-all text-foreground">{file.name}<span className="ml-2 text-xs text-muted">{(file.size / 1024 / 1024).toFixed(1)} MB</span></span>

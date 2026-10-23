@@ -19,6 +19,7 @@ use App\Jobs\SendDocumentRouteNotification;
 use App\Services\DocumentPdf;
 use App\Services\DocumentMetadata;
 use App\Services\RichDocumentContent;
+use App\Services\TrackingNumberPdfStamper;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -26,6 +27,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Illuminate\Support\Arr;
 use Illuminate\Validation\ValidationException;
@@ -246,7 +248,12 @@ class DocumentCreationController extends Controller
     private function attachTrackedRevision(Request $request, DocumentCreationDraft $draft)
     {
         $document = Document::query()->findOrFail($draft->official_document_id);
-        $pdf = app(DocumentPdf::class)->renderDraft($draft, $document->tracking_number)->output();
+        $basePdf = app(DocumentPdf::class)->renderDraft($draft)->output();
+        $pdf = app(TrackingNumberPdfStamper::class)->stampBytes(
+            $basePdf,
+            (string) $document->tracking_number,
+            URL::signedRoute('documents.track', ['trackingNumber' => $document->tracking_number]),
+        );
         $path = 'documents/versions/'.Str::uuid().'.pdf';
         abort_unless(Storage::disk('document_private')->put($path, $pdf), 500, 'Could not save the revised PDF.');
 
