@@ -56,8 +56,8 @@ class DocumentPdfLayoutTest extends TestCase
         }
         $content['cc'] = ['Records', '', 'Another office', ''];
         $layout = $this->assertSharedLayout($content);
-        $this->assertCount(11, $layout['geometry']['fields']);
-        $this->assertSame("Records\n\nAnother office\n", $layout['geometry']['fields'][10]['value']);
+        $this->assertCount(7, $layout['geometry']['fields']);
+        $this->assertSame("Records\n\nAnother office\n", $layout['geometry']['fields'][6]['value']);
     }
 
     public function test_wrapped_metadata_and_inline_styles_keep_the_same_rectangles(): void
@@ -82,5 +82,24 @@ class DocumentPdfLayoutTest extends TestCase
             ]]]],
         ];
         $this->assertGreaterThan(1, $this->assertSharedLayout($content)['pages']);
+    }
+
+    public function test_multiple_recipients_and_aligned_signatures_keep_the_same_layout(): void
+    {
+        $content = $this->content(4);
+        $content['recipients'] = [
+            ['id' => 'one', 'name' => 'First Recipient', 'position' => 'Director'],
+            ['id' => 'two', 'name' => 'Second Recipient', 'position' => 'Officer'],
+        ];
+        $content['signature_blocks'] = [
+            ['id' => 'left-one', 'name' => 'Left One', 'position' => 'Chief', 'align' => 'left'],
+            ['id' => 'left-two', 'name' => 'Left Two', 'position' => 'Deputy', 'align' => 'left'],
+            ['id' => 'center', 'name' => 'Center', 'position' => 'Director', 'align' => 'center'],
+            ['id' => 'right', 'name' => 'Right', 'position' => 'Officer', 'align' => 'right'],
+        ];
+        $content['show_attention'] = false;
+
+        $layout = $this->assertSharedLayout($content);
+        $this->assertCount(19, $layout['geometry']['fields']);
     }
 }

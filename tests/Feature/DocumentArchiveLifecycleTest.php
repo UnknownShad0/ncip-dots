@@ -26,7 +26,7 @@ class DocumentArchiveLifecycleTest extends TestCase
 
     public function test_generated_archive_preserves_status_and_content_and_restores_to_approved_list(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['is_active' => true]);
         $draft = $this->draft($user, 'registered');
         $this->actingAs($user)->post(route('document-creation.archive', $draft))->assertRedirect();
         $this->assertNotNull($draft->fresh()->archived_at);
@@ -42,10 +42,27 @@ class DocumentArchiveLifecycleTest extends TestCase
         $this->assertSame(2, $draft->events()->count());
     }
 
+    public function test_ready_for_routing_generated_document_can_be_archived_and_restored(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $draft = $this->draft($user, 'ready_for_routing');
+
+        $this->actingAs($user)->post(route('document-creation.archive', $draft))->assertRedirect();
+        $this->assertNotNull($draft->fresh()->archived_at);
+        $this->get('/document-workflow')->assertInertia(fn (Assert $page) => $page
+            ->where('readyPagination.total', 0));
+
+        $this->post(route('document-creation.restore', $draft))->assertRedirect();
+        $this->assertNull($draft->fresh()->archived_at);
+        $this->get('/document-workflow')->assertInertia(fn (Assert $page) => $page
+            ->where('readyPagination.total', 1)
+            ->where('readyDocuments.0.id', $draft->id));
+    }
+
     public function test_approved_counts_refresh_after_archive_and_restore_with_a_warm_cache(): void
     {
-        $user = User::factory()->create();
-        $other = User::factory()->create();
+        $user = User::factory()->create(['is_active' => true]);
+        $other = User::factory()->create(['is_active' => true]);
         $registered = $this->draft($user, 'registered');
         $this->draft($user, 'approved');
         $this->draft($user, 'draft');
@@ -71,8 +88,8 @@ class DocumentArchiveLifecycleTest extends TestCase
 
     public function test_generated_actions_enforce_ownership_and_status_and_soft_delete_drafts(): void
     {
-        $owner = User::factory()->create();
-        $other = User::factory()->create();
+        $owner = User::factory()->create(['is_active' => true]);
+        $other = User::factory()->create(['is_active' => true]);
         $draft = $this->draft($owner, 'draft');
         $approved = $this->draft($owner, 'approved');
         $this->actingAs($other)->delete(route('document-creation.destroy', $draft))->assertForbidden();
@@ -90,7 +107,7 @@ class DocumentArchiveLifecycleTest extends TestCase
     public function test_tracking_drafts_can_be_deleted_but_finalized_records_cannot(): void
     {
         $office = Office::create(['name' => 'Origin']);
-        $user = User::factory()->create(['office_id' => $office->id, 'role_id' => 3]);
+        $user = User::factory()->create(['office_id' => $office->id, 'role_id' => 3, 'is_active' => true]);
         $draft = Document::create(['title' => 'Draft', 'tracking_number' => 'D-1', 'office_id' => $office->id,
             'created_by' => $user->id, 'status' => 'draft', 'is_finalized' => false]);
         $this->actingAs($user)->delete(route('documents.destroy', $draft))->assertRedirect();
@@ -104,8 +121,8 @@ class DocumentArchiveLifecycleTest extends TestCase
     {
         $origin = Office::create(['name' => 'Origin']);
         $holder = Office::create(['name' => 'Holder']);
-        $user = User::factory()->create(['office_id' => $holder->id, 'role_id' => 3]);
-        $other = User::factory()->create(['office_id' => $origin->id, 'role_id' => 3]);
+        $user = User::factory()->create(['office_id' => $holder->id, 'role_id' => 3, 'is_active' => true]);
+        $other = User::factory()->create(['office_id' => $origin->id, 'role_id' => 3, 'is_active' => true]);
         $document = Document::create(['title' => 'Tracked', 'tracking_number' => 'T-1', 'office_id' => $origin->id,
             'created_by' => $other->id, 'status' => 'pending', 'is_finalized' => true]);
         $document->trails()->create(['from_office_id' => $origin->id, 'to_office_id' => $holder->id,

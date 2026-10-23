@@ -91,7 +91,13 @@ type Option = {
 const blank = {
     page_template: "memo",
     recipient_label: "FOR",
+    show_for: true,
+    show_from: true,
+    show_subject: true,
+    show_date: true,
+    show_signature: false,
     for: "",
+    recipients: [{ id: "recipient-1", name: "", position: "" }],
     thru: "",
     attention: "",
     show_thru: false,
@@ -104,30 +110,60 @@ const blank = {
     thru_position: "",
     attention_position: "",
     from_position: "",
-    signature_blocks: [] as { id: string; name: string; position: string }[],
+    signature_blocks: [] as { id: string; name: string; position: string; align: "left" | "center" | "right" }[],
     body: "",
     cc: [] as string[],
 };
 
+function normalizeDocumentTitle(value: unknown): string {
+    return String(value ?? "")
+        .replace(/[\/\\:*?"<>|\u0000-\u001F\u007F]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/\.+$/, "")
+        .trim()
+        .replace(/\.pdf$/i, "")
+        .trim()
+        .replace(/\.+$/, "")
+        .trim();
+}
+
 function normalizeDraftContent(saved: Record<string, any> = {}): Record<string, any> {
     const { show_signature_block, signature_name, signature_position, ...content } = saved;
     const cc = Array.isArray(content.cc) ? content.cc : [];
+    const visible = (key: string, fallback: boolean) => typeof content[key] === "boolean" ? content[key] : fallback;
+    const recipients = Array.isArray(content.recipients) && content.recipients.length
+        ? content.recipients.map((recipient: Record<string, any>, index: number) => ({
+            id: String(recipient.id ?? `recipient-${index + 1}`),
+            name: String(recipient.name ?? ""),
+            position: String(recipient.position ?? ""),
+        }))
+        : [{ id: "recipient-1", name: String(content.for ?? ""), position: String(content.for_position ?? "") }];
     const hasLegacySignature = Boolean(show_signature_block || String(signature_name ?? "").trim() || String(signature_position ?? "").trim());
     const signatureBlocks = Array.isArray(content.signature_blocks)
         ? content.signature_blocks.map((block: Record<string, any>, index: number) => ({
             id: String(block.id ?? `signature-${index + 1}`),
             name: String(block.name ?? ""),
             position: String(block.position ?? ""),
+            align: (["left", "center", "right"].includes(block.align) ? block.align : index % 2 ? "right" : "left") as "left" | "center" | "right",
         }))
-        : hasLegacySignature ? [{ id: "legacy-signature", name: String(signature_name ?? ""), position: String(signature_position ?? "") }] : [];
+        : hasLegacySignature ? [{ id: "legacy-signature", name: String(signature_name ?? ""), position: String(signature_position ?? ""), align: "left" as const }] : [];
 
     return {
         ...blank,
         ...content,
         page_template: content.page_template === "letter" ? "letter" : "memo",
-        show_thru: Boolean(content.show_thru || String(content.thru ?? "").trim() || String(content.thru_position ?? "").trim()),
-        show_attention: Boolean(content.show_attention || String(content.attention ?? "").trim() || String(content.attention_position ?? "").trim()),
-        show_cc: Boolean(content.show_cc || cc.some((line: unknown) => String(line ?? "").trim())),
+        show_for: visible("show_for", true),
+        show_thru: visible("show_thru", Boolean(String(content.thru ?? "").trim() || String(content.thru_position ?? "").trim())),
+        show_attention: visible("show_attention", Boolean(String(content.attention ?? "").trim() || String(content.attention_position ?? "").trim())),
+        show_from: visible("show_from", true),
+        show_subject: visible("show_subject", true),
+        show_date: visible("show_date", true),
+        show_signature: visible("show_signature", signatureBlocks.length > 0),
+        show_cc: visible("show_cc", cc.some((line: unknown) => String(line ?? "").trim())),
+        recipients,
+        for: recipients[0]?.name ?? "",
+        for_position: recipients[0]?.position ?? "",
         cc,
         signature_blocks: signatureBlocks,
     };
@@ -355,6 +391,8 @@ export default function Index({
     const [editing, setEditing] = useState<number | null>(draftToEdit?.id ?? null);
     const [typeId, setTypeId] = useState(String(draftToEdit?.document_type_id ?? ""));
     const [content, setContent] = useState<Record<string, any>>(() => normalizeDraftContent({ footer_office_name: footerOfficeName, ...(draftToEdit?.content ?? {}) }));
+    const [documentTitle, setDocumentTitle] = useState(draftToEdit?.title ?? "");
+    const [titleManuallyEdited, setTitleManuallyEdited] = useState(Boolean(draftToEdit));
     const [savedTemplate, setSavedTemplate] = useState<{ typeId: string; template?: DocumentTemplate } | null>(draftToEdit ? { typeId: String(draftToEdit.document_type_id), template: draftToEdit.content.template } : null);
     const [approverOfficeId, setApproverOfficeId] = useState(String(draftToEdit?.approver_office_id ?? ""));
     const [notifyApproversByEmail, setNotifyApproversByEmail] = useState(Boolean(draftToEdit?.notify_approvers_by_email));
@@ -403,6 +441,8 @@ export default function Index({
         setSavedTemplate({ typeId: String(draftToEdit.document_type_id), template: draftToEdit.content.template });
         setTypeId(String(draftToEdit.document_type_id));
         setContent(normalizeDraftContent(draftToEdit.content));
+        setDocumentTitle(draftToEdit.title);
+        setTitleManuallyEdited(true);
         setApproverOfficeId(String(draftToEdit.approver_office_id ?? ""));
         setNotifyApproversByEmail(Boolean(draftToEdit.notify_approvers_by_email));
         setDirty(false);
@@ -461,6 +501,8 @@ export default function Index({
         setSavedTemplate(null);
         setTypeId("");
         setContent(normalizeDraftContent({ footer_office_name: footerOfficeName }));
+        setDocumentTitle("");
+        setTitleManuallyEdited(false);
         setApproverOfficeId("");
         setNotifyApproversByEmail(false);
         setDirty(false);
@@ -471,6 +513,8 @@ export default function Index({
         setSavedTemplate({ typeId: String(draft.document_type_id), template: draft.content.template });
         setTypeId(String(draft.document_type_id));
         setContent(normalizeDraftContent(draft.content));
+        setDocumentTitle(draft.title);
+        setTitleManuallyEdited(true);
         setApproverOfficeId(String(draft.approver_office_id ?? ""));
         setNotifyApproversByEmail(Boolean(draft.notify_approvers_by_email));
         setDirty(false);
@@ -479,6 +523,7 @@ export default function Index({
     const change = (key: string, value: any) => {
         setDirty(true);
         setContent((current) => ({ ...current, [key]: value }));
+        if (key === "subject" && !titleManuallyEdited) setDocumentTitle(String(value ?? ""));
         setErrors((current) => {
             const next = { ...current };
             delete next[`content.${key}`];
@@ -489,12 +534,29 @@ export default function Index({
             return next;
         });
     };
+    const preparedDocumentTitle = () => {
+        const title = normalizeDocumentTitle(documentTitle);
+        if (!title) {
+            setErrors(current => ({ ...current, title: "Enter a document filename." }));
+            window.setTimeout(() => document.getElementById("document-title")?.focus(), 0);
+            return null;
+        }
+        setDocumentTitle(title);
+        setErrors(current => {
+            const next = { ...current };
+            delete next.title;
+            return next;
+        });
+        return title;
+    };
     const saveDraft = (event: FormEvent) => {
         event.preventDefault();
         if (saving) return;
+        const title = preparedDocumentTitle();
+        if (!title) return;
         setNotice("");
         setActionError("");
-        const data = { document_type_id: typeId, content };
+        const data = { title, document_type_id: typeId, content };
         const options = {
             preserveScroll: true,
             onStart: () => setSaving(true),
@@ -502,6 +564,8 @@ export default function Index({
             onError: (errors: Record<string, string>) => setErrors(errors),
             onSuccess: (page: any) => {
                 setEditing(Number(page.props.savedDraftId));
+                setDocumentTitle(String(page.props.savedDraftTitle ?? title));
+                setTitleManuallyEdited(true);
                 setSavedTemplate({ typeId, template: content.template });
                 setDirty(false);
                 setErrors({});
@@ -541,18 +605,22 @@ export default function Index({
     };
     const finalizeDocument = () => {
         const nextErrors: Record<string, string> = {};
+        const title = normalizeDocumentTitle(documentTitle);
+        if (!title) nextErrors.title = "Enter a document filename.";
         if (!typeId) nextErrors.document_type_id = "Choose a document type.";
-        if (!String(content.from ?? "").trim()) nextErrors["content.from"] = "Enter the sender name.";
-        if (!String(content.subject ?? "").trim()) nextErrors["content.subject"] = "Enter a subject.";
+        if (content.show_from !== false && !String(content.from ?? "").trim()) nextErrors["content.from"] = "Enter the sender name.";
+        if (content.show_subject !== false && !String(content.subject ?? "").trim()) nextErrors["content.subject"] = "Enter a subject.";
         if (!String(content.body ?? "").trim()) nextErrors["content.body"] = "Enter the document body.";
         if (Object.keys(nextErrors).length > 0) {
             setErrors(nextErrors);
             window.setTimeout(() => document.getElementById("document-editor-errors")?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
             return;
         }
+        setDocumentTitle(title);
         setErrors({});
         router.post("/document-creation/finalize", {
             draft_id: editing,
+            title,
             document_type_id: typeId,
             content,
         }, {
@@ -571,6 +639,7 @@ export default function Index({
             target.fromEditor
                 ? {
                     draft_id: target.id,
+                    title: normalizeDocumentTitle(documentTitle),
                     document_type_id: typeId,
                     content,
                     approver_office_id: submissionOfficeId,
@@ -621,6 +690,7 @@ export default function Index({
         const apply = () => {
             const { title: sampleTitle, ...sample } = selectedType.sample_content!;
             setContent(current => ({ ...current, ...sample, body: "" }));
+            if (!titleManuallyEdited) setDocumentTitle(String(sampleTitle ?? sample.subject ?? ""));
             setDirty(true);
         };
         if (content.subject || content.body || content.body_document) {
@@ -677,13 +747,38 @@ export default function Index({
                         <form onSubmit={saveDraft} aria-busy={saving}>
                             <fieldset disabled={saving} className="min-w-0">
                                 <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-surface px-5 py-4">
-                                    <div>
-                                        <h2 className="mt-1 text-lg font-semibold text-foreground">
-                                            {editing
-                                                ? "Edit document"
-                                                : "New document"}
-                                        </h2>
-                                    </div>
+                                    <label className="min-w-0 flex-1 sm:max-w-xl" htmlFor="document-title">
+                                        <span className="mb-1 block text-xs font-medium text-muted">Document filename</span>
+                                        <span className={`flex h-10 min-w-0 items-center overflow-hidden rounded-lg border bg-background focus-within:ring-2 focus-within:ring-primary/20 ${errors.title ? "border-danger" : "border-border"}`}>
+                                            <input
+                                                id="document-title"
+                                                required
+                                                maxLength={255}
+                                                value={documentTitle}
+                                                title={`${normalizeDocumentTitle(documentTitle) || "Untitled document"}.pdf`}
+                                                aria-invalid={Boolean(errors.title)}
+                                                aria-describedby={errors.title ? "document-title-error" : undefined}
+                                                placeholder="Enter document filename"
+                                                onChange={(event) => {
+                                                    setDocumentTitle(event.target.value);
+                                                    setTitleManuallyEdited(true);
+                                                    setDirty(true);
+                                                    setErrors(current => {
+                                                        const next = { ...current };
+                                                        delete next.title;
+                                                        return next;
+                                                    });
+                                                }}
+                                                onBlur={() => {
+                                                    const normalized = normalizeDocumentTitle(documentTitle);
+                                                    if (normalized) setDocumentTitle(normalized);
+                                                }}
+                                                className="h-full min-w-0 flex-1 border-0 bg-transparent px-3 text-sm font-semibold text-foreground outline-none ring-0 focus:ring-0"
+                                            />
+                                            <span className="shrink-0 border-l border-border bg-secondary px-3 text-sm font-medium text-muted">.pdf</span>
+                                        </span>
+                                        {errors.title && <span id="document-title-error" className="mt-1 block text-xs text-danger">{errors.title}</span>}
+                                    </label>
                                     <div id="document-actions" className="flex flex-wrap items-center gap-2">
                                         <span
                                             role="status"
@@ -713,7 +808,9 @@ export default function Index({
                                         </button>
                                         <button
                                             type="button"
-                                            onClick={() => setPreviewOpen(true)}
+                                            onClick={() => {
+                                                if (preparedDocumentTitle()) setPreviewOpen(true);
+                                            }}
                                             className="rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:bg-background"
                                         >
                                             <Eye
@@ -914,7 +1011,7 @@ export default function Index({
                             </div>
                         </div>
                         <div className="max-h-[70vh] overflow-auto rounded-lg border border-border bg-surface p-3 sm:p-6">
-                            {previewOpen && <DocumentPdfPreview payload={{ draft_id: editing, document_type_id: typeId, content }} />}
+                            {previewOpen && <DocumentPdfPreview fileName={`${normalizeDocumentTitle(documentTitle)}.pdf`} payload={{ draft_id: editing, title: normalizeDocumentTitle(documentTitle), document_type_id: typeId, content }} />}
                         </div>
                         <div className="mt-4 flex flex-wrap justify-end gap-2">
                             <button

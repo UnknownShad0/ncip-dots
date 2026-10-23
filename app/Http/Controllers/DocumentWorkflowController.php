@@ -22,9 +22,7 @@ class DocumentWorkflowController extends Controller
             ->where('created_by', $user->id)
             ->whereNull('archived_at')
             ->where(function (Builder $ready) {
-                $ready->where(fn (Builder $unattached) => $unattached
-                    ->whereNull('official_document_id')
-                    ->whereIn('status', ['ready_for_routing', 'approved', 'awaiting_verification', 'verified']))
+                $ready->whereIn('status', ['ready_for_routing', 'approved', 'awaiting_verification', 'verified', 'registered'])
                     ->orWhere('status', 'revision_requested');
             });
         $this->searchDrafts($readyQuery, $search);
@@ -71,6 +69,8 @@ class DocumentWorkflowController extends Controller
                 'status' => $draft->status === 'revision_requested' ? 'revision_requested' : 'ready_for_routing',
                 'version_number' => $draft->version_number,
                 'official_document_id' => $draft->official_document_id,
+                'can_edit' => $draft->status !== 'revision_requested',
+                'preview_url' => route('document-creation.preview-submission', $draft),
                 'updated_at' => $draft->updated_at?->format('M j, Y g:i A'),
             ])->values(),
             'readyPagination' => $this->pagination($ready),

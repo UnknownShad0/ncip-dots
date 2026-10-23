@@ -10,6 +10,39 @@ class DocumentInlineEditingTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_document_filename_is_normalized_and_deduplicated_per_creator(): void
+    {
+        $type = DocumentType::create(['name' => 'Memo', 'is_active' => true]);
+        $creator = User::factory()->create(['is_active' => true]);
+        $otherCreator = User::factory()->create(['is_active' => true]);
+        $payload = [
+            'document_type_id' => $type->id,
+            'title' => '  Monthly   Report / Final.pdf  ',
+            'content' => ['from' => 'Sender', 'subject' => 'A different subject', 'body' => 'Document body'],
+        ];
+
+        $this->actingAs($creator)->post('/document-creation', $payload)
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('savedDraftTitle', 'Monthly Report Final');
+        $first = DocumentCreationDraft::latest('id')->firstOrFail();
+        $this->post('/document-creation', $payload)
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('savedDraftTitle', 'Monthly Report Final (1)');
+        $second = DocumentCreationDraft::latest('id')->firstOrFail();
+
+        $this->put('/document-creation/'.$first->id, $payload)->assertSessionHasNoErrors();
+        $this->assertSame('Monthly Report Final', $first->fresh()->title);
+        $this->assertSame('Monthly Report Final (1)', $second->fresh()->title);
+
+        $this->actingAs($otherCreator)->post('/document-creation', $payload)->assertSessionHasNoErrors();
+        $this->assertSame('Monthly Report Final', DocumentCreationDraft::latest('id')->firstOrFail()->title);
+
+        $payload['title'] = ' / : .pdf ';
+        $this->postJson('/document-creation', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('title');
+    }
+
     public function test_spaces_around_inline_marks_survive_save_update_and_reopen(): void
     {
         $type = DocumentType::create(['name' => 'Memo', 'is_active' => true]);
@@ -61,6 +94,7 @@ class DocumentInlineEditingTest extends TestCase
         $this->assertStringContainsString('<th>FOR</th>', $pdf->html($draft->title, $draft->fresh()->content));
         $payload['content']['for'] = '';
         $payload['content']['for_position'] = '';
+        $payload['content']['show_for'] = false;
         $this->put('/document-creation/'.$draft->id, $payload)->assertSessionHasNoErrors();
         $html = $pdf->html($draft->title, $draft->fresh()->content);
         foreach (['FOR', 'TO', 'THRU', 'ATTENTION'] as $label) $this->assertStringNotContainsString('<th>'.$label.'</th>', $html);
@@ -110,5 +144,74 @@ class DocumentInlineEditingTest extends TestCase
         $this->assertStringContainsString("First\n\n&lt;script&gt;alert(1)&lt;/script&gt;", $html);
         $this->assertStringNotContainsString('<script>', $html);
         $this->assertStringNotContainsString('<th>THRU</th>', $html);
+    }
+
+    public function test_visibility_recipients_and_signature_alignment_round_trip(): void
+    {
+        $type = DocumentType::create(['name' => 'Memo', 'is_active' => true]);
+        $user = User::factory()->create(['is_active' => true]);
+        $payload = ['document_type_id' => $type->id, 'content' => [
+            'show_for' => true,
+            'show_from' => false,
+            'show_subject' => false,
+            'show_date' => false,
+            'show_signature' => true,
+            'for' => 'Stale legacy recipient',
+            'for_position' => 'Stale position',
+            'recipients' => [
+                ['id' => 'one', 'name' => 'First Recipient', 'position' => 'Director'],
+                ['id' => 'two', 'name' => 'Second Recipient', 'position' => 'Officer'],
+            ],
+            'from' => '',
+            'subject' => '',
+            'date' => '',
+            'signature_blocks' => [
+                ['id' => 'sig-left-1', 'name' => 'Left One', 'position' => 'Chief', 'align' => 'left'],
+                ['id' => 'sig-left-2', 'name' => 'Left Two', 'position' => 'Deputy', 'align' => 'left'],
+                ['id' => 'sig-center', 'name' => 'Center One', 'position' => 'Manager', 'align' => 'center'],
+                ['id' => 'sig-right', 'name' => 'Right One', 'position' => 'Director', 'align' => 'right'],
+            ],
+            'body' => 'Body remains required.',
+        ]];
+
+        $this->actingAs($user)->post('/document-creation', $payload)->assertSessionHasNoErrors();
+        $draft = DocumentCreationDraft::firstOrFail();
+        $this->assertSame('First Recipient', $draft->content['for']);
+        $this->assertSame('Director', $draft->content['for_position']);
+        $this->assertSame($payload['content']['recipients'], $draft->content['recipients']);
+        $this->assertSame(['left', 'left', 'center', 'right'], array_column($draft->content['signature_blocks'], 'align'));
+        $this->assertSame('First Recipient', $draft->title);
+
+        $html = app(\App\Services\DocumentPdf::class)->html($draft->title, $draft->content);
+        $this->assertStringContainsString('First Recipient', $html);
+        $this->assertStringContainsString('Second Recipient', $html);
+        $this->assertStringNotContainsString('<th>FROM</th>', $html);
+        $this->assertStringNotContainsString('<th>SUBJECT</th>', $html);
+        $this->assertStringNotContainsString('<th>DATE</th>', $html);
+        $this->assertStringContainsString('.signature-block { min-width:0; text-align:left;', $html);
+        $this->assertStringContainsString('grid-column: 1; grid-row: 2;', $html);
+        $this->assertStringContainsString('grid-column: 2; grid-row: 1;', $html);
+        $this->assertStringContainsString('grid-column: 3; grid-row: 1;', $html);
+        $this->assertStringNotContainsString('grid-row: 1; text-align:', $html);
+
+        $required = $payload;
+        $required['content']['show_from'] = true;
+        $required['content']['show_subject'] = true;
+        $this->postJson('/document-creation', $required)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['content.from', 'content.subject']);
+    }
+
+    public function test_legacy_core_fields_without_visibility_flags_remain_visible(): void
+    {
+        $html = view('documents.generated', [
+            'title' => 'Legacy memo',
+            'header' => 'data:image/png;base64,example',
+            'content' => ['from' => '', 'subject' => '', 'date' => '', 'body' => 'Legacy body'],
+        ])->render();
+
+        foreach (['FOR', 'FROM', 'SUBJECT', 'DATE'] as $label) {
+            $this->assertStringContainsString('<th>'.$label.'</th>', $html);
+        }
     }
 }

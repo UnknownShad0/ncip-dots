@@ -782,8 +782,7 @@ class DocumentController extends Controller
             $approvedDraft = DocumentCreationDraft::query()
                 ->whereKey($validated['approved_draft_id'])
                 ->whereNull('archived_at')
-                ->whereIn('status', ['ready_for_routing', 'approved', 'awaiting_verification', 'verified'])
-                ->whereNull('official_document_id')
+                ->whereIn('status', ['ready_for_routing', 'approved', 'awaiting_verification', 'verified', 'registered'])
                 ->where('created_by', auth()->id())
                 ->first();
             abort_unless($approvedDraft, 422, 'This generated document is no longer Ready for Routing.');
@@ -856,9 +855,12 @@ class DocumentController extends Controller
 
                 if ($approvedDraft) {
                     $approvedDraft = DocumentCreationDraft::query()->whereNull('archived_at')->lockForUpdate()->findOrFail($approvedDraft->id);
-                    abort_unless(in_array($approvedDraft->status, ['ready_for_routing', 'approved', 'awaiting_verification', 'verified'], true) && ! $approvedDraft->official_document_id
-                        && (int) $approvedDraft->created_by === (int) auth()->id(), 409, 'This generated document was already attached to a routing record.');
-                    $approvedDraft->update(['official_document_id' => $document->id, 'status' => 'registered']);
+                    abort_unless(in_array($approvedDraft->status, ['ready_for_routing', 'approved', 'awaiting_verification', 'verified', 'registered'], true)
+                        && (int) $approvedDraft->created_by === (int) auth()->id(), 409, 'This generated document is no longer available for routing.');
+                    $approvedDraft->update([
+                        'official_document_id' => $approvedDraft->official_document_id ?: $document->id,
+                        'status' => 'registered',
+                    ]);
                     $approvedDraft->events()->create([
                         'user_id' => auth()->id(),
                         'event' => 'Attached to routing record',
@@ -1073,7 +1075,7 @@ class DocumentController extends Controller
                 if ($draft) {
                     if (in_array($decision, ['changes_requested', 'rejected'], true)) {
                         $draft->update([
-                            'status' => $decision === 'changes_requested' ? 'revision_requested' : 'rejected',
+                            'status' => $decision === 'changes_requested' ? 'revision_requested' : 'registered',
                             'decision_at' => now(),
                             'decision_remarks' => $validated['remarks'] ?? null,
                         ]);
@@ -1128,7 +1130,7 @@ class DocumentController extends Controller
                 $draft->update([
                     'status' => match ($decision) {
                         'changes_requested' => 'revision_requested',
-                        'rejected' => 'rejected',
+                        'rejected' => 'registered',
                         default => 'registered',
                     },
                     'decision_at' => now(),
@@ -1940,8 +1942,7 @@ class DocumentController extends Controller
             'approvedDocuments' => DocumentCreationDraft::query()
                 ->with('documentType:id,name')
                 ->whereNull('archived_at')
-                ->whereIn('status', ['ready_for_routing', 'approved', 'awaiting_verification', 'verified'])
-                ->whereNull('official_document_id')
+                ->whereIn('status', ['ready_for_routing', 'approved', 'awaiting_verification', 'verified', 'registered'])
                 ->where('created_by', auth()->id())
                 ->latest()
                 ->get(['id', 'title', 'document_type_id', 'status'])

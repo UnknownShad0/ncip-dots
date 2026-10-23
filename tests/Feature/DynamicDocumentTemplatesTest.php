@@ -207,6 +207,7 @@ class DynamicDocumentTemplatesTest extends TestCase
         $this->actingAs(User::factory()->create());
         $payload = $this->payload($type);
         unset($payload['content']['date']);
+        $payload['content']['show_date'] = false;
         $this->post('/document-creation', $payload)->assertSessionHasNoErrors();
         $draft = DocumentCreationDraft::firstOrFail();
         $pdf = app(DocumentPdf::class);

@@ -1535,7 +1535,7 @@ export default function DocumentsIndex({
                                         <option value="">Select a generated document</option>
                                         {approvedDocuments.map((document) => <option key={document.id} value={document.id} disabled={document.disabled}>{document.title} · {document.document_type ?? 'Document'}</option>)}
                                     </select>
-                                    <p className="mt-1 text-xs text-muted">This file will be attached to the new routing record, and its assigned tracking number will be printed on the PDF before review.</p>
+                                    <p className="mt-1 text-xs text-muted">A PDF snapshot with its own tracking number will be attached to this routing record. The generated source remains available for another routing record.</p>
                                 </div>}
                                 <label className="mb-1 block text-sm font-medium text-foreground">Title</label>
                                 <input

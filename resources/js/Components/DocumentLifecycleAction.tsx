@@ -21,7 +21,7 @@ export default function DocumentLifecycleAction({ action, url, title, iconOnly =
         });
     };
     return <>
-        <button type="button" title={label} aria-label={`${label}: ${title}`} onClick={() => setOpen(true)} className={`inline-flex items-center gap-2 rounded-lg border border-border p-2.5 text-sm font-semibold hover:bg-background ${action === 'delete' ? 'text-danger' : 'text-primary'}`}>
+        <button type="button" title={label} aria-label={`${label}: ${title}`} onClick={() => setOpen(true)} className={`inline-flex items-center gap-2 rounded-lg border border-border p-2.5 text-sm font-semibold hover:bg-background ${action === 'delete' ? 'text-danger' : action === 'archive' ? 'text-warning' : 'text-primary'}`}>
             <Icon size={16} aria-hidden="true" />{!iconOnly && (action === 'archive' ? 'Archive' : action === 'restore' ? 'Restore' : 'Delete')}
         </button>
         <WorkspaceDialog open={open} onClose={() => setOpen(false)} labelledBy={`lifecycle-${action}-${url.replace(/\W/g, '')}`} width="max-w-md" busy={busy}>

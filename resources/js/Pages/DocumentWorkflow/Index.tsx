@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import DocumentLifecycleAction from '@/Components/DocumentLifecycleAction';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     ArrowRight,
@@ -8,6 +9,8 @@ import {
     FileClock,
     FileSignature,
     FileText,
+    Eye,
+    Pencil,
     Search,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -21,6 +24,8 @@ type ReadyDocument = {
     status: string;
     version_number: number;
     official_document_id?: number | null;
+    can_edit?: boolean;
+    preview_url: string;
     updated_at?: string;
 };
 type TrackedDocument = {
@@ -133,7 +138,7 @@ export default function Index({ search: initialSearch = '', readyDocuments = [],
 
     const openTracked = (id: number) => route('documents.index', { open_document_id: id });
     const queues = [
-        { key: 'ready' as const, label: 'Ready to Route', description: 'Finalized generated files waiting to be added to routing.', count: readyPagination.total, icon: FileText },
+        { key: 'ready' as const, label: 'Ready to Route', description: 'Finalized generated files available for new routing records.', count: readyPagination.total, icon: FileText },
         ...(canReview ? [{ key: 'approvals' as const, label: 'Approval Tasks', description: 'Tracked files waiting for a decision from your office.', count: approvalPagination.total, icon: FileClock }] : []),
         { key: 'submissions' as const, label: 'My Submissions', description: 'Documents you sent into routing, including returned items.', count: submissionPagination.total, icon: FileSignature },
         { key: 'approved' as const, label: 'Approved Documents', description: 'Tracked submissions that have passed approval.', count: approvedPagination.total, icon: FileCheck2 },
@@ -165,7 +170,7 @@ export default function Index({ search: initialSearch = '', readyDocuments = [],
         // The workflow landing view shows only the queue directory.
     } else if (activeQueue === 'ready') {
         panelTitle = 'Ready to Route';
-        panelDescription = 'Finalized generated documents that have not been attached to a routing record.';
+        panelDescription = 'Finalized generated documents available for new routing records. A document can be routed more than once.';
         panelCount = readyPagination.total;
         panelPage = readyPagination;
         pageKey = 'ready_page';
@@ -178,8 +183,16 @@ export default function Index({ search: initialSearch = '', readyDocuments = [],
             action={document.status === 'revision_requested'
                 ? <Link href={route('document-creation.index', { edit_draft_id: document.id })} className="dots-button-primary inline-flex min-h-10 items-center gap-2">Revise document<ArrowRight size={15} aria-hidden="true" /></Link>
                 : <>
-                    <Link href={route('document-creation.index', { edit_draft_id: document.id })} className="dots-button-secondary inline-flex min-h-10 items-center">Edit</Link>
-                    {navigationVisibility?.all_documents === true && <Link href={route('documents.index', { create_routing_draft_id: document.id })} className="dots-button-primary inline-flex min-h-10 items-center gap-2">Create routing record<ArrowRight size={15} aria-hidden="true" /></Link>}
+                    <a href={document.preview_url} target="_blank" rel="noreferrer" className="dots-button-secondary inline-flex min-h-10 items-center gap-2">
+                        <Eye size={16} aria-hidden="true" />View
+                    </a>
+                    {document.can_edit && <Link href={route('document-creation.index', { edit_draft_id: document.id })} className="dots-button-secondary inline-flex min-h-10 items-center gap-2">
+                        <Pencil size={16} aria-hidden="true" />Edit
+                    </Link>}
+                    <DocumentLifecycleAction action="archive" title={document.title} url={route('document-creation.archive', document.id)} />
+                    {navigationVisibility?.all_documents === true && <Link href={route('documents.index', { create_routing_draft_id: document.id })} className="dots-button-primary inline-flex min-h-10 items-center gap-2">
+                        Route<ArrowRight size={15} aria-hidden="true" />
+                    </Link>}
                 </>}
         />);
     } else if (activeQueue === 'approvals') {

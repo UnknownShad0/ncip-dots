@@ -30,6 +30,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Illuminate\Support\Arr;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
@@ -47,7 +48,8 @@ class DocumentCreationController extends Controller
             $draftToEdit = DocumentCreationDraft::query()
                 ->whereKey($request->integer('edit_draft_id'))
                 ->where('created_by', $user->id)
-                ->whereIn('status', ['draft', 'ready_for_routing', 'revision_requested'])
+                ->whereNull('archived_at')
+                ->whereIn('status', ['draft', 'ready_for_routing', 'revision_requested', 'approved', 'awaiting_verification', 'verified', 'registered'])
                 ->first();
             abort_unless($draftToEdit, 404);
             $draftToEdit = $draftToEdit->only([
@@ -64,6 +66,7 @@ class DocumentCreationController extends Controller
             'documentTypes' => $this->documentTypeOptions(),
             'draftToEdit' => $draftToEdit,
             'savedDraftId' => session('savedDraftId'),
+            'savedDraftTitle' => session('savedDraftTitle'),
             'approverOffices' => [],
             'currentUserId' => $user->id,
             'footerOfficeName' => DocumentMetadata::officeName($user),
@@ -163,12 +166,16 @@ class DocumentCreationController extends Controller
             'title' => $draft->title,
         ]);
 
-        return back()->with('success', 'Draft saved.')->with('savedDraftId', $draft->id);
+        return back()->with('success', 'Draft saved.')
+            ->with('savedDraftId', $draft->id)
+            ->with('savedDraftTitle', $draft->title);
     }
 
     public function update(Request $request, DocumentCreationDraft $draft)
     {
-        abort_unless((int) $draft->created_by === (int) $request->user()->id && in_array($draft->status, ['draft', 'ready_for_routing', 'revision_requested'], true), 403);
+        abort_unless((int) $draft->created_by === (int) $request->user()->id
+            && ! $draft->archived_at
+            && in_array($draft->status, ['draft', 'ready_for_routing', 'revision_requested', 'approved', 'awaiting_verification', 'verified', 'registered'], true), 403);
         $data = $this->validateDraft($request, $draft);
         $nextStatus = $draft->official_document_id
             && $draft->officialDocument?->approval_status === 'changes_requested'
@@ -180,24 +187,29 @@ class DocumentCreationController extends Controller
             'title' => $draft->title,
         ]);
 
-        return back()->with('success', 'Draft updated.')->with('savedDraftId', $draft->id);
+        return back()->with('success', 'Draft updated.')
+            ->with('savedDraftId', $draft->id)
+            ->with('savedDraftTitle', $draft->title);
     }
 
     public function finalizeCurrent(Request $request)
     {
         $existing = $this->editableDraft($request);
         $data = $this->validateDraft($request, $existing);
-        $draft = DB::transaction(function () use ($request, $data, $existing) {
+        $isTrackedRevision = false;
+        $draft = DB::transaction(function () use ($request, $data, $existing, &$isTrackedRevision) {
             if ($existing) {
                 $draft = DocumentCreationDraft::query()
                     ->whereKey($existing->id)
                     ->where('created_by', $request->user()->id)
-                    ->whereIn('status', ['draft', 'ready_for_routing', 'revision_requested'])
+                    ->whereNull('archived_at')
+                    ->whereIn('status', ['draft', 'ready_for_routing', 'revision_requested', 'approved', 'awaiting_verification', 'verified', 'registered'])
                     ->lockForUpdate()
                     ->firstOrFail();
-                if ($draft->official_document_id) {
+                if ($draft->status === 'revision_requested' && $draft->official_document_id) {
                     $trackedDocument = Document::query()->lockForUpdate()->findOrFail($draft->official_document_id);
                     abort_unless($trackedDocument->approval_status === 'changes_requested', 409, 'This tracked document is not waiting for a revision.');
+                    $isTrackedRevision = true;
                 }
             } else {
                 $draft = DocumentCreationDraft::create([
@@ -236,7 +248,7 @@ class DocumentCreationController extends Controller
             return $draft;
         });
 
-        if ($draft->official_document_id) {
+        if ($isTrackedRevision) {
             return $this->attachTrackedRevision($request, $draft);
         }
 
@@ -539,7 +551,7 @@ class DocumentCreationController extends Controller
         DB::transaction(function () use ($request, $draft, $archived) {
             $draft = DocumentCreationDraft::query()->lockForUpdate()->findOrFail($draft->id);
             abort_unless((int) $draft->created_by === (int) $request->user()->id, 403);
-            abort_unless(in_array($draft->status, ['approved', 'awaiting_verification', 'verified', 'registered'], true), 403);
+            abort_unless(in_array($draft->status, ['ready_for_routing', 'approved', 'awaiting_verification', 'verified', 'registered'], true), 403);
             abort_unless((bool) $draft->archived_at !== $archived, 409);
             $draft->update(['archived_at' => $archived ? now() : null]);
             $draft->events()->create([
@@ -694,9 +706,12 @@ class DocumentCreationController extends Controller
         $user = $request->user();
         abort_unless($this->canAccess($draft, $request)
             || ($draft->approver_office_id && $this->userCanApproveForOffice($user, $draft->approver_office_id)), 403);
-        $version = $draft->versions()->where('version_number', $draft->version_number)->firstOrFail();
+        $version = $draft->versions()->where('version_number', $draft->version_number)->first();
 
-        return app(DocumentPdf::class)->response($draft->title, DocumentMetadata::present($version->content, $draft->creator));
+        return app(DocumentPdf::class)->response(
+            $draft->title,
+            DocumentMetadata::present($version?->content ?? $draft->content ?? [], $draft->creator),
+        );
     }
 
     private function editableDraft(Request $request): ?DocumentCreationDraft
@@ -707,11 +722,21 @@ class DocumentCreationController extends Controller
         }
 
         return DocumentCreationDraft::query()->whereKey($request->integer('draft_id'))
-            ->where('created_by', $request->user()->id)->whereIn('status', ['draft', 'ready_for_routing', 'revision_requested'])->firstOrFail();
+            ->where('created_by', $request->user()->id)
+            ->whereNull('archived_at')
+            ->whereIn('status', ['draft', 'ready_for_routing', 'revision_requested', 'approved', 'awaiting_verification', 'verified', 'registered'])
+            ->firstOrFail();
     }
 
     private function validateDraft(Request $request, ?DocumentCreationDraft $existing = null): array
     {
+        $incomingContent = $request->input('content', []);
+        $showFrom = ! is_array($incomingContent) || ! array_key_exists('show_from', $incomingContent)
+            ? true
+            : (bool) $incomingContent['show_from'];
+        $showSubject = ! is_array($incomingContent) || ! array_key_exists('show_subject', $incomingContent)
+            ? true
+            : (bool) $incomingContent['show_subject'];
         $data = $request->validate([
             'document_type_id' => ['required', 'integer', 'exists:document_types,id'],
             'title' => ['nullable', 'string', 'max:255'],
@@ -719,18 +744,27 @@ class DocumentCreationController extends Controller
             'content.page_template' => ['nullable', 'string', 'in:memo,letter'],
             'content.recipient_label' => ['nullable', 'in:FOR,TO'],
             'content.for' => ['nullable', 'string', 'max:255'], 'content.thru' => ['nullable', 'string', 'max:255'],
-            'content.attention' => ['nullable', 'string', 'max:255'], 'content.from' => ['required', 'string', 'max:255'],
-            'content.subject' => ['required', 'string', 'max:255'], 'content.date' => ['nullable', 'string', 'max:100'],
-            'content.show_thru' => ['nullable', 'boolean'], 'content.show_attention' => ['nullable', 'boolean'], 'content.show_cc' => ['nullable', 'boolean'],
+            'content.attention' => ['nullable', 'string', 'max:255'], 'content.from' => [Rule::requiredIf($showFrom), 'nullable', 'string', 'max:255'],
+            'content.subject' => [Rule::requiredIf($showSubject), 'nullable', 'string', 'max:255'], 'content.date' => ['nullable', 'string', 'max:100'],
+            'content.show_for' => ['nullable', 'boolean'], 'content.show_thru' => ['nullable', 'boolean'],
+            'content.show_attention' => ['nullable', 'boolean'], 'content.show_from' => ['nullable', 'boolean'],
+            'content.show_subject' => ['nullable', 'boolean'], 'content.show_date' => ['nullable', 'boolean'],
+            'content.show_signature' => ['nullable', 'boolean'], 'content.show_cc' => ['nullable', 'boolean'],
             'content.for_position' => ['nullable', 'string', 'max:255'],
             'content.thru_position' => ['nullable', 'string', 'max:255'],
             'content.attention_position' => ['nullable', 'string', 'max:255'],
             'content.from_position' => ['nullable', 'string', 'max:255'],
-            'content.signature_blocks' => ['nullable', 'array', 'max:10'],
+            'content.recipients' => ['nullable', 'array', 'max:100'],
+            'content.recipients.*' => ['required', 'array'],
+            'content.recipients.*.id' => ['nullable', 'string', 'max:100'],
+            'content.recipients.*.name' => ['nullable', 'string', 'max:255'],
+            'content.recipients.*.position' => ['nullable', 'string', 'max:255'],
+            'content.signature_blocks' => ['nullable', 'array', 'max:100'],
             'content.signature_blocks.*' => ['required', 'array'],
             'content.signature_blocks.*.id' => ['nullable', 'string', 'max:100'],
             'content.signature_blocks.*.name' => ['nullable', 'string', 'max:255'],
             'content.signature_blocks.*.position' => ['nullable', 'string', 'max:255'],
+            'content.signature_blocks.*.align' => ['nullable', 'in:left,center,right'],
             'content.body' => ['required_without:content.body_document', 'nullable', 'string', 'max:50000'],
             'content.body_document' => ['nullable', 'array'],
             'content.cc' => ['nullable', 'array', 'max:100'], 'content.cc.*' => ['nullable', 'string', 'max:255'],
@@ -742,16 +776,43 @@ class DocumentCreationController extends Controller
         ]);
         $type = DocumentType::query()->whereKey($data['document_type_id'])->where('is_active', true)->first();
         abort_unless($type, 422, 'Choose an active document type.');
-        $data['content'] = Arr::only($data['content'], ['page_template', 'recipient_label', 'for', 'thru', 'attention', 'show_thru', 'show_attention', 'show_cc', 'from', 'for_position', 'thru_position', 'attention_position', 'from_position', 'subject', 'date', 'signature_blocks', 'body', 'body_document', 'cc']);
+        $data['content'] = Arr::only($data['content'], ['page_template', 'recipient_label', 'for', 'recipients', 'thru', 'attention', 'show_for', 'show_thru', 'show_attention', 'show_from', 'show_subject', 'show_date', 'show_signature', 'show_cc', 'from', 'for_position', 'thru_position', 'attention_position', 'from_position', 'subject', 'date', 'signature_blocks', 'body', 'body_document', 'cc']);
         $data['content']['page_template'] ??= 'memo';
         $data['content']['recipient_label'] ??= 'FOR';
-        $data['content']['show_thru'] = (bool) ($data['content']['show_thru'] ?? false);
-        $data['content']['show_attention'] = (bool) ($data['content']['show_attention'] ?? false);
-        $data['content']['show_cc'] = (bool) ($data['content']['show_cc'] ?? false);
-        $data['content']['signature_blocks'] = array_map(
-            fn (array $block) => Arr::only($block, ['id', 'name', 'position']),
-            array_values($data['content']['signature_blocks'] ?? []),
+        $data['content']['show_for'] = (bool) ($data['content']['show_for'] ?? true);
+        $data['content']['show_thru'] = array_key_exists('show_thru', $data['content'])
+            ? (bool) $data['content']['show_thru']
+            : filled($data['content']['thru'] ?? null) || filled($data['content']['thru_position'] ?? null);
+        $data['content']['show_attention'] = array_key_exists('show_attention', $data['content'])
+            ? (bool) $data['content']['show_attention']
+            : filled($data['content']['attention'] ?? null) || filled($data['content']['attention_position'] ?? null);
+        $data['content']['show_from'] = (bool) ($data['content']['show_from'] ?? true);
+        $data['content']['show_subject'] = (bool) ($data['content']['show_subject'] ?? true);
+        $data['content']['show_date'] = (bool) ($data['content']['show_date'] ?? true);
+        $data['content']['show_cc'] = array_key_exists('show_cc', $data['content'])
+            ? (bool) $data['content']['show_cc']
+            : collect($data['content']['cc'] ?? [])->contains(fn ($line) => filled($line));
+        $data['content']['recipients'] = array_map(
+            fn (array $recipient) => Arr::only($recipient, ['id', 'name', 'position']),
+            array_values($data['content']['recipients'] ?? [[
+                'id' => 'recipient-1',
+                'name' => $data['content']['for'] ?? '',
+                'position' => $data['content']['for_position'] ?? '',
+            ]]),
         );
+        $data['content']['for'] = $data['content']['recipients'][0]['name'] ?? '';
+        $data['content']['for_position'] = $data['content']['recipients'][0]['position'] ?? '';
+        $data['content']['signature_blocks'] = array_map(
+            fn (array $block, int $index) => [
+                ...Arr::only($block, ['id', 'name', 'position']),
+                'align' => in_array($block['align'] ?? null, ['left', 'center', 'right'], true)
+                    ? $block['align']
+                    : ($index % 2 ? 'right' : 'left'),
+            ],
+            array_values($data['content']['signature_blocks'] ?? []),
+            array_keys(array_values($data['content']['signature_blocks'] ?? [])),
+        );
+        $data['content']['show_signature'] = (bool) ($data['content']['show_signature'] ?? count($data['content']['signature_blocks']) > 0);
         if (isset($data['content']['body_document'])) {
             $rich = app(RichDocumentContent::class);
             $data['content']['body_document'] = $rich->normalize($data['content']['body_document']);
@@ -766,7 +827,18 @@ class DocumentCreationController extends Controller
             ? ($existing->content['template_snapshot'] ?? $templates->defaultSnapshot())
             : $templates->forType($type)['snapshot'];
         // The editor uses Subject as the record name; accept titles from older clients.
-        $data['title'] = filled($data['title'] ?? null) ? $data['title'] : $data['content']['subject'];
+        $requestedTitle = filled($data['title'] ?? null)
+            ? $data['title']
+            : (filled($data['content']['subject'] ?? null)
+                ? $data['content']['subject']
+                : ($existing?->title ?: ($data['content']['for'] ?: 'Untitled document')));
+        $normalizedTitle = $this->normalizeDraftTitle((string) $requestedTitle);
+        if ($normalizedTitle === '') {
+            throw ValidationException::withMessages([
+                'title' => 'Enter a document filename.',
+            ]);
+        }
+        $data['title'] = $this->uniqueDraftTitle($normalizedTitle, $request->user(), $existing);
         $data['content']['document_title'] = $data['title'];
         $data['content']['footer_office_name'] = $existing?->content['footer_office_name'] ?? DocumentMetadata::officeName($request->user());
         // Preserve the exact visible fields, including blank CC lines, for shared layout.
@@ -774,6 +846,45 @@ class DocumentCreationController extends Controller
         $data['content']['cc'] = array_map(fn ($line) => $line ?? '', array_values($data['content']['cc'] ?? []));
 
         return $data;
+    }
+
+    private function normalizeDraftTitle(string $title): string
+    {
+        $title = preg_replace('/[\x00-\x1F\x7F\\\\\/:*?"<>|]+/u', ' ', $title) ?? '';
+        $title = preg_replace('/\s+/u', ' ', trim($title)) ?? '';
+        $title = rtrim($title, " .\t\n\r\0\x0B");
+        $title = preg_replace('/\.pdf$/iu', '', $title) ?? '';
+
+        return mb_substr(rtrim(trim($title), '.'), 0, 255);
+    }
+
+    private function uniqueDraftTitle(string $title, User $user, ?DocumentCreationDraft $existing): string
+    {
+        $isTaken = function (string $candidate) use ($user, $existing): bool {
+            return DocumentCreationDraft::query()
+                ->where('created_by', $user->id)
+                ->when($existing, fn (Builder $query) => $query->whereKeyNot($existing->id))
+                ->whereRaw('LOWER(title) = LOWER(?)', [$candidate])
+                ->exists();
+        };
+
+        if (! $isTaken($title)) {
+            return $title;
+        }
+
+        $base = $title;
+        $number = 1;
+        if (preg_match('/^(.*) \((\d+)\)$/u', $title, $matches)) {
+            $base = trim($matches[1]);
+            $number = ((int) $matches[2]) + 1;
+        }
+
+        do {
+            $suffix = ' ('.$number++.')';
+            $candidate = rtrim(mb_substr($base, 0, 255 - mb_strlen($suffix))).$suffix;
+        } while ($isTaken($candidate));
+
+        return $candidate;
     }
 
     private function documentTypeOptions(): array

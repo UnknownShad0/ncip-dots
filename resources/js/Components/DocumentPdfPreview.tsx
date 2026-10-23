@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { useEffect, useState } from 'react';
 
-export default function DocumentPdfPreview({ payload, draftId }: { payload?: Record<string, unknown>; draftId?: number }) {
+export default function DocumentPdfPreview({ payload, draftId, fileName = 'document.pdf' }: { payload?: Record<string, unknown>; draftId?: number; fileName?: string }) {
     const [url, setUrl] = useState('');
     const [error, setError] = useState('');
     const serialized = JSON.stringify(payload);
@@ -35,7 +35,7 @@ export default function DocumentPdfPreview({ payload, draftId }: { payload?: Rec
     return <div className="space-y-3">
         <div className="flex flex-wrap justify-end gap-2">
             <a href={url} target="_blank" rel="noopener noreferrer" className="dots-button-secondary">Open PDF / Print</a>
-            <a href={url} download="document.pdf" className="dots-button-primary">Download PDF</a>
+            <a href={url} download={fileName} className="dots-button-primary">Download PDF</a>
         </div>
         <iframe title="Document PDF preview" src={url} className="h-[70vh] w-full rounded-lg border border-border bg-white" />
         <p className="text-xs text-muted">This PDF uses the same layout as the generated attachment. If the preview is unavailable, use Open PDF / Print.</p>

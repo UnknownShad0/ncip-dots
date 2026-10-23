@@ -34,12 +34,11 @@ header .full-header { height: 90px; max-width: 100%; }
 .letter-date { margin:0 0 22px auto; max-width:48%; text-align:right; font-weight:normal; }
 .letter-subject { font-weight:bold; }
 .letter-divider { margin-top:22px; }
-.signature-list { display:grid; grid-template-columns:minmax(0,1fr); gap:20px; margin-top:24px; }
-.signature-list.multiple { grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:24px; row-gap:16px; }
-.signature-block { min-width:0; page-break-inside:avoid; break-inside:avoid; }
+.signature-list { display:grid; gap:16px 24px; margin-top:24px; }
+.signature-block { min-width:0; text-align:left; page-break-inside:avoid; break-inside:avoid; }
 .signature-space { height:56px; }
-.signature-name { max-width:360px; min-height:23px; font-weight:bold; white-space:pre-wrap; }
-.signature-position { max-width:360px; min-height:22px; font-size:10pt; white-space:pre-wrap; }
+.signature-name { max-width:100%; min-height:23px; font-weight:bold; white-space:pre-wrap; }
+.signature-position { max-width:100%; min-height:22px; font-size:10pt; white-space:pre-wrap; }
 .body { white-space: pre-wrap; overflow-wrap: break-word; }
 .rich-body { white-space: normal; overflow-wrap: break-word; }
 .rich-body p { margin:0 0 9pt; white-space:pre-wrap; word-wrap:break-word; }
@@ -79,14 +78,39 @@ footer .tagline { height: 17px; max-width: 100%; margin-top: 5px; }
 (02) 875 1200 · ncip.gov.ph · csc@ncip.gov.ph<br>
 <img class="tagline" src="{{ $template['footer_tagline']['src'] ?? 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('images/ncip-footer.png'))) }}" alt="Masaganang Katutubong Pamayanan: Sandigan ng Pambansang Kaunlaran"></div>
 </footer>
-@php($pageTemplate = ($content['page_template'] ?? 'memo') === 'letter' ? 'letter' : 'memo')
-@if ($pageTemplate === 'letter' && filled($content['date'] ?? null))
-<div class="letter-date">{{ \App\Services\DocumentMetadata::displayDate($content['date']) }}</div>
+@php
+$pageTemplate = ($content['page_template'] ?? 'memo') === 'letter' ? 'letter' : 'memo';
+// Visibility: explicit show_* flags win (this is what the editor sends). Documents
+// saved before the flags existed keep the old always-visible core fields.
+$flag = fn (string $key, bool $fallback): bool => array_key_exists($key, $content) && $content[$key] !== null ? (bool) $content[$key] : $fallback;
+$shown = [
+    'for' => $flag('show_for', true),
+    'thru' => $flag('show_thru', filled($content['thru'] ?? null) || filled($content['thru_position'] ?? null)),
+    'attention' => $flag('show_attention', filled($content['attention'] ?? null) || filled($content['attention_position'] ?? null)),
+    'from' => $flag('show_from', true),
+    'subject' => $flag('show_subject', true),
+    'date' => $flag('show_date', true),
+];
+$recipientLabel = ($content['recipient_label'] ?? 'FOR') === 'TO' ? 'TO' : 'FOR';
+$recipients = collect(is_array($content['recipients'] ?? null) && count($content['recipients'])
+    ? $content['recipients']
+    : [['name' => $content['for'] ?? '', 'position' => $content['for_position'] ?? '']])->values();
+$rowKeys = array_values(array_filter(
+    $pageTemplate === 'letter' ? ['for', 'from', 'subject'] : ['for', 'thru', 'attention', 'from', 'subject', 'date'],
+    fn ($key) => $shown[$key],
+));
+@endphp
+@if ($pageTemplate === 'letter' && $shown['date'])
+<div class="letter-date">{{ \App\Services\DocumentMetadata::displayDate($content['date'] ?? null) }}</div>
 @endif
 <div class="metadata {{ $pageTemplate === 'letter' ? 'letter-metadata' : '' }}"><table>
-@foreach (($pageTemplate === 'letter' ? ['for' => ($content['recipient_label'] ?? 'FOR') === 'TO' ? 'TO' : 'FOR', 'from' => 'FROM', 'subject' => 'SUBJECT'] : ['for' => ($content['recipient_label'] ?? 'FOR') === 'TO' ? 'TO' : 'FOR', 'thru' => 'THRU', 'attention' => 'ATTENTION', 'from' => 'FROM', 'subject' => 'SUBJECT', 'date' => 'DATE']) as $key => $label)
-@if (filled($content[$key] ?? null) || filled($content[$key.'_position'] ?? null) || in_array($key, ['from', 'subject']))
-<tr><th>{{ $label }}</th><td class="field-colon">:</td><td><div class="field-value {{ in_array($key, ['for', 'thru', 'attention', 'from']) ? 'person-name' : '' }} {{ $pageTemplate === 'letter' && $key === 'subject' ? 'letter-subject' : '' }}">{{ $key === 'date' ? \App\Services\DocumentMetadata::displayDate($content[$key] ?? null) : ($content[$key] ?? '') }}</div>@if (in_array($key, ['for', 'thru', 'attention', 'from']) && filled($content[$key.'_position'] ?? null))<div class="position">{{ $content[$key.'_position'] }}</div>@endif</td></tr>
+@foreach ($rowKeys as $key)
+@if ($key === 'for')
+@foreach ($recipients as $index => $recipient)
+<tr><th>{{ $index === 0 ? $recipientLabel : '' }}</th><td class="field-colon">{{ $index === 0 ? ':' : '' }}</td><td><div class="field-value person-name">{{ $recipient['name'] ?? '' }}</div><div class="position">{{ $recipient['position'] ?? '' }}</div></td></tr>
+@endforeach
+@else
+<tr><th>{{ strtoupper($key) }}</th><td class="field-colon">:</td><td><div class="field-value {{ in_array($key, ['thru', 'attention', 'from']) ? 'person-name' : '' }} {{ $pageTemplate === 'letter' && $key === 'subject' ? 'letter-subject' : '' }}">{{ $key === 'date' ? \App\Services\DocumentMetadata::displayDate($content[$key] ?? null) : ($content[$key] ?? '') }}</div>@if (in_array($key, ['thru', 'attention', 'from']))<div class="position">{{ $content[$key.'_position'] ?? '' }}</div>@endif</td></tr>
 @endif
 @endforeach
 </table></div>
@@ -96,21 +120,38 @@ footer .tagline { height: 17px; max-width: 100%; margin-top: 5px; }
 @else
 <div class="body">{{ $content['body'] ?? '' }}</div>
 @endif
-@php($legacySignature = !empty($content['show_signature_block']) || filled($content['signature_name'] ?? null) || filled($content['signature_position'] ?? null))
-@php($signatureBlocks = is_array($content['signature_blocks'] ?? null) ? array_values($content['signature_blocks']) : ($legacySignature ? [['name' => $content['signature_name'] ?? '', 'position' => $content['signature_position'] ?? '']] : []))
-@if (count($signatureBlocks))
+@php
+$legacySignature = !empty($content['show_signature_block']) || filled($content['signature_name'] ?? null) || filled($content['signature_position'] ?? null);
+$signatureBlocks = is_array($content['signature_blocks'] ?? null) ? array_values($content['signature_blocks']) : ($legacySignature ? [['name' => $content['signature_name'] ?? '', 'position' => $content['signature_position'] ?? '']] : []);
+$showSignatures = $flag('show_signature', count($signatureBlocks) > 0);
+$sides = ['left', 'center', 'right'];
+$counters = ['left' => 0, 'center' => 0, 'right' => 0];
+// Same side => stacked. Row = number of earlier blocks on that side. Old blocks without
+// `align` alternate left/right, the same as the old 2-column grid.
+$placed = collect($signatureBlocks)->values()->map(function ($block, $index) use (&$counters, $sides) {
+    $align = in_array($block['align'] ?? null, $sides, true) ? $block['align'] : ($index % 2 ? 'right' : 'left');
+    return ['name' => $block['name'] ?? '', 'position' => $block['position'] ?? '', 'align' => $align, 'row' => ++$counters[$align]];
+});
+$wideSignatures = $placed->contains(fn ($block) => $block['align'] !== 'left');
+$orderedSignatures = $placed->sortBy(fn ($block) => $block['row'] * 10 + array_search($block['align'], $sides))->values();
+@endphp
+@if ($showSignatures && count($signatureBlocks))
 @if ($pageTemplate === 'letter')<div>Sincerely,</div>@endif
-<section class="signature-list {{ count($signatureBlocks) > 1 ? 'multiple' : '' }}">
-@foreach ($signatureBlocks as $signature)
-<div class="signature-block">
+<section class="signature-list" style="grid-template-columns: {{ $wideSignatures ? 'repeat(3,minmax(0,1fr))' : 'minmax(0,1fr)' }};">
+@foreach ($orderedSignatures as $signature)
+<div class="signature-block" style="grid-column: {{ $wideSignatures ? array_search($signature['align'], $sides) + 1 : 1 }}; grid-row: {{ $signature['row'] }};">
 <div class="signature-space"></div>
-@if (filled($signature['name'] ?? null))<div class="signature-name">{{ $signature['name'] }}</div>@endif
-@if (filled($signature['position'] ?? null))<div class="signature-position">{{ $signature['position'] }}</div>@endif
+<div class="signature-name">{{ $signature['name'] ?? '' }}</div>
+<div class="signature-position">{{ $signature['position'] ?? '' }}</div>
 </div>
 @endforeach
 </section>
 @endif
-@if (count(array_filter($content['cc'] ?? [], fn ($line) => trim((string) $line) !== '')))
-<table class="cc"><tr><th>CC</th><td class="field-colon">:</td><td>{{ implode("\n", array_filter($content['cc'], fn ($line) => trim((string) $line) !== '')) }}</td></tr></table>
+@php
+$ccLines = array_filter($content['cc'] ?? [], fn ($line) => trim((string) $line) !== '');
+$showCc = $flag('show_cc', count($ccLines) > 0);
+@endphp
+@if ($showCc)
+<table class="cc"><tr><th>CC</th><td class="field-colon">:</td><td>{{ implode("\n", $ccLines) }}</td></tr></table>
 @endif
 </body></html>
