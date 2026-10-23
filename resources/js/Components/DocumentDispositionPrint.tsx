@@ -70,7 +70,7 @@ const LANE_W = 22;
 const DOT_CENTER_Y = 7.5;
 const PENDING_STATUSES = ['waiting', 'available', 'in_progress', 'waiting_on_branch', 'paused'];
 
-const modeWords = (mode?: string | null) => mode === 'parallel' ? 'at the same time' : 'one after another';
+const modeLabel = (mode?: string | null) => mode === 'parallel' ? 'Parallel approval' : 'Sequential approval';
 
 const pendingStatusText = (status: string) => ({
     waiting: 'Waiting for its turn',
@@ -198,7 +198,7 @@ export default function DocumentDispositionPrint({ document }: { document: Docum
                 depth,
                 office: step.office || 'Office unavailable',
                 statusText: pendingStatusText(step.status),
-                note: depth > 0 && first ? `Forwarded by ${ownerOffice || 'the office above'} · offices review ${modeWords(route.mode)}` : undefined,
+                note: depth > 0 && first ? `Forwarded by ${ownerOffice || 'the office above'} · ${modeLabel(route.mode)}` : undefined,
                 branchStart: depth > 0 && first,
             };
             first = false;
@@ -207,7 +207,7 @@ export default function DocumentDispositionPrint({ document }: { document: Docum
     });
     const todoRows = collectTodo(routeTree, 0);
     const modes = Array.from(new Set(routeTree.map((route) => route.mode || 'sequential')));
-    const labelText = `STILL TO DO${modes.length === 1 ? ` · offices review ${modeWords(modes[0])}` : ''}`;
+    const labelText = `STILL TO DO${modes.length === 1 ? ` · ${modeLabel(modes[0])}` : ''}`;
 
     const rows: JourneyRow[] = [
         ...eventRows,
@@ -392,7 +392,7 @@ export default function DocumentDispositionPrint({ document }: { document: Docum
                 <tr><td className="field-label">PURPOSE:</td><td className="field-value">{document.purpose_type || 'For Appropriate Action'}</td></tr>
                 <tr><td className="field-label">DOCUMENT:</td><td className="field-value">{getDocumentTypeName(document) || 'No document attached'}</td></tr>
                 <tr><td className="field-label">DATE CREATED:</td><td className="field-value">{document.created_at || '—'}</td></tr>
-                <tr><td className="field-label">ROUTING:</td><td className="field-value">{document.route_mode ? `Offices review ${modeWords(document.route_mode)}. ${routeStatusText(document.route_status)}.` : 'Standard office routing'}</td></tr>
+                <tr><td className="field-label">APPROVAL FLOW:</td><td className="field-value">{document.route_mode ? `${modeLabel(document.route_mode)}. ${routeStatusText(document.route_status)}.` : 'Standard office routing'}</td></tr>
             </tbody>
         </table>;
         if (block.type === 'journey-heading') return <>

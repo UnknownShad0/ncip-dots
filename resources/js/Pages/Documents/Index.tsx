@@ -33,6 +33,14 @@ export type RouteTree = {
     steps: RouteTreeStep[];
 };
 
+type EditableApprovalRoute = {
+    id: number;
+    mode: 'sequential' | 'parallel';
+    revision: string;
+    from_office?: string | null;
+    steps: RouteTreeStep[];
+};
+
 export type DocumentRouteProgressData = {
     route_tree?: RouteTree[];
     route_steps?: RouteTreeStep[];
@@ -152,6 +160,7 @@ type DocumentItem = {
         decided_at?: string | null;
     }>;
     route_tree?: RouteTree[];
+    editable_route?: EditableApprovalRoute | null;
 };
 
 type LibraryOption = { id: number | string; name: string; source?: string; disabled?: boolean };
@@ -300,6 +309,12 @@ export default function DocumentsIndex({
     const [releaseError, setReleaseError] = useState('');
     const [releaseOfficeSearch, setReleaseOfficeSearch] = useState('');
     const [draggedOfficeId, setDraggedOfficeId] = useState<string | null>(null);
+    const [routeEditingDocument, setRouteEditingDocument] = useState<DocumentItem | null>(null);
+    const [routeEditForm, setRouteEditForm] = useState({ officeIds: [] as string[], reason: '' });
+    const [routeEditOriginalOfficeIds, setRouteEditOriginalOfficeIds] = useState<string[]>([]);
+    const [routeEditSearch, setRouteEditSearch] = useState('');
+    const [routeEditError, setRouteEditError] = useState('');
+    const [draggedRouteEditOfficeId, setDraggedRouteEditOfficeId] = useState<string | null>(null);
     const [uploadError, setUploadError] = useState('');
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [search, setSearch] = useState(filters?.search ?? '');
@@ -614,6 +629,144 @@ export default function DocumentsIndex({
         }
     };
 
+    const dismissRouteEditor = () => {
+        setRouteEditingDocument(null);
+        setRouteEditForm({ officeIds: [], reason: '' });
+        setRouteEditOriginalOfficeIds([]);
+        setRouteEditSearch('');
+        setRouteEditError('');
+        setDraggedRouteEditOfficeId(null);
+    };
+
+    const openRouteEditor = (document: DocumentItem) => {
+        const editableRoute = document.editable_route;
+        if (!editableRoute) return;
+        const officeIds = editableRoute.steps
+            .filter((step) => ['available', 'waiting'].includes(step.status))
+            .sort((left, right) => left.position - right.position)
+            .map((step) => String(step.office_id));
+        setRouteEditingDocument(document);
+        setRouteEditForm({ officeIds, reason: '' });
+        setRouteEditOriginalOfficeIds(officeIds);
+        setRouteEditSearch('');
+        setRouteEditError('');
+        closeDocumentDetails();
+    };
+
+    const closeRouteEditor = () => {
+        if (processing) return;
+        const dirty = routeEditForm.reason.trim() !== ''
+            || JSON.stringify(routeEditForm.officeIds) !== JSON.stringify(routeEditOriginalOfficeIds);
+        if (!dirty) {
+            dismissRouteEditor();
+            return;
+        }
+        setCrudAlert({
+            title: 'Discard route changes?',
+            message: 'Your unsaved approval route changes will be lost.',
+            confirmLabel: 'Discard changes',
+            isDestructive: true,
+            onConfirm: () => { setCrudAlert(null); dismissRouteEditor(); },
+        });
+    };
+
+    const toggleRouteEditOffice = (officeId: string) => {
+        const lockedCount = routeEditingDocument?.editable_route?.steps.filter((step) => !['available', 'waiting'].includes(step.status)).length ?? 0;
+        if (!routeEditForm.officeIds.includes(officeId) && lockedCount + routeEditForm.officeIds.length >= 30) {
+            setRouteEditError('A route may contain no more than 30 active offices.');
+            return;
+        }
+        setRouteEditForm((current) => ({
+            ...current,
+            officeIds: current.officeIds.includes(officeId)
+                ? current.officeIds.filter((selected) => selected !== officeId)
+                : [...current.officeIds, officeId],
+        }));
+        setRouteEditError('');
+    };
+
+    const moveRouteEditOffice = (officeId: string, direction: -1 | 1) => {
+        setRouteEditForm((current) => {
+            const currentIndex = current.officeIds.indexOf(officeId);
+            const nextIndex = currentIndex + direction;
+            if (currentIndex < 0 || nextIndex < 0 || nextIndex >= current.officeIds.length) return current;
+            const officeIds = [...current.officeIds];
+            [officeIds[currentIndex], officeIds[nextIndex]] = [officeIds[nextIndex], officeIds[currentIndex]];
+            return { ...current, officeIds };
+        });
+    };
+
+    const reorderRouteEditOffice = (targetOfficeId: string) => {
+        if (!draggedRouteEditOfficeId || draggedRouteEditOfficeId === targetOfficeId) return;
+        setRouteEditForm((current) => {
+            const officeIds = [...current.officeIds];
+            const fromIndex = officeIds.indexOf(draggedRouteEditOfficeId);
+            const toIndex = officeIds.indexOf(targetOfficeId);
+            if (fromIndex < 0 || toIndex < 0) return current;
+            officeIds.splice(fromIndex, 1);
+            officeIds.splice(toIndex, 0, draggedRouteEditOfficeId);
+            return { ...current, officeIds };
+        });
+        setDraggedRouteEditOfficeId(null);
+    };
+
+    const saveRouteChanges = () => {
+        const editableRoute = routeEditingDocument?.editable_route;
+        if (!routeEditingDocument?.id || !editableRoute || processing) return;
+        if (!routeEditForm.reason.trim()) {
+            setRouteEditError('Explain why the approval route is being changed.');
+            return;
+        }
+        setProcessing(true);
+        setRouteEditError('');
+        router.put(`/documents/${routeEditingDocument.id}/routes/${editableRoute.id}/remaining-steps`, {
+            office_ids: routeEditForm.officeIds.map(Number),
+            reason: routeEditForm.reason.trim(),
+            revision: editableRoute.revision,
+        }, {
+            preserveScroll: true,
+            onFinish: () => setProcessing(false),
+            onError: (errors) => setRouteEditError(Object.values(errors).join(' ') || 'Could not update the approval route.'),
+            onSuccess: () => {
+                dismissRouteEditor();
+                setCrudAlert({ title: 'Approval route updated', message: 'The active approval route was updated successfully.' });
+            },
+        });
+    };
+
+    const handleRouteEdit = (event: FormEvent) => {
+        event.preventDefault();
+        if (!routeEditForm.reason.trim()) {
+            setRouteEditError('Explain why the approval route is being changed.');
+            return;
+        }
+        const editableRoute = routeEditingDocument?.editable_route;
+        const isParallel = editableRoute?.mode === 'parallel';
+        const currentComparison = isParallel ? [...routeEditForm.officeIds].sort() : routeEditForm.officeIds;
+        const originalComparison = isParallel ? [...routeEditOriginalOfficeIds].sort() : routeEditOriginalOfficeIds;
+        if (JSON.stringify(currentComparison) === JSON.stringify(originalComparison)) {
+            setRouteEditError(isParallel ? 'Add or remove at least one unreceived office before saving.' : 'Change at least one remaining office or its position before saving.');
+            return;
+        }
+        const removedAvailableSteps = editableRoute?.steps.filter((step) => step.status === 'available' && !routeEditForm.officeIds.includes(String(step.office_id))) ?? [];
+        const sequentialAvailableOfficeId = editableRoute?.steps.find((step) => step.status === 'available')?.office_id;
+        const sequentialAvailableChanged = !isParallel && sequentialAvailableOfficeId != null && routeEditForm.officeIds[0] !== String(sequentialAvailableOfficeId);
+        if (removedAvailableSteps.length > 0 || sequentialAvailableChanged) {
+            setCrudAlert({
+                title: removedAvailableSteps.length > 1 ? 'Remove unreceived offices?' : 'Remove the unreceived office?',
+                message: isParallel
+                    ? `${removedAvailableSteps.length} pending parallel ${removedAvailableSteps.length === 1 ? 'assignment' : 'assignments'} will be cancelled before receipt.`
+                    : routeEditForm.officeIds.length > 0
+                        ? 'Its pending assignment will be cancelled before receipt, and the first remaining office will become active.'
+                        : 'Its pending assignment will be cancelled before receipt. If every locked step is already approved, the route will complete.',
+                confirmLabel: 'Update route',
+                onConfirm: () => { setCrudAlert(null); saveRouteChanges(); },
+            });
+            return;
+        }
+        saveRouteChanges();
+    };
+
     useEffect(() => {
         const requestedId = openDocumentId == null ? '' : String(openDocumentId);
         if (!requestedId || autoOpenedDocumentId.current === requestedId) return;
@@ -777,6 +930,15 @@ export default function DocumentsIndex({
     const filteredReleaseOffices = normalizedReleaseOfficeSearch
         ? offices.filter((office) => office.name.toLocaleLowerCase().includes(normalizedReleaseOfficeSearch))
         : offices;
+    const normalizedRouteEditSearch = routeEditSearch.trim().toLocaleLowerCase();
+    const filteredRouteEditOffices = normalizedRouteEditSearch
+        ? offices.filter((office) => office.name.toLocaleLowerCase().includes(normalizedRouteEditSearch))
+        : offices;
+    const routeEditIsParallel = routeEditingDocument?.editable_route?.mode === 'parallel';
+    const routeEditLockedSteps = routeEditingDocument?.editable_route?.steps
+        .filter((step) => !['available', 'waiting'].includes(step.status))
+        .sort((left, right) => left.position - right.position) ?? [];
+    const routeEditLockedOfficeIds = new Set(routeEditLockedSteps.map((step) => String(step.office_id)));
 
     return (
         <AuthenticatedLayout
@@ -1018,12 +1180,13 @@ export default function DocumentsIndex({
             <WorkspaceDialog open={Boolean(viewingRow)} onClose={closeDocumentDetails} labelledBy="document-details-title" width="max-w-3xl">
                 {viewingRow && (
                     <section>
-                        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
+                        <div className="sticky top-0 z-10 flex flex-wrap items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
                             <div>
                                 <h2 id="document-details-title" className="break-words text-lg font-semibold text-foreground">{viewingRow.title || 'Document details'}</h2>
                                 <p className="mt-1 break-words text-sm text-muted">{viewingRow.tracking_number || 'Tracking number unavailable'}</p>
                             </div>
-                            <div className="flex shrink-0 items-center gap-2">
+                            <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
+                                {viewingRow.editable_route && <button type="button" onClick={() => openRouteEditor(viewingRow)} className="dots-button-secondary px-3" aria-label="Edit remaining approval route"><Pencil size={16} aria-hidden="true" /> Edit route</button>}
                                 {viewingRow.is_finalized && <button type="button" onClick={() => printDisposition(viewingRow)} className="dots-button-secondary px-3" aria-label="Print disposition form"><Printer size={16} aria-hidden="true" /> Print disposition</button>}
                                 <button type="button" onClick={closeDocumentDetails} aria-label="Close document details" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
                                     <X size={19} aria-hidden="true" />
@@ -1058,6 +1221,125 @@ export default function DocumentsIndex({
                             <button type="button" onClick={closeDocumentDetails} className="dots-button-secondary">Close</button>
                         </div>
                     </section>
+                )}
+            </WorkspaceDialog>
+
+            <WorkspaceDialog open={Boolean(routeEditingDocument)} onClose={closeRouteEditor} labelledBy="edit-route-title" width="max-w-3xl" busy={processing}>
+                {routeEditingDocument?.editable_route && (
+                    <form onSubmit={handleRouteEdit} aria-busy={processing}>
+                        <fieldset disabled={processing} className="min-w-0">
+                            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
+                                <div>
+                                    <h2 id="edit-route-title" className="text-lg font-semibold text-foreground">Edit remaining route</h2>
+                                    <p className="mt-1 text-sm text-muted">{routeEditIsParallel ? 'Add offices or remove unreceived offices from this parallel approval flow.' : 'Update only the unfinished part of this sequential approval flow.'}</p>
+                                </div>
+                                <button type="button" onClick={closeRouteEditor} aria-label="Close route editor" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
+                                    <X size={19} aria-hidden="true" />
+                                </button>
+                            </div>
+
+                            <div className="space-y-6 p-5 sm:p-6">
+                                <div className="rounded-xl border border-primary/20 bg-secondary/50 px-4 py-3 text-sm text-foreground">
+                                    {routeEditIsParallel
+                                        ? <><strong>Parallel approval:</strong> new offices receive the document immediately. Approved and received offices stay locked.</>
+                                        : <><strong>Sequential approval:</strong> approved and received offices stay locked. Waiting offices can be added, removed, or reordered.</>}
+                                </div>
+
+                                <section aria-labelledby="locked-route-steps-title">
+                                    <div className="mb-3">
+                                        <h3 id="locked-route-steps-title" className="font-semibold text-foreground">Completed and active offices</h3>
+                                        <p className="mt-0.5 text-xs text-muted">These steps are preserved and cannot be edited.</p>
+                                    </div>
+                                    {routeEditLockedSteps.length > 0 ? <ol className="space-y-2">
+                                        {routeEditLockedSteps.map((step, index) => <li key={step.id} className="flex items-center gap-3 rounded-xl border border-border bg-background p-3">
+                                            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface text-xs font-bold text-muted">{index + 1}</span>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="break-words text-sm font-semibold text-foreground">{step.office}</p>
+                                                <p className="mt-0.5 text-xs text-muted">{step.status === 'approved' ? 'Approval completed' : step.status === 'in_progress' ? 'Received and under review' : step.status === 'waiting_on_branch' ? 'Waiting for its child route' : step.status.replaceAll('_', ' ')}</p>
+                                            </div>
+                                            <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${getStatusClasses(step.status)}`}>{step.status.replaceAll('_', ' ')}</span>
+                                        </li>)}
+                                    </ol> : <p className="rounded-xl border border-dashed border-border px-4 py-5 text-center text-sm text-muted">No locked steps yet.</p>}
+                                </section>
+
+                                <section aria-labelledby="remaining-route-steps-title">
+                                    <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+                                        <div>
+                                            <h3 id="remaining-route-steps-title" className="font-semibold text-foreground">{routeEditIsParallel ? 'Unreceived offices' : 'Remaining offices'}</h3>
+                                            <p className="mt-0.5 text-xs text-muted">{routeEditIsParallel ? 'Every selected office can receive and review independently.' : 'The first office is active when no received office is still reviewing.'}</p>
+                                        </div>
+                                        <span className="text-xs font-medium text-muted">{routeEditLockedSteps.length + routeEditForm.officeIds.length}/30 offices</span>
+                                    </div>
+
+                                    <div className="mb-3 flex h-11 items-center gap-2 rounded-xl border border-border bg-surface px-3 text-muted focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
+                                        <Search size={17} className="shrink-0" aria-hidden="true" />
+                                        <label htmlFor="route-edit-office-search" className="sr-only">Search offices for the remaining route</label>
+                                        <input id="route-edit-office-search" type="search" value={routeEditSearch} onChange={(event) => setRouteEditSearch(event.target.value)} placeholder="Search offices…" className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-foreground placeholder:text-muted focus:ring-0" />
+                                        {routeEditSearch && <button type="button" onClick={() => setRouteEditSearch('')} className="rounded-md p-1 text-muted hover:bg-secondary hover:text-foreground" aria-label="Clear office search"><X size={15} aria-hidden="true" /></button>}
+                                    </div>
+                                    <div className="grid max-h-48 gap-2 overflow-y-auto rounded-xl border border-border bg-background p-2 sm:grid-cols-2">
+                                        {filteredRouteEditOffices.map((office) => {
+                                            const officeId = String(office.id);
+                                            const selected = routeEditForm.officeIds.includes(officeId);
+                                            const locked = routeEditLockedOfficeIds.has(officeId);
+                                            const unavailable = locked || (Boolean(office.disabled) && !selected)
+                                                || (routeEditLockedSteps.length + routeEditForm.officeIds.length >= 30 && !selected);
+                                            return <label key={office.id} className={`flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2 text-sm ${unavailable ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${selected ? 'border-primary bg-secondary' : 'border-border bg-surface'}`}>
+                                                <input type="checkbox" checked={selected} disabled={unavailable} onChange={() => toggleRouteEditOffice(officeId)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
+                                                <span className="text-foreground">{office.name}{locked && <span className="ml-2 text-xs text-muted">Locked</span>}</span>
+                                            </label>;
+                                        })}
+                                        {filteredRouteEditOffices.length === 0 && <p className="p-2 text-sm text-muted sm:col-span-2">No offices match “{routeEditSearch.trim()}”.</p>}
+                                    </div>
+
+                                    {routeEditForm.officeIds.length > 0 ? <ol className="mt-4 space-y-2" aria-label="Updated remaining office order">
+                                        {routeEditForm.officeIds.map((officeId, index) => {
+                                            const office = offices.find((option) => String(option.id) === officeId);
+                                            const originalAvailable = routeEditingDocument.editable_route?.steps.find((step) => step.status === 'available' && String(step.office_id) === officeId);
+                                            const isPreservedAvailable = Boolean(originalAvailable);
+                                            return <li key={officeId} draggable={!routeEditIsParallel} onDragStart={() => !routeEditIsParallel && setDraggedRouteEditOfficeId(officeId)} onDragOver={(event) => { if (!routeEditIsParallel) event.preventDefault(); }} onDrop={() => !routeEditIsParallel && reorderRouteEditOffice(officeId)} onDragEnd={() => setDraggedRouteEditOfficeId(null)} className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3">
+                                                {!routeEditIsParallel && <GripVertical size={17} className="shrink-0 cursor-grab text-muted" aria-label="Drag to reorder" />}
+                                                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-white">{routeEditLockedSteps.length + index + 1}</span>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="break-words text-sm font-medium text-foreground">{office?.name}</p>
+                                                    {isPreservedAvailable && <p className="mt-0.5 text-[11px] font-medium text-primary">Waiting to be received</p>}
+                                                    {routeEditIsParallel && !isPreservedAvailable && <p className="mt-0.5 text-[11px] font-medium text-primary">Will be available immediately</p>}
+                                                </div>
+                                                <div className="flex shrink-0 gap-1">
+                                                    {!routeEditIsParallel && <button type="button" disabled={index === 0} onClick={() => moveRouteEditOffice(officeId, -1)} aria-label={`Move ${office?.name} up`} className="rounded-md p-2 text-muted hover:bg-secondary disabled:opacity-30"><ArrowUp size={15} /></button>}
+                                                    {!routeEditIsParallel && <button type="button" disabled={index === routeEditForm.officeIds.length - 1} onClick={() => moveRouteEditOffice(officeId, 1)} aria-label={`Move ${office?.name} down`} className="rounded-md p-2 text-muted hover:bg-secondary disabled:opacity-30"><ArrowDown size={15} /></button>}
+                                                    <button type="button" onClick={() => toggleRouteEditOffice(officeId)} aria-label={`Remove ${office?.name}`} className="rounded-md p-2 text-muted hover:bg-danger-soft hover:text-danger"><X size={15} /></button>
+                                                </div>
+                                            </li>;
+                                        })}
+                                    </ol> : <p className="mt-4 rounded-xl border border-dashed border-border px-4 py-5 text-center text-sm text-muted">{routeEditIsParallel ? 'No unreceived office selected. The route can finish after all locked active offices approve.' : 'No future office selected. The route can finish after the locked active step is approved.'}</p>}
+                                </section>
+
+                                <section className="grid gap-3 rounded-xl border border-border bg-background p-4 sm:grid-cols-2" aria-label="Route change summary">
+                                    <div>
+                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Before</p>
+                                        <p className="mt-1 text-sm text-foreground">{routeEditOriginalOfficeIds.map((officeId) => routeEditingDocument.editable_route?.steps.find((step) => String(step.office_id) === officeId)?.office).filter(Boolean).join(routeEditIsParallel ? ', ' : ' → ') || 'No remaining offices'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">After</p>
+                                        <p className="mt-1 text-sm text-foreground">{routeEditForm.officeIds.map((officeId) => offices.find((office) => String(office.id) === officeId)?.name).filter(Boolean).join(routeEditIsParallel ? ', ' : ' → ') || 'No remaining offices'}</p>
+                                    </div>
+                                </section>
+
+                                <div>
+                                    <label htmlFor="route-edit-reason" className="mb-1 block text-sm font-medium text-foreground">Reason for route change <span className="text-danger">*</span></label>
+                                    <textarea id="route-edit-reason" required maxLength={1000} rows={3} value={routeEditForm.reason} onChange={(event) => { setRouteEditForm((current) => ({ ...current, reason: event.target.value })); setRouteEditError(''); }} className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm" placeholder="Explain why the remaining approval route needs to change." />
+                                    <p className="mt-1 text-right text-xs text-muted">{routeEditForm.reason.length}/1000</p>
+                                </div>
+                                {routeEditError && <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{routeEditError}</p>}
+                            </div>
+
+                            <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-surface px-5 py-4 sm:px-6">
+                                <button type="button" onClick={closeRouteEditor} className="dots-button-secondary">Cancel</button>
+                                <button type="submit" className="dots-button-primary">{processing ? 'Saving…' : 'Save route changes'}</button>
+                            </div>
+                        </fieldset>
+                    </form>
                 )}
             </WorkspaceDialog>
 
@@ -1100,11 +1382,11 @@ export default function DocumentsIndex({
                                     </div>
                                 )}
                                 <div className="sm:col-span-2">
-                                    <p className="mb-2 text-sm font-medium text-foreground">Routing type</p>
-                                    <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Routing type">
+                                    <p className="mb-2 text-sm font-medium text-foreground">Approval flow</p>
+                                    <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Approval flow">
                                         {([
-                                            ['sequential', 'Step by step', 'Each office acts after the previous office approves.'],
-                                            ['parallel', 'At the same time', 'All offices can review and approve independently.'],
+                                            ['sequential', 'Sequential approval', 'Offices review in order. The next office receives the document after the current office approves.'],
+                                            ['parallel', 'Parallel approval', 'All selected offices receive the document immediately and can review independently.'],
                                         ] as const).map(([mode, label, description]) => (
                                             <button key={mode} type="button" aria-pressed={releaseForm.routingMode === mode} onClick={() => setReleaseForm({ ...releaseForm, routingMode: mode })} className={`rounded-xl border p-3 text-left ${releaseForm.routingMode === mode ? 'border-primary bg-secondary' : 'border-border bg-surface'}`}>
                                                 <span className="block text-sm font-semibold text-foreground">{label}</span>
@@ -1477,8 +1759,8 @@ export function DocumentRouteProgress({ document }: { document: DocumentRoutePro
                 </div>
                 {/* Small legend so the lines are easy to read */}
                 <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-muted" aria-label="Legend">
-                    <span className="inline-flex items-center gap-2"><span className="h-4 w-0 border-l-2 border-solid border-primary/60" aria-hidden="true" />Step by step</span>
-                    <span className="inline-flex items-center gap-2"><span className="h-4 w-0 border-l-2 border-dashed border-primary/60" aria-hidden="true" />Parallel</span>
+                    <span className="inline-flex items-center gap-2"><span className="h-4 w-0 border-l-2 border-solid border-primary/60" aria-hidden="true" />Sequential approval</span>
+                    <span className="inline-flex items-center gap-2"><span className="h-4 w-0 border-l-2 border-dashed border-primary/60" aria-hidden="true" />Parallel approval</span>
                     <span className="inline-flex items-center gap-2"><span className="h-3.5 w-3.5 rounded-full border-2 border-primary bg-primary ring-4 ring-primary/10" aria-hidden="true" />Current</span>
                     <span className="inline-flex items-center gap-2"><span className="h-3.5 w-3.5 rounded-full border-2 border-success bg-success" aria-hidden="true" />Approved</span>
                 </div>
@@ -1548,7 +1830,7 @@ function RouteTreeGroup({ route, statusLabel, depth, round, continues = false }:
         {depth === 0 && <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
                 <p className="text-xs font-semibold text-foreground">Route {round}</p>
-                <p className="text-[11px] text-muted">{isParallel ? 'Parallel · offices can act independently' : 'Step by step · next office waits for approval'}</p>
+                <p className="text-[11px] text-muted">{isParallel ? 'Parallel approval · offices can act independently' : 'Sequential approval · next office waits for approval'}</p>
             </div>
             <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${getStatusClasses(route.status)}`}>{statusLabel(route.status)}</span>
         </div>}
@@ -1600,7 +1882,7 @@ function RouteTreeGroup({ route, statusLabel, depth, round, continues = false }:
                             <span className={`absolute left-[7px] top-[19px] w-[25px] border-t-2 ${childStyle}`} aria-hidden="true" />
                             <div className="flex h-8 items-center gap-2 overflow-hidden pb-2 pl-8">
                                 <span className={`min-w-0 truncate rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none ${LANE_BG[childLane]} ${LANE_TEXT[childLane]}`}>
-                                    Forwarded by {step.office} · {childParallel ? 'Parallel' : 'Step by step'}
+                                    Forwarded by {step.office} · {childParallel ? 'Parallel approval' : 'Sequential approval'}
                                 </span>
                                 <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold capitalize leading-none ${getStatusClasses(child.status)}`}>{statusLabel(child.status)}</span>
                             </div>

@@ -6,13 +6,13 @@ use App\Http\Controllers\AuditTrailController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\DocumentCreationController;
-use App\Http\Controllers\DocumentWorkflowController;
 use App\Http\Controllers\DocumentFontController;
 use App\Http\Controllers\DocumentTypeController;
+use App\Http\Controllers\DocumentWorkflowController;
 use App\Http\Controllers\DraftsController;
-use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\GmailIntegrationController;
 use App\Http\Controllers\HrisEmployeeController;
+use App\Http\Controllers\IntegrationController;
 use App\Http\Controllers\IplumaController;
 use App\Http\Controllers\NavigationAccessController;
 use App\Http\Controllers\OfficeController;
@@ -23,7 +23,9 @@ use App\Http\Controllers\RangeController;
 use App\Http\Controllers\SetupController;
 use App\Http\Controllers\SystemMaintenanceController;
 use App\Http\Controllers\UserAccountController;
+use App\Services\DocumentTemplates;
 use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
 
 Route::redirect('/', '/login');
 Route::get('/track/{trackingNumber}', [PublicDocumentTrackingController::class, 'show'])
@@ -48,7 +50,7 @@ Route::middleware(['auth', 'active.user', 'verified', 'system.maintenance', 'nav
     Route::get('/document-workflow', [DocumentWorkflowController::class, 'index'])->name('document-workflow.index');
     Route::get('/document-fonts/{face}', DocumentFontController::class)
         ->where('face', 'regular|bold|italic|bold-italic')->name('document-fonts.show');
-    Route::get('/document-assets/{filename}', [\App\Services\DocumentTemplates::class, 'show'])->where('filename', '[a-f0-9]{64}\.(png|jpg)')->name('document-assets.show');
+    Route::get('/document-assets/{filename}', [DocumentTemplates::class, 'show'])->where('filename', '[a-f0-9]{64}\.(png|jpg)')->name('document-assets.show');
     Route::post('/document-creation/preview', [DocumentCreationController::class, 'preview'])->middleware('throttle:30,1')->name('document-creation.preview');
     Route::get('/document-creation/{draft}/preview', [DocumentCreationController::class, 'previewSubmission'])->middleware('throttle:30,1')->name('document-creation.preview-submission');
     Route::get('/drafts', [DraftsController::class, 'index'])->name('drafts.index');
@@ -63,6 +65,8 @@ Route::middleware(['auth', 'active.user', 'verified', 'system.maintenance', 'nav
     Route::post('/documents', [DocumentController::class, 'store'])->name('documents.store');
     Route::put('/documents/{id}', [DocumentController::class, 'update'])->name('documents.update');
     Route::post('/documents/{id}/release', [DocumentController::class, 'release'])->name('documents.release');
+    Route::put('/documents/{document}/routes/{route}/remaining-steps', [DocumentController::class, 'updateRemainingRouteSteps'])
+        ->whereNumber('document')->whereNumber('route')->name('documents.routes.remaining-steps.update');
     Route::post('/documents/{id}/receive', [DocumentController::class, 'receive'])->name('documents.receive');
     Route::post('/documents/{id}/terminal', [DocumentController::class, 'tagTerminal'])->name('documents.terminal');
     Route::delete('/documents/{id}', [DocumentController::class, 'destroy'])->name('documents.destroy');
@@ -122,7 +126,7 @@ Route::middleware(['auth', 'active.user', 'verified', 'system.maintenance', 'nav
         Route::put('/system-maintenance', [SystemMaintenanceController::class, 'update'])->name('system-maintenance.update');
     });
 
-    Route::get('/connected-systems', fn () => \Inertia\Inertia::render('ConnectedSystems/Index'))->name('connected-systems.index');
+    Route::get('/connected-systems', fn () => Inertia::render('ConnectedSystems/Index'))->name('connected-systems.index');
     Route::get('/drip', [IntegrationController::class, 'drip'])->name('drip.index');
     Route::get('/ipluma', [IplumaController::class, 'index'])->name('ipluma.index');
     Route::get('/pdmis', [IntegrationController::class, 'pdmis'])->name('pdmis.index');

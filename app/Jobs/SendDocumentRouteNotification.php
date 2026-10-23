@@ -48,7 +48,7 @@ class SendDocumentRouteNotification implements ShouldQueue
             'Document: '.$this->documentTitle,
             'Tracking number: '.$this->trackingNumber,
             'Office: '.$this->officeName,
-            'Routing type: '.($this->routingMode === 'parallel' ? 'Parallel' : 'Sequential'),
+            'Approval flow: '.($this->routingMode === 'parallel' ? 'Parallel approval' : 'Sequential approval'),
         ];
 
         if (filled($this->remarks)) {

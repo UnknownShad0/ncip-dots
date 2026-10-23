@@ -61,11 +61,16 @@ const routeStepLabel = (status: string) => routeStepLabels[status] ?? status.rep
 //   - a forwarded branch is rendered INSIDE its parent step's <li>, right under the parent card,
 //     indented 32px (ml-8). Its header is 8px top padding + 24px label row + 8px gap = 40px,
 //     and a connector drops from the parent card's bottom edge into the child lane.
+//   - the terminal card (if any) sits right below the last route with 12px top padding;
+//     its dot center is at y = 12 + 23 = 35px, and the last route's main rail continues
+//     (`continues`) all the way down to it.
 // Rows are separated with padding (never margin) so rails stay continuous.
 // One color per depth, like colored git lanes. Full class names so Tailwind can see them.
 const LANE_BORDER = ['border-blue-500/60', 'border-sky-500/70', 'border-violet-500/70', 'border-amber-500/70'];
 const LANE_TEXT = ['text-blue-800', 'text-sky-800', 'text-violet-800', 'text-amber-800'];
 const LANE_BG = ['bg-blue-50', 'bg-sky-50', 'bg-violet-50', 'bg-amber-50'];
+
+const findTerminalTrail = (trails: Trail[]) => trails.find((trail) => trail.status?.toLowerCase() === 'terminal');
 
 export default function Show({ document }: { document: TrackedDocument }) {
     return (
@@ -97,7 +102,7 @@ export default function Show({ document }: { document: TrackedDocument }) {
                         </dl>
                     </section>
 
-                    {document.route_tree?.length || document.route_steps?.length ? <RouteBranchMap document={document} /> : null}
+                    {document.route_tree?.length || document.route_steps?.length || findTerminalTrail(document.trails) ? <RouteBranchMap document={document} /> : null}
 
                     <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7" aria-labelledby="routing-history-title">
                         <div className="flex flex-wrap items-end justify-between gap-2">
@@ -153,8 +158,9 @@ export default function Show({ document }: { document: TrackedDocument }) {
 }
 
 function RouteBranchMap({ document }: { document: TrackedDocument }) {
+    // Always show routes oldest to newest (Route 1 first), whatever order the backend sends them in.
     const routes: PublicRoute[] = document.route_tree?.length
-        ? document.route_tree
+        ? [...document.route_tree].sort((a, b) => a.id - b.id)
         : document.route_steps?.length
             ? [{
                 id: 0,
@@ -170,7 +176,12 @@ function RouteBranchMap({ document }: { document: TrackedDocument }) {
     ]));
     const approvedCount = allSteps.filter((step) => step.status === 'approved').length;
     const routeStatus = routes.some((route) => route.status === 'pending') ? 'pending' : (document.status || document.route_status || 'pending');
-    const originOffice = document.route_from_office || routes[routes.length - 1]?.from_office || document.office_name || 'Originating office';
+    // The earliest route is where the document started.
+    const originOffice = document.route_from_office || routes[0]?.from_office || document.office_name || 'Originating office';
+    // Trails are latest first, so find() returns the most recent terminal entry.
+    const terminalTrail = findTerminalTrail(document.trails);
+    // With routes above it, the last route's rail must run straight down into the terminal dot.
+    const terminalConnected = Boolean(terminalTrail) && routes.length > 0;
 
     return <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" aria-labelledby="office-route-title">
         <div className="border-b border-slate-200 bg-gradient-to-br from-blue-50 via-white to-slate-50 p-5 sm:p-7">
@@ -189,8 +200,8 @@ function RouteBranchMap({ document }: { document: TrackedDocument }) {
             </div>
             {/* Small legend so the lines are easy to read */}
             <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-slate-600" aria-label="Legend">
-                <span className="inline-flex items-center gap-2"><span className="h-4 w-0 border-l-2 border-solid border-blue-500/60" aria-hidden="true" />Step by step</span>
-                <span className="inline-flex items-center gap-2"><span className="h-4 w-0 border-l-2 border-dashed border-blue-500/60" aria-hidden="true" />Parallel</span>
+                <span className="inline-flex items-center gap-2"><span className="h-4 w-0 border-l-2 border-solid border-blue-500/60" aria-hidden="true" />Sequential approval</span>
+                <span className="inline-flex items-center gap-2"><span className="h-4 w-0 border-l-2 border-dashed border-blue-500/60" aria-hidden="true" />Parallel approval</span>
                 <span className="inline-flex items-center gap-2"><span className="h-3.5 w-3.5 rounded-full border-2 border-blue-600 bg-blue-600 ring-4 ring-blue-100" aria-hidden="true" />Current</span>
                 <span className="inline-flex items-center gap-2"><span className="h-3.5 w-3.5 rounded-full border-2 border-emerald-500 bg-emerald-500" aria-hidden="true" />Approved</span>
             </div>
@@ -209,8 +220,31 @@ function RouteBranchMap({ document }: { document: TrackedDocument }) {
                 </div>
             </div>
 
-            <div className="mt-5 space-y-6">
-                {routes.map((route, index) => <PublicRouteGroup key={route.id} route={route} depth={0} round={index + 1} />)}
+            <div className="mt-5">
+                {routes.length > 0 && <div className="space-y-6">
+                    {routes.map((route, index) => <PublicRouteGroup key={route.id} route={route} depth={0} round={index + 1} continues={terminalConnected && index === routes.length - 1} />)}
+                </div>}
+                {terminalTrail && <ol className="relative" aria-label="Terminal transaction">
+                    <li className={`relative pl-8 ${terminalConnected ? 'pt-3' : ''}`}>
+                        {/* Rail from the previous step straight into the terminal dot (12px padding + 23px dot center = 35px) */}
+                        {terminalConnected && <span className="absolute left-[6px] top-0 h-[35px] w-0 border-l-2 border-solid border-blue-500/60" aria-hidden="true" />}
+                        <span className={`absolute left-0 z-[1] h-3.5 w-3.5 rounded-full border-2 border-slate-700 bg-slate-700 ring-4 ring-slate-200 ${terminalConnected ? 'top-7' : 'top-4'}`} aria-hidden="true" />
+                        <span className={`absolute left-3.5 h-0.5 w-[18px] bg-slate-200 ${terminalConnected ? 'top-[34px]' : 'top-[22px]'}`} aria-hidden="true" />
+                        <article className="rounded-xl border border-slate-300 bg-slate-50 p-3.5 sm:p-4">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="flex min-w-0 items-start gap-3">
+                                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-700 text-xs font-bold text-white">{allSteps.length + 1}</span>
+                                    <div className="min-w-0">
+                                        <p className="break-words text-sm font-semibold text-slate-900">{terminalTrail.from_office || terminalTrail.holder || terminalTrail.to_office || originOffice}</p>
+                                        <p className="mt-0.5 text-xs text-slate-500">{terminalTrail.action || 'Tagged as Terminal'}</p>
+                                    </div>
+                                </div>
+                                <RouteStepStatus status="terminal" />
+                            </div>
+                            {terminalTrail.created_at && <p className="mt-3 border-t border-slate-200 pt-2.5 text-xs text-slate-500">Recorded {terminalTrail.created_at}</p>}
+                        </article>
+                    </li>
+                </ol>}
             </div>
         </div>
     </section>;
@@ -220,7 +254,7 @@ function collectPublicRouteSteps(route: PublicRoute): PublicRouteStep[] {
     return route.steps.flatMap((step) => [step, ...(step.child_routes ?? []).flatMap((child) => collectPublicRouteSteps(child))]);
 }
 
-function PublicRouteGroup({ route, depth, round }: { route: PublicRoute; depth: number; round?: number }) {
+function PublicRouteGroup({ route, depth, round, continues = false }: { route: PublicRoute; depth: number; round?: number; continues?: boolean }) {
     const isParallel = route.mode === 'parallel';
     const lane = depth % 4;
     const childLane = (depth + 1) % 4;
@@ -229,7 +263,7 @@ function PublicRouteGroup({ route, depth, round }: { route: PublicRoute; depth: 
         {depth === 0 && <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
                 <p className="text-xs font-semibold text-slate-900">Route {round}</p>
-                <p className="text-[11px] text-slate-500">{isParallel ? 'Parallel · offices can act independently' : 'Step by step · next office waits for approval'}</p>
+                <p className="text-[11px] text-slate-500">{isParallel ? 'Parallel approval · offices can act independently' : 'Sequential approval · next office waits for approval'}</p>
             </div>
             <RouteStepStatus status={route.status} />
         </div>}
@@ -239,13 +273,15 @@ function PublicRouteGroup({ route, depth, round }: { route: PublicRoute; depth: 
                 const isFirst = index === 0;
                 const isLast = index === route.steps.length - 1;
                 const startsAtDot = isFirst && depth === 0;
+                // The last step keeps its rail going to the bottom when something (the terminal card) follows this route.
+                const runsThrough = isLast && continues;
 
                 // Rail segment for this step. Solid = step by step, dashed = parallel.
                 // On the last step the rail ends at the dot, even if the step has children,
                 // because the children hang off their own (indented) lane.
                 const start = startsAtDot ? 'top-[23px]' : 'top-0';
-                const end = isLast ? 'h-[23px]' : 'bottom-0';
-                const rail = startsAtDot && isLast ? null : <span
+                const end = isLast && !runsThrough ? 'h-[23px]' : 'bottom-0';
+                const rail = startsAtDot && isLast && !runsThrough ? null : <span
                     className={`absolute left-[6px] w-0 border-l-2 ${LANE_BORDER[lane]} ${isParallel ? 'border-dashed' : 'border-solid'} ${start} ${end}`}
                     aria-hidden="true"
                 />;
@@ -285,7 +321,7 @@ function PublicRouteGroup({ route, depth, round }: { route: PublicRoute; depth: 
                             <span className={`absolute left-[7px] top-[19px] w-[25px] border-t-2 ${childStyle}`} aria-hidden="true" />
                             <div className="flex h-8 items-center gap-2 overflow-hidden pb-2 pl-8">
                                 <span className={`min-w-0 truncate rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none ${LANE_BG[childLane]} ${LANE_TEXT[childLane]}`}>
-                                    Forwarded by {step.office} · {childParallel ? 'Parallel' : 'Step by step'}
+                                    Forwarded by {step.office} · {childParallel ? 'Parallel approval' : 'Sequential approval'}
                                 </span>
                                 <RouteStepStatus status={child.status} compact />
                             </div>
