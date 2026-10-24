@@ -6,6 +6,7 @@ use App\Models\Office;
 use App\Models\User;
 use App\Notifications\UserAccountCreated;
 use App\Services\AuditTrailWriter;
+use App\Services\EmailNotificationSettings;
 use App\Services\HrisDirectory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -222,6 +223,13 @@ class UserAccountController extends Controller
         ]);
         if ($type === 'employee') {
             $request->session()->forget('hris_employee_lookup');
+        }
+
+        if (! app(EmailNotificationSettings::class)->automatedEnabled()) {
+            return redirect()->route('user-accounts.index')->with(
+                'warning',
+                'Account created, but the password setup email was not sent because email notifications are paused.',
+            );
         }
 
         try {

@@ -11,8 +11,8 @@ const appearances = {
     confirmation: { icon: AlertTriangle, color: 'text-warning' },
 };
 
-export default function WorkspaceAlert({ title, message, onClose, onConfirm, confirmLabel = 'Continue', isDestructive = false, variant = onConfirm ? 'confirmation' : 'success' }: {
-    title: string; message: string; onClose: () => void; onConfirm?: () => void; confirmLabel?: string; isDestructive?: boolean; variant?: WorkspaceAlertVariant;
+export default function WorkspaceAlert({ title, message, onClose, onConfirm, confirmLabel = 'Continue', isDestructive = false, variant = onConfirm ? 'confirmation' : 'success', toast = false }: {
+    title: string; message: string; onClose: () => void; onConfirm?: () => void; confirmLabel?: string; isDestructive?: boolean; variant?: WorkspaceAlertVariant; toast?: boolean;
 }) {
     const { icon: Icon, color } = appearances[variant];
     const [fading, setFading] = useState(false);
@@ -23,7 +23,7 @@ export default function WorkspaceAlert({ title, message, onClose, onConfirm, con
     }, [onClose]);
 
     useEffect(() => {
-        if (variant !== 'success' || onConfirm) return;
+        if ((!toast && variant !== 'success') || onConfirm) return;
 
         setFading(false);
         const fadeTimer = window.setTimeout(() => setFading(true), 5000);
@@ -33,13 +33,13 @@ export default function WorkspaceAlert({ title, message, onClose, onConfirm, con
             window.clearTimeout(fadeTimer);
             window.clearTimeout(dismissTimer);
         };
-    }, [title, message, variant, onConfirm]);
+    }, [title, message, variant, onConfirm, toast]);
 
-    // Routine success never takes focus away from the next task.
-    if (variant === 'success' && !onConfirm) {
+    // Routine notices never take focus away from the next task.
+    if ((toast || variant === 'success') && !onConfirm) {
         return <div className={`dots-dialog fixed right-4 top-4 z-[70] flex w-[calc(100%-2rem)] max-w-md items-start gap-3 rounded-lg border border-border bg-surface p-4 text-foreground shadow-lg transition-opacity duration-300 ${fading ? 'pointer-events-none opacity-0' : 'opacity-100'}`}>
             <Icon size={20} className={`mt-0.5 shrink-0 ${color}`} aria-hidden="true" />
-            <div role="status" aria-atomic="true" className="min-w-0 flex-1">
+            <div role={variant === 'error' ? 'alert' : 'status'} aria-atomic="true" className="min-w-0 flex-1">
                 <p className="font-semibold">{title}</p>
                 <p className="mt-1 text-sm text-muted">{message}</p>
             </div>

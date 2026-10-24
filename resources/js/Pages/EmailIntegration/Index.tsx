@@ -1,7 +1,8 @@
+import WorkspaceAlert, { type WorkspaceAlertVariant } from '@/Components/WorkspaceAlert';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, useForm } from '@inertiajs/react';
 import { Mail, Power, Send, Server, ShieldCheck } from 'lucide-react';
-import { FormEvent } from 'react';
+import { FormEvent, useState } from 'react';
 
 type Props = {
     configured: boolean;
@@ -15,6 +16,34 @@ type Props = {
     statusMessage?: string | null;
     errorMessage?: string | null;
 };
+
+type AlertState = {
+    title: string;
+    message: string;
+    variant: WorkspaceAlertVariant;
+};
+
+function alertFromResponse(statusMessage?: string | null, errorMessage?: string | null): AlertState | null {
+    if (errorMessage) {
+        return {
+            title: errorMessage.toLowerCase().includes('paused') ? 'Email delivery is paused' : 'Test email not sent',
+            message: errorMessage,
+            variant: errorMessage.toLowerCase().includes('paused') ? 'info' : 'error',
+        };
+    }
+
+    if (!statusMessage) return null;
+
+    return {
+        title: statusMessage.toLowerCase().includes('test email')
+            ? 'Test email sent'
+            : statusMessage.toLowerCase().includes('paused')
+                ? 'Email delivery paused'
+                : 'Email delivery updated',
+        message: statusMessage,
+        variant: 'success',
+    };
+}
 
 export default function EmailIntegrationIndex({
     configured,
@@ -30,16 +59,31 @@ export default function EmailIntegrationIndex({
 }: Props) {
     const testForm = useForm({ recipient: testRecipient ?? '' });
     const automationForm = useForm({ enabled: automatedEnabled });
+    const [alert, setAlert] = useState<AlertState | null>(() => alertFromResponse(statusMessage, errorMessage));
 
     const submitTest = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        testForm.post(route('email-integration.test'), { preserveScroll: true });
+        setAlert(null);
+        testForm.post(route('email-integration.test'), {
+            preserveScroll: true,
+            onSuccess: (page) => {
+                const response = page.props as unknown as Props;
+                setAlert(alertFromResponse(response.statusMessage, response.errorMessage));
+            },
+        });
     };
 
     const toggleAutomation = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        setAlert(null);
         automationForm.transform(() => ({ enabled: !automatedEnabled }));
-        automationForm.patch(route('email-integration.automation.update'), { preserveScroll: true });
+        automationForm.patch(route('email-integration.automation.update'), {
+            preserveScroll: true,
+            onSuccess: (page) => {
+                const response = page.props as unknown as Props;
+                setAlert(alertFromResponse(response.statusMessage, response.errorMessage));
+            },
+        });
     };
 
     return (
@@ -58,9 +102,6 @@ export default function EmailIntegrationIndex({
         }>
             <Head title="Email notifications" />
             <div className="mx-auto max-w-3xl space-y-5">
-                {statusMessage && <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{statusMessage}</div>}
-                {errorMessage && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{errorMessage}</div>}
-
                 <section className="rounded-xl border border-border bg-surface p-6">
                     <div className="flex items-start gap-4">
                         <span className="rounded-xl bg-secondary p-3 text-primary"><Mail size={22} aria-hidden="true" /></span>
@@ -110,9 +151,9 @@ export default function EmailIntegrationIndex({
                                 <Power size={20} aria-hidden="true" />
                             </span>
                             <div>
-                                <h2 className="text-lg font-semibold">Automated workflow emails</h2>
+                                <h2 className="text-lg font-semibold">Email delivery</h2>
                                 <p className="mt-1 text-sm leading-6 text-muted">
-                                    Controls approval, routing, receipt, and document status emails. Manual test emails remain available while paused.
+                                    Controls every outgoing email, including document workflows, account setup, verification, password reset, and test messages.
                                 </p>
                             </div>
                         </div>
@@ -121,7 +162,7 @@ export default function EmailIntegrationIndex({
                         </span>
                     </div>
                     <p className="mt-4 rounded-lg border border-border bg-background px-4 py-3 text-sm text-muted">
-                        Queued email jobs check this setting when they run. While paused, they are safely skipped instead of accumulating for later delivery.
+                        While paused, all outgoing emails are blocked. Queued workflow jobs are safely skipped instead of accumulating for later delivery.
                     </p>
                     <form onSubmit={toggleAutomation} className="mt-4">
                         <button
@@ -133,9 +174,9 @@ export default function EmailIntegrationIndex({
                         >
                             {automationForm.processing
                                 ? 'Updating...'
-                                : automatedEnabled ? 'Pause automated emails' : 'Enable automated emails'}
+                                : automatedEnabled ? 'Pause email delivery' : 'Enable email delivery'}
                         </button>
-                        {!configured && !automatedEnabled && <p className="mt-2 text-sm text-amber-800">Complete the SMTP configuration before enabling automated emails.</p>}
+                        {!configured && !automatedEnabled && <p className="mt-2 text-sm text-amber-800">Complete the SMTP configuration before enabling email delivery.</p>}
                     </form>
                 </section>
 
@@ -161,14 +202,28 @@ export default function EmailIntegrationIndex({
                         </div>
                         <button
                             type="submit"
-                            disabled={!configured || testForm.processing}
+                            disabled={testForm.processing}
                             className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             {testForm.processing ? 'Sending...' : 'Send test'}
                         </button>
                     </form>
+                    {!automatedEnabled && (
+                        <p className="mt-2 text-sm text-amber-800">
+                            Email delivery is paused. You can still press Send test to confirm that DOTS blocks the message; no email will leave the system.
+                        </p>
+                    )}
                 </section>
             </div>
+            {alert && (
+                <WorkspaceAlert
+                    toast
+                    title={alert.title}
+                    message={alert.message}
+                    variant={alert.variant}
+                    onClose={() => setAlert(null)}
+                />
+            )}
         </AuthenticatedLayout>
     );
 }

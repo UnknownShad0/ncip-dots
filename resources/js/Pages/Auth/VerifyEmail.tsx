@@ -29,6 +29,11 @@ export default function VerifyEmail({ status }: { status?: string }) {
                     you provided during registration.
                 </div>
             )}
+            {status === 'verification-email-paused' && (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+                    Email delivery is temporarily paused. Please contact an administrator.
+                </div>
+            )}
 
             <form onSubmit={submit}>
                 <div className="mt-4 flex items-center justify-between">

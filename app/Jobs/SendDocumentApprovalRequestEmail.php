@@ -9,6 +9,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Throwable;
 
 class SendDocumentApprovalRequestEmail implements ShouldQueue
@@ -39,24 +40,27 @@ class SendDocumentApprovalRequestEmail implements ShouldQueue
             return;
         }
 
-        $body = implode("\n", [
-            'Hello '.$this->recipientName.',',
-            '',
-            'A document submission is waiting for approval.',
-            '',
-            'Submitted by: '.$this->submitterName,
-            'Document: '.$this->documentTitle,
-            'Version: '.$this->versionNumber,
-            '',
-            'Open the approval queue in DOTS:',
-            route('document-creation.index', ['queue' => 'approval']),
-        ]);
-
         try {
-            $mailer->sendText(
+            $mailer->sendDocumentNotification(
                 $this->recipientEmail,
-                '[DOTS] A document is waiting for approval',
-                $body,
+                '[DOTS] Approval needed: '.$this->subjectDocumentTitle(),
+                [
+                    'preheader' => $this->submitterName.' submitted a document that is waiting for your review.',
+                    'label' => 'Action required',
+                    'heading' => 'A document is waiting for your approval',
+                    'recipient_name' => $this->recipientName,
+                    'intro' => $this->submitterName.' submitted a document that requires review and approval from your office.',
+                    'details' => [
+                        ['label' => 'Document', 'value' => $this->documentTitle],
+                        ['label' => 'Submitted by', 'value' => $this->submitterName],
+                        ['label' => 'Version', 'value' => $this->versionNumber],
+                    ],
+                    'closing' => 'Please review the document and record your decision in the Document Tracking System.',
+                    'action_label' => 'Review document',
+                    'action_url' => route('document-creation.index', ['queue' => 'approval']),
+                    'notice' => 'For accountability and security, approval decisions must be completed while signed in to your DOTS account.',
+                    'tone' => 'warning',
+                ],
             );
         } catch (Throwable $exception) {
             Log::warning('Email document approval notification attempt failed.', [
@@ -91,5 +95,10 @@ class SendDocumentApprovalRequestEmail implements ShouldQueue
         $parts = explode('@', $this->recipientEmail, 2);
 
         return count($parts) === 2 ? substr($parts[0], 0, 1).'***@'.$parts[1] : 'invalid';
+    }
+
+    private function subjectDocumentTitle(): string
+    {
+        return Str::limit(trim((string) preg_replace('/\s+/', ' ', $this->documentTitle)), 90);
     }
 }

@@ -46,8 +46,8 @@ class EmailIntegrationController extends Controller
             return back()->with(
                 'status',
                 $enabled
-                    ? 'Automated workflow emails are already enabled.'
-                    : 'Automated workflow emails are already paused.',
+                    ? 'Email delivery is already enabled.'
+                    : 'Email delivery is already paused.',
             );
         }
 
@@ -69,15 +69,15 @@ class EmailIntegrationController extends Controller
             );
         });
 
-        Log::notice('Automated email notifications were '.($enabled ? 'enabled' : 'paused').'.', [
+        Log::notice('Email delivery was '.($enabled ? 'enabled' : 'paused').'.', [
             'user_id' => $request->user()?->id,
         ]);
 
         return back()->with(
             'status',
             $enabled
-                ? 'Automated workflow emails are now enabled.'
-                : 'Automated workflow emails are paused. Manual test emails remain available.',
+                ? 'Email delivery is now enabled.'
+                : 'Email delivery is paused. All outgoing emails are blocked.',
         );
     }
 
@@ -87,15 +87,32 @@ class EmailIntegrationController extends Controller
             'recipient' => ['required', 'email:rfc', 'max:255'],
         ]);
 
+        if ($mailer->automatedDeliveryIssue() === 'notifications_paused') {
+            return back()->with('error', 'Email delivery is paused. DOTS blocked the test message, so no email was sent.');
+        }
+
         if (! $mailer->isConfigured()) {
-            return back()->with('error', 'Complete the missing email settings in .env, then clear the configuration cache.');
+            return back()->with('error', 'The test email was not sent because the SMTP configuration is incomplete. Complete the missing settings in .env, then clear the configuration cache.');
         }
 
         try {
-            $mailer->sendText(
+            $mailer->sendDocumentNotification(
                 $validated['recipient'],
-                '[DOTS] Email notification test',
-                "This is a test email from the DOTS email notification service.\n\nIf you received this message, the SMTP configuration is working.",
+                '[DOTS] Email delivery test successful',
+                [
+                    'preheader' => 'DOTS successfully sent this email delivery test.',
+                    'label' => 'System test',
+                    'heading' => 'Email delivery is working',
+                    'recipient_name' => $request->user()?->name ?: 'Administrator',
+                    'intro' => 'This test message was sent by the Document Tracking System.',
+                    'details' => [
+                        ['label' => 'Delivery status', 'value' => 'Successful'],
+                        ['label' => 'From address', 'value' => $mailer->senderAddress()],
+                    ],
+                    'closing' => 'If you can read this message, the configured SMTP service is delivering DOTS emails with both HTML and plain-text content.',
+                    'notice' => 'No action is required. This message was generated from the Email notifications administration page.',
+                    'tone' => 'primary',
+                ],
             );
         } catch (Throwable $exception) {
             Log::warning('Email notification test failed.', [
@@ -112,7 +129,7 @@ class EmailIntegrationController extends Controller
             'user_id' => $request->user()?->id,
         ]);
 
-        return back()->with('status', 'Test email sent successfully.');
+        return back()->with('status', 'The test email was sent successfully with its HTML and plain-text content.');
     }
 
     private function recipientHint(string $email): string

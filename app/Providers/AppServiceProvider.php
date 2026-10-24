@@ -2,7 +2,12 @@
 
 namespace App\Providers;
 
+use App\Services\DocumentTemplates;
+use App\Services\EmailNotificationSettings;
 use Illuminate\Auth\Notifications\ResetPassword as ResetPasswordNotification;
+use Illuminate\Mail\Events\MessageSending;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
@@ -14,7 +19,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->scoped(\App\Services\DocumentTemplates::class);
+        $this->app->scoped(DocumentTemplates::class);
     }
 
     /**
@@ -23,6 +28,16 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Password::defaults(fn () => Password::min(8)->mixedCase()->numbers()->symbols());
+
+        Event::listen(MessageSending::class, function (): bool {
+            if (app(EmailNotificationSettings::class)->automatedEnabled()) {
+                return true;
+            }
+
+            Log::notice('Outgoing email was blocked because email notifications are paused.');
+
+            return false;
+        });
 
         Vite::prefetch(concurrency: 3);
 

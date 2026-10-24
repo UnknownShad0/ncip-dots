@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\AuditTrailWriter;
+use App\Services\EmailNotificationSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -36,6 +37,15 @@ class PasswordResetLinkController extends Controller
         ]);
 
         $username = $request->input('username');
+        if (! app(EmailNotificationSettings::class)->automatedEnabled()) {
+            app(AuditTrailWriter::class)->record('password.reset_requested', details: [
+                'identifier' => $username,
+                'reason' => 'email_notifications_paused',
+            ], result: 'failure');
+
+            return back()->with('status', 'If an account matches that username, we’ll send a password reset link shortly.');
+        }
+
         if ($this->usesLogMailer(config('mail.default'))) {
             app(AuditTrailWriter::class)->record('password.reset_requested', details: [
                 'identifier' => $username,

@@ -33,7 +33,7 @@ const detailLabels: Record<string, string> = {
     import: 'Import',
     result: 'Result',
     mode: 'Mode',
-    automated_emails: 'Automated workflow emails',
+    automated_emails: 'Email delivery',
 };
 
 const actionLabels: Record<string, string> = {
@@ -46,8 +46,8 @@ const actionLabels: Record<string, string> = {
     'login.failed': 'Sign in failed',
     'login.locked': 'Account locked after repeated sign in failures',
     'logout.succeeded': 'Signed out',
-    'email_notifications.enabled': 'Automated email notifications enabled',
-    'email_notifications.paused': 'Automated email notifications paused',
+    'email_notifications.enabled': 'Email delivery enabled',
+    'email_notifications.paused': 'Email delivery paused',
 };
 
 function isRecord(value: unknown): value is DetailRecord {

@@ -44,38 +44,82 @@ class SendDocumentRouteNotification implements ShouldQueue
             return;
         }
 
-        $eventLabel = match ($this->event) {
-            'approval_required' => 'Your office has a document to review and approve.',
-            'approved' => 'An office approved the document.',
-            'changes_requested' => 'An office requested changes to the document.',
-            'rejected' => 'An office rejected the document.',
-            default => 'There is an update to the document route.',
+        $message = match ($this->event) {
+            'approval_required' => [
+                'subject' => '[DOTS] Office review needed: '.$this->trackingNumber,
+                'preheader' => 'A routed document is ready for review by '.$this->officeName.'.',
+                'label' => 'Action required',
+                'heading' => 'Your office has a document to review',
+                'intro' => 'A routed document is ready for review and approval by your office.',
+                'closing' => 'Sign in to DOTS to review the document and record an authorized decision.',
+                'action' => 'Review document',
+                'tone' => 'warning',
+            ],
+            'approved' => [
+                'subject' => '[DOTS] Route approved by '.$this->officeName.': '.$this->trackingNumber,
+                'preheader' => $this->officeName.' approved the routed document.',
+                'label' => 'Route update',
+                'heading' => 'An office approved your document',
+                'intro' => $this->officeName.' approved the routed document.',
+                'closing' => 'The document will proceed according to its configured route.',
+                'action' => 'View route status',
+                'tone' => 'success',
+            ],
+            'changes_requested' => [
+                'subject' => '[DOTS] Route changes requested: '.$this->trackingNumber,
+                'preheader' => $this->officeName.' requested changes to the routed document.',
+                'label' => 'Action required',
+                'heading' => 'An office requested changes to your document',
+                'intro' => $this->officeName.' requested changes to the routed document.',
+                'closing' => 'Open DOTS to review the request and prepare the next version.',
+                'action' => 'Review requested changes',
+                'tone' => 'warning',
+            ],
+            'rejected' => [
+                'subject' => '[DOTS] Route rejected by '.$this->officeName.': '.$this->trackingNumber,
+                'preheader' => $this->officeName.' rejected the routed document.',
+                'label' => 'Route update',
+                'heading' => 'An office rejected your document',
+                'intro' => $this->officeName.' rejected the routed document.',
+                'closing' => 'Open DOTS to review the recorded decision.',
+                'action' => 'View route status',
+                'tone' => 'danger',
+            ],
+            default => [
+                'subject' => '[DOTS] Document route update: '.$this->trackingNumber,
+                'preheader' => 'There is an update to the document route.',
+                'label' => 'Route update',
+                'heading' => 'There is an update to the document route',
+                'intro' => 'There is an update to the routed document.',
+                'closing' => 'Open DOTS to view the current route status.',
+                'action' => 'View route status',
+                'tone' => 'primary',
+            ],
         };
-        $lines = [
-            'Hello '.$this->recipientName.',',
-            '',
-            $eventLabel,
-            '',
-            'Document: '.$this->documentTitle,
-            'Tracking number: '.$this->trackingNumber,
-            'Office: '.$this->officeName,
-            'Approval flow: '.($this->routingMode === 'parallel' ? 'Parallel approval' : 'Sequential approval'),
-        ];
-
-        if (filled($this->remarks)) {
-            $lines[] = '';
-            $lines[] = 'Remarks: '.$this->remarks;
-        }
-
-        $lines[] = '';
-        $lines[] = 'Open the document in DOTS:';
-        $lines[] = route('documents.index', ['open_document_id' => $this->documentId]);
 
         try {
-            $mailer->sendText(
+            $mailer->sendDocumentNotification(
                 $this->recipientEmail,
-                '[DOTS] Document route update: '.$this->trackingNumber,
-                implode("\n", $lines),
+                $message['subject'],
+                [
+                    'preheader' => $message['preheader'],
+                    'label' => $message['label'],
+                    'heading' => $message['heading'],
+                    'recipient_name' => $this->recipientName,
+                    'intro' => $message['intro'],
+                    'details' => [
+                        ['label' => 'Document', 'value' => $this->documentTitle],
+                        ['label' => 'DOTS No.', 'value' => $this->trackingNumber],
+                        ['label' => $this->event === 'approval_required' ? 'Assigned office' : 'Office', 'value' => $this->officeName],
+                        ['label' => 'Approval flow', 'value' => $this->routingMode === 'parallel' ? 'Parallel approval' : 'Sequential approval'],
+                    ],
+                    'remarks_label' => 'Reviewer remarks',
+                    'remarks' => $this->remarks,
+                    'closing' => $message['closing'],
+                    'action_label' => $message['action'],
+                    'action_url' => route('documents.index', ['open_document_id' => $this->documentId]),
+                    'tone' => $message['tone'],
+                ],
             );
         } catch (Throwable $exception) {
             Log::warning('Email document route notification attempt failed.', [

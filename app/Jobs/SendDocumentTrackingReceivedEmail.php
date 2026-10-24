@@ -9,6 +9,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\URL;
 use Throwable;
 
 class SendDocumentTrackingReceivedEmail implements ShouldQueue
@@ -39,22 +40,26 @@ class SendDocumentTrackingReceivedEmail implements ShouldQueue
             return;
         }
 
-        $body = implode("\n", [
-            'Hello '.$this->recipientName.',',
-            '',
-            sprintf(
-                'Your document %s (%s) was received by %s.',
-                $this->documentTitle,
-                $this->trackingNumber,
-                $this->receivingOfficeName,
-            ),
-        ]);
-
         try {
-            $mailer->sendText(
+            $mailer->sendDocumentNotification(
                 $this->recipientEmail,
-                'Document received: '.$this->trackingNumber,
-                $body,
+                '[DOTS] Document received by '.$this->receivingOfficeName.': '.$this->trackingNumber,
+                [
+                    'preheader' => 'Receipt of your document was recorded by '.$this->receivingOfficeName.'.',
+                    'label' => 'Receipt confirmation',
+                    'heading' => 'Your document was received',
+                    'recipient_name' => $this->recipientName,
+                    'intro' => 'Receipt of your document was recorded in the Document Tracking System.',
+                    'details' => [
+                        ['label' => 'Document', 'value' => $this->documentTitle],
+                        ['label' => 'DOTS No.', 'value' => $this->trackingNumber],
+                        ['label' => 'Received by office', 'value' => $this->receivingOfficeName],
+                    ],
+                    'closing' => 'You can open DOTS to view the latest route and receipt history.',
+                    'action_label' => 'Track document',
+                    'action_url' => URL::signedRoute('documents.track', ['trackingNumber' => $this->trackingNumber]),
+                    'tone' => 'receipt',
+                ],
             );
         } catch (Throwable $exception) {
             Log::warning('Email document tracking notification attempt failed.', [
