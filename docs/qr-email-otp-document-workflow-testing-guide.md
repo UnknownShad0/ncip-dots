@@ -83,7 +83,8 @@ Use a document whose `signature_status` is `needs_signature`.
 6. Choose the PDF under **A signed copy is required** in the review dialog.
 7. Click **Upload signed PDF and approve**.
 8. Confirm a new file with type `signed` appears.
-9. Confirm the route step is approved and `signature_status` is `signed`.
+9. Confirm the green **Signed** badge appears on the uploaded signed file, not on the original primary file.
+10. Confirm the route step is approved and `signature_status` is `signed`.
 
 Expected version metadata:
 

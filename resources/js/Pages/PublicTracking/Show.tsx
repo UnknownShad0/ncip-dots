@@ -138,7 +138,7 @@ export default function Show({ document, workflow }: { document: TrackedDocument
 
                     {document.route_tree?.length || document.route_steps?.length || findTerminalTrail(document.trails) ? <RouteBranchMap document={document} /> : null}
 
-                    <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7" aria-labelledby="routing-history-title">
+                    {/* <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7" aria-labelledby="routing-history-title">
                         <div className="flex flex-wrap items-end justify-between gap-2">
                             <div>
                                 <h2 id="routing-history-title" className="text-lg font-semibold">Activity timeline</h2>
@@ -182,7 +182,7 @@ export default function Show({ document, workflow }: { document: TrackedDocument
                                 </li>;
                             })}
                         </ol> : <p className="mt-3 rounded-lg bg-slate-50 p-4 text-sm text-slate-600">No routing activity is available yet.</p>}
-                    </section>
+                    </section> */}
 
                     <p className="mt-6 text-center text-xs text-slate-500">National Commission on Indigenous Peoples · Document Tracking System</p>
                 </div>
@@ -383,7 +383,7 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
                                 <a href={file.download_url} className="dots-button-secondary px-3 py-2"><Download size={15} /> Download</a>
                                 {file.type === 'original' && file.is_pdf && workflow.signature_status === 'needs_signature' && <button type="button" disabled title="Available after approval." className="dots-button-secondary cursor-not-allowed px-3 py-2 opacity-50"><FileSignature size={15} aria-hidden="true" /> Sign with iPluma</button>}
                                 {file.type === 'original' && file.is_pdf && workflow.signature_status === 'sent_to_ipluma' && <span className="inline-flex items-center gap-1.5 rounded-lg bg-warning-soft px-3 py-2 text-xs font-medium text-warning"><FileSignature size={15} aria-hidden="true" /> Sent to iPluma</span>}
-                                {file.type === 'original' && file.is_pdf && workflow.signature_status === 'signed' && <span className="inline-flex items-center gap-1.5 rounded-lg bg-success-soft px-3 py-2 text-xs font-medium text-success"><FileSignature size={15} aria-hidden="true" /> Signed</span>}
+                                {file.type === 'signed' && <span className="inline-flex items-center gap-1.5 rounded-lg bg-success-soft px-3 py-2 text-xs font-medium text-success"><FileSignature size={15} aria-hidden="true" /> Signed</span>}
                             </div>
                         </li>)}
                     </ul> : <p className="mt-3 rounded-lg bg-background p-3 text-sm text-muted">No document files are available.</p>}

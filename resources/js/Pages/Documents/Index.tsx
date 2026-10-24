@@ -1995,7 +1995,7 @@ function DocumentReferenceDetails({ document, loading = false }: { document: Doc
                                             {file.url && <a href={file.url} className="dots-button-secondary min-h-9 px-3 py-1.5 text-xs"><Download size={14} aria-hidden="true" />Download</a>}
                                             {file.type === 'original' && file.is_pdf && document.signature_status === 'needs_signature' && <button type="button" disabled title={document.approval_status === 'approved' ? 'iPluma file submission is not connected yet.' : 'Available after approval.'} className="dots-button-secondary min-h-9 px-3 py-1.5 text-xs"><FileSignature size={14} aria-hidden="true" />Sign with iPluma</button>}
                                             {file.type === 'original' && file.is_pdf && document.signature_status === 'sent_to_ipluma' && <span className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-warning-soft px-3 py-1.5 text-xs font-medium text-warning"><FileSignature size={14} aria-hidden="true" />Sent to iPluma</span>}
-                                            {file.type === 'original' && file.is_pdf && document.signature_status === 'signed' && <span className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-success-soft px-3 py-1.5 text-xs font-medium text-success"><FileSignature size={14} aria-hidden="true" />Signed</span>}
+                                            {file.type === 'signed' && <span className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-success-soft px-3 py-1.5 text-xs font-medium text-success"><FileSignature size={14} aria-hidden="true" />Signed</span>}
                                         </div>
                                     </div>
                                 </li>
