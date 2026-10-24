@@ -48,7 +48,7 @@ Implemented document messages:
 2. Submission approved
 3. Changes requested for a submission
 4. Submission rejected
-5. Document registered
+5. Document registered — email job/template implemented; UI trigger still needs wiring
 6. Routed document requires office review
 7. Route approved by an office
 8. Route changes requested by an office
@@ -76,7 +76,7 @@ Account creation, email verification, and password-reset emails are intentionall
 | 2 | Submission approved | Document creator | Success | View submission | Implemented as branded HTML with text fallback |
 | 3 | Changes requested | Document creator | Action required / warning | Review requested changes | Implemented as branded HTML with text fallback |
 | 4 | Submission rejected | Document creator | Important status | View submission | Implemented as branded HTML with text fallback |
-| 5 | Document registered | Document creator | Success | View document | Implemented as branded HTML with text fallback |
+| 5 | Document registered | Document creator | Success | View document | Email job/template implemented; UI trigger not currently wired |
 | 6 | Routed document requires review | Receiving office approver | Action required | Review document | Implemented as branded HTML with text fallback |
 | 7 | Route decision update | Document creator | Status update | View document | Implemented as branded HTML with text fallback |
 | 8 | Document received | Document creator | Receipt confirmation | Track document | Implemented as branded HTML with text fallback |
@@ -247,7 +247,8 @@ Use factual wording. Avoid emotionally loaded copy such as “Unfortunately” o
 
 **Category:** Success  
 **Suggested color:** Green  
-**Recipient:** Document creator
+**Recipient:** Document creator<br>
+**Status:** Email job/template implemented; UI trigger not currently wired
 
 **Subject**
 
