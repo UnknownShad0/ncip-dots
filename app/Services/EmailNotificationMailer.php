@@ -21,6 +21,31 @@ class EmailNotificationMailer
         });
     }
 
+    public function sendSecurityCode(string $recipient, string $recipientName, string $code, string $trackingNumber): void
+    {
+        $this->validateSecurityDelivery($recipient);
+        $subject = $this->safeSubject('[DOTS] Verification code for '.$trackingNumber);
+        $data = [
+            'productName' => 'Document Tracking System',
+            'logoPath' => public_path('images/email/ncip-logo.png'),
+            'preheader' => 'Use code '.$code.' to verify your DOTS document access.',
+            'recipientName' => $recipientName,
+            'code' => $code,
+            'trackingNumber' => $trackingNumber,
+            'expiresMinutes' => (int) config('qr_document.otp_ttl_minutes', 10),
+            'requestedAt' => now()->format('F j, Y g:i A'),
+        ];
+
+        Mail::send(
+            ['html' => 'emails.document-otp', 'text' => 'emails.document-otp-text'],
+            $data,
+            function (Message $message) use ($recipient, $subject): void {
+                $message->to($recipient)->subject($subject);
+                $message->getHeaders()->addTextHeader('X-DOTS-Security', 'document-otp');
+            },
+        );
+    }
+
     /**
      * Send a branded document-workflow email with a plain-text fallback.
      *
@@ -151,6 +176,18 @@ class EmailNotificationMailer
         $issues = $this->configurationIssues();
         if ($issues !== []) {
             throw new RuntimeException('Email notifications are not configured: '.implode(', ', $issues).'.');
+        }
+    }
+
+    private function validateSecurityDelivery(string $recipient): void
+    {
+        if (! filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+            throw new RuntimeException('The verification recipient email address is invalid.');
+        }
+
+        $issues = $this->configurationIssues();
+        if ($issues !== []) {
+            throw new RuntimeException('Email delivery is not configured: '.implode(', ', $issues).'.');
         }
     }
 

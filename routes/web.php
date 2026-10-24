@@ -19,6 +19,7 @@ use App\Http\Controllers\OfficeController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicDocumentTrackingController;
 use App\Http\Controllers\PurposeTypeController;
+use App\Http\Controllers\QrDocumentWorkflowController;
 use App\Http\Controllers\RangeController;
 use App\Http\Controllers\SetupController;
 use App\Http\Controllers\SystemMaintenanceController;
@@ -30,8 +31,27 @@ use Inertia\Inertia;
 Route::redirect('/', '/login');
 Route::get('/track/{trackingNumber}', [PublicDocumentTrackingController::class, 'show'])
     ->where('trackingNumber', '[^/]+')
-    ->middleware(['signed', 'throttle:30,1'])
+    ->middleware(['signed', 'throttle:qr-tracking', 'qr.document:optional'])
     ->name('documents.track');
+Route::post('/track/{trackingNumber}/otp', [QrDocumentWorkflowController::class, 'requestOtp'])
+    ->where('trackingNumber', '[^/]+')->middleware(['signed', 'throttle:qr-otp-request'])->name('documents.track.otp.request');
+Route::post('/track/{trackingNumber}/otp/verify', [QrDocumentWorkflowController::class, 'verifyOtp'])
+    ->where('trackingNumber', '[^/]+')->middleware(['signed', 'throttle:qr-otp-verify'])->name('documents.track.otp.verify');
+Route::post('/track/{trackingNumber}/otp/resend', [QrDocumentWorkflowController::class, 'resendOtp'])
+    ->where('trackingNumber', '[^/]+')->middleware(['signed', 'throttle:qr-otp-resend'])->name('documents.track.otp.resend');
+Route::delete('/track/{trackingNumber}/session', [QrDocumentWorkflowController::class, 'endSession'])
+    ->where('trackingNumber', '[^/]+')->name('documents.track.session.destroy');
+
+Route::middleware(['qr.document', 'throttle:qr-document-actions'])->group(function () {
+    Route::post('/track/{trackingNumber}/receive', [QrDocumentWorkflowController::class, 'receive'])->name('documents.track.receive');
+    Route::post('/track/{trackingNumber}/decision', [QrDocumentWorkflowController::class, 'decide'])->name('documents.track.decision');
+    Route::post('/track/{trackingNumber}/wet-signed', [QrDocumentWorkflowController::class, 'uploadWetSignedAndApprove'])->name('documents.track.wet-signed');
+    Route::post('/track/{trackingNumber}/forward', [QrDocumentWorkflowController::class, 'forward'])->name('documents.track.forward');
+    Route::get('/track/{trackingNumber}/files/{file}/view', [QrDocumentWorkflowController::class, 'viewFile'])
+        ->whereNumber('file')->name('documents.track.files.view');
+    Route::get('/track/{trackingNumber}/files/{file}', [QrDocumentWorkflowController::class, 'downloadFile'])
+        ->whereNumber('file')->name('documents.track.files.download');
+});
 
 Route::middleware(['auth', 'active.user'])->get('/maintenance', [SystemMaintenanceController::class, 'show'])->name('maintenance.show');
 

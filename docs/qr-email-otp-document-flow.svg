@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1120" viewBox="0 0 1400 1120" role="img" aria-labelledby="title desc">
+  <title id="title">QR, email OTP, receipt, approval, signing, and forwarding flow</title>
+  <desc id="desc">An existing DOTS user scans a QR code, verifies an official email OTP, receives the document, and sees only the processing actions allowed by their role, office, and route state.</desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0f172a" flood-opacity="0.12"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#475569"/>
+    </marker>
+    <style>
+      .bg{fill:#f8fafc}.title{font:700 30px Arial,sans-serif;fill:#0f172a}.subtitle{font:400 15px Arial,sans-serif;fill:#475569}.heading{font:700 18px Arial,sans-serif;fill:#0f172a}.copy{font:400 14px Arial,sans-serif;fill:#475569}.small{font:700 12px Arial,sans-serif;fill:#475569}.white-heading{font:700 18px Arial,sans-serif;fill:#fff}.white-copy{font:400 14px Arial,sans-serif;fill:#dbeafe}.card{fill:#fff;stroke:#cbd5e1;stroke-width:2;filter:url(#shadow)}.blue{fill:#e0f2fe;stroke:#0284c7;stroke-width:2;filter:url(#shadow)}.indigo{fill:#eef2ff;stroke:#4f46e5;stroke-width:2;filter:url(#shadow)}.green{fill:#ecfdf5;stroke:#059669;stroke-width:2;filter:url(#shadow)}.amber{fill:#fffbeb;stroke:#d97706;stroke-width:2;filter:url(#shadow)}.red{fill:#fef2f2;stroke:#dc2626;stroke-width:2;filter:url(#shadow)}.dark{fill:#0f4c81;stroke:#0f4c81;stroke-width:2;filter:url(#shadow)}.line{fill:none;stroke:#475569;stroke-width:3;marker-end:url(#arrow)}.dash{fill:none;stroke:#64748b;stroke-width:3;stroke-dasharray:7 7;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect class="bg" width="1400" height="1120" rx="24"/>
+  <text class="title" x="700" y="48" text-anchor="middle">QR-to-Action Document Flow</text>
+  <text class="subtitle" x="700" y="76" text-anchor="middle">OTP authenticates an existing DOTS user; role, office, route, and file state authorize each action.</text>
+
+  <rect class="blue" x="60" y="120" width="250" height="94" rx="16"/>
+  <text class="heading" x="185" y="157" text-anchor="middle">1. Scan QR</text>
+  <text class="copy" x="185" y="184" text-anchor="middle">Open signed tracking page</text>
+
+  <path class="line" d="M310 167H375"/>
+  <polygon class="amber" points="500,108 625,167 500,226 375,167"/>
+  <text class="heading" x="500" y="158" text-anchor="middle">Receivable?</text>
+  <text class="copy" x="500" y="184" text-anchor="middle">Pending route + available step</text>
+
+  <path class="line" d="M625 167H690"/>
+  <rect class="indigo" x="690" y="120" width="260" height="94" rx="16"/>
+  <text class="heading" x="820" y="157" text-anchor="middle">2. Official email</text>
+  <text class="copy" x="820" y="184" text-anchor="middle">Map to existing DOTS user</text>
+
+  <path class="line" d="M950 167H1015"/>
+  <polygon class="amber" points="1150,108 1285,167 1150,226 1015,167"/>
+  <text class="heading" x="1150" y="153" text-anchor="middle">Eligible?</text>
+  <text class="copy" x="1150" y="179" text-anchor="middle">Active + correct office</text>
+  <text class="copy" x="1150" y="199" text-anchor="middle">+ receiving role</text>
+
+  <path class="dash" d="M500 226V270H235V306"/>
+  <text class="small" x="515" y="258">NO</text>
+  <rect class="red" x="90" y="306" width="290" height="74" rx="16"/>
+  <text class="heading" x="235" y="337" text-anchor="middle">No receive action</text>
+  <text class="copy" x="235" y="361" text-anchor="middle">Show current tracking state</text>
+
+  <path class="dash" d="M1150 226V306"/>
+  <text class="small" x="1164" y="268">NO</text>
+  <rect class="red" x="1000" y="306" width="300" height="74" rx="16"/>
+  <text class="heading" x="1150" y="337" text-anchor="middle">Generic response</text>
+  <text class="copy" x="1150" y="361" text-anchor="middle">Do not reveal why email failed</text>
+
+  <path class="line" d="M1015 167H975V400H700V424"/>
+  <text class="small" x="980" y="153">YES</text>
+  <rect class="indigo" x="490" y="424" width="420" height="96" rx="16"/>
+  <text class="heading" x="700" y="461" text-anchor="middle">3. Send and verify email OTP</text>
+  <text class="copy" x="700" y="488" text-anchor="middle">Single-use, expiring, and rate-limited</text>
+
+  <path class="line" d="M700 520V566"/>
+  <rect class="dark" x="450" y="566" width="500" height="104" rx="16"/>
+  <text class="white-heading" x="700" y="605" text-anchor="middle">4. Authenticated QR session</text>
+  <text class="white-copy" x="700" y="633" text-anchor="middle">Existing user + document + route-step scope</text>
+  <text class="white-copy" x="700" y="654" text-anchor="middle">Short-lived passwordless authentication</text>
+
+  <path class="line" d="M700 670V716"/>
+  <rect class="green" x="450" y="716" width="500" height="104" rx="16"/>
+  <text class="heading" x="700" y="755" text-anchor="middle">5. Confirm physical receipt</text>
+  <text class="copy" x="700" y="783" text-anchor="middle">Step: available → in_progress</text>
+  <text class="copy" x="700" y="804" text-anchor="middle">Record receiver, time, trail, and audit</text>
+
+  <path class="line" d="M700 820V866"/>
+  <rect class="card" x="460" y="866" width="480" height="82" rx="16"/>
+  <text class="heading" x="700" y="899" text-anchor="middle">6. Show permitted actions</text>
+  <text class="copy" x="700" y="925" text-anchor="middle">Recheck role, office, route, version, and signature state</text>
+
+  <path class="line" d="M700 948V974H180V1000"/>
+  <path class="line" d="M700 948V974H525V1000"/>
+  <path class="line" d="M700 948V974H875V1000"/>
+  <path class="line" d="M700 948V974H1220V1000"/>
+
+  <rect class="green" x="30" y="1000" width="300" height="88" rx="16"/>
+  <text class="heading" x="180" y="1034" text-anchor="middle">Approve</text>
+  <text class="copy" x="180" y="1060" text-anchor="middle">Approve exact version; advance route</text>
+
+  <rect class="blue" x="370" y="1000" width="310" height="88" rx="16"/>
+  <text class="heading" x="525" y="1034" text-anchor="middle">Sign and approve</text>
+  <text class="copy" x="525" y="1060" text-anchor="middle">iPluma or wet-signed PDF</text>
+
+  <rect class="amber" x="730" y="1000" width="290" height="88" rx="16"/>
+  <text class="heading" x="875" y="1034" text-anchor="middle">Forward</text>
+  <text class="copy" x="875" y="1060" text-anchor="middle">Create child route; wait for return</text>
+
+  <rect class="red" x="1070" y="1000" width="300" height="88" rx="16"/>
+  <text class="heading" x="1220" y="1034" text-anchor="middle">Changes or reject</text>
+  <text class="copy" x="1220" y="1060" text-anchor="middle">Record remarks; pause or close route</text>
+
+  <text class="small" x="700" y="1108" text-anchor="middle">Receipt and every later action remain separate audited events, even in the same QR session.</text>
+</svg>

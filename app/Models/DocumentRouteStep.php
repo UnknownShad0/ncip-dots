@@ -24,6 +24,8 @@ class DocumentRouteStep extends Model
         'decision_remarks',
         'decided_by',
         'decided_at',
+        'approved_document_file_id',
+        'signed_document_file_id',
     ];
 
     protected function casts(): array
@@ -68,5 +70,15 @@ class DocumentRouteStep extends Model
     public function decider(): BelongsTo
     {
         return $this->belongsTo(User::class, 'decided_by');
+    }
+
+    public function approvedFile(): BelongsTo
+    {
+        return $this->belongsTo(DocumentFile::class, 'approved_document_file_id');
+    }
+
+    public function signedFile(): BelongsTo
+    {
+        return $this->belongsTo(DocumentFile::class, 'signed_document_file_id');
     }
 }

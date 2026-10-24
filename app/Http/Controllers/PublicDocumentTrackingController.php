@@ -2,12 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActionType;
 use App\Models\Document;
+use App\Models\Office;
+use App\Services\QrDocumentAccess;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\URL;
 use Inertia\Inertia;
 
 class PublicDocumentTrackingController extends Controller
 {
-    public function show(string $trackingNumber)
+    public function show(Request $request, string $trackingNumber)
     {
         $document = Document::query()
             ->where('tracking_number', $trackingNumber)
@@ -17,6 +22,7 @@ class PublicDocumentTrackingController extends Controller
                 'trails.fromOffice:id,name', 'trails.toOffice:id,name',
                 'latestRoute.fromOffice:id,name', 'latestRoute.steps.office:id,name',
                 'routes.fromOffice:id,name', 'routes.steps.office:id,name',
+                'files',
             ])
             ->first();
 
@@ -24,8 +30,69 @@ class PublicDocumentTrackingController extends Controller
             $routes = $document->routes;
             $rootRoute = $routes->whereNull('parent_step_id')->sortByDesc('id')->first();
             $hasPendingRoute = $routes->contains(fn ($route) => $route->status === 'pending');
+            $qrDocument = $request->attributes->get('qr_document');
+            $verified = $qrDocument && (int) $qrDocument->id === (int) $document->id;
+            $user = $verified ? $request->user() : null;
+            $step = $verified ? $request->attributes->get('qr_route_step') : null;
+            $pending = $request->session()->get('qr_otp_pending');
+            $otpPending = is_array($pending) && (int) ($pending['document_id'] ?? 0) === (int) $document->id;
+            $expiresAt = now()->addMinutes((int) config('qr_document.otp_ttl_minutes', 10));
+            $actionableStepExists = $routes
+                ->where('status', 'pending')
+                ->contains(fn ($route) => $route->steps->contains(
+                    fn ($routeStep) => in_array($routeStep->status, ['available', 'in_progress'], true)
+                ));
+            $workflow = [
+                'state' => $verified ? 'verified' : ($otpPending ? 'otp_pending' : 'public'),
+                'can_start' => $actionableStepExists,
+                'masked_email' => $otpPending ? ($pending['masked_email'] ?? null) : null,
+                'request_otp_url' => URL::temporarySignedRoute('documents.track.otp.request', $expiresAt, ['trackingNumber' => $trackingNumber]),
+                'verify_otp_url' => $otpPending
+                    ? URL::temporarySignedRoute('documents.track.otp.verify', $expiresAt, ['trackingNumber' => $trackingNumber])
+                    : null,
+                'resend_otp_url' => $otpPending
+                    ? URL::temporarySignedRoute('documents.track.otp.resend', $expiresAt, ['trackingNumber' => $trackingNumber])
+                    : null,
+                'resend_available_at' => $otpPending ? ($pending['resend_available_at'] ?? null) : null,
+                'session_end_url' => route('documents.track.session.destroy', ['trackingNumber' => $trackingNumber]),
+                'user' => $verified ? [
+                    'name' => $user->name,
+                    'office' => $user->office?->name,
+                    'role' => $user->role,
+                ] : null,
+                'expires_at' => $verified ? data_get($request->session()->get('qr_document_access'), 'expires_at') : null,
+                'step_status' => $step?->status,
+                'can_receive' => $verified && $step?->status === 'available' && $user->canReceiveDocuments(),
+                'can_approve' => $verified && app(QrDocumentAccess::class)->canApprove($document, $user, $step),
+                'can_forward' => $verified && $step?->status === 'in_progress' && $user->isAdministrator(),
+                'receive_url' => $verified ? route('documents.track.receive', ['trackingNumber' => $trackingNumber]) : null,
+                'decision_url' => $verified ? route('documents.track.decision', ['trackingNumber' => $trackingNumber]) : null,
+                'wet_signed_url' => $verified ? route('documents.track.wet-signed', ['trackingNumber' => $trackingNumber]) : null,
+                'forward_url' => $verified ? route('documents.track.forward', ['trackingNumber' => $trackingNumber]) : null,
+                'signature_status' => $document->signature_status,
+                'ipluma_available' => false,
+                'files' => $verified ? $document->files->sortByDesc('id')->values()->map(fn ($file) => [
+                    'id' => $file->id,
+                    'name' => $file->original_name,
+                    'type' => $file->type,
+                    'size_bytes' => $file->size_bytes,
+                    'is_pdf' => strtolower(pathinfo($file->original_name, PATHINFO_EXTENSION)) === 'pdf',
+                    'download_url' => route('documents.track.files.download', ['trackingNumber' => $trackingNumber, 'file' => $file->id]),
+                    'view_url' => in_array(strtolower(pathinfo($file->original_name, PATHINFO_EXTENSION)), ['pdf', 'png', 'jpg', 'jpeg'], true)
+                        ? route('documents.track.files.view', ['trackingNumber' => $trackingNumber, 'file' => $file->id])
+                        : null,
+                ])->all() : [],
+                'action_types' => $verified && $user->isAdministrator()
+                    ? ActionType::query()->where('is_active', true)->orderBy('name')->get(['id', 'name'])->all()
+                    : [],
+                'offices' => $verified && $user->isAdministrator() && $user->office?->range_id
+                    ? Office::query()->where('range_id', $user->office->range_id)->whereKeyNot($user->office_id)
+                        ->orderBy('name')->get(['id', 'name'])->all()
+                    : [],
+            ];
 
             return Inertia::render('PublicTracking/Show', [
+                'workflow' => $workflow,
                 'document' => [
                     'tracking_number' => $document->tracking_number,
                     'title' => $document->title,

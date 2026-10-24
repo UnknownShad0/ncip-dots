@@ -33,7 +33,9 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
-        $authUser = $request->user();
+        // A QR OTP identity is deliberately document-scoped, not a full application login.
+        // The public tracking controller shares only the small identity subset it needs.
+        $authUser = $request->attributes->has('qr_document') ? null : $request->user();
         $authUserData = null;
 
         if ($authUser) {

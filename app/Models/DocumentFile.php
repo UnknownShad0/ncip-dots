@@ -13,12 +13,16 @@ class DocumentFile extends Model
     protected $fillable = [
         'document_id',
         'document_trail_id',
+        'source_document_file_id',
+        'route_step_id',
         'type',
+        'signature_method',
         'file_name',
         'original_name',
         'file_path',
         'mime_type',
         'size_bytes',
+        'sha256',
         'uploaded_by',
     ];
 
@@ -63,5 +67,15 @@ class DocumentFile extends Model
     public function uploader(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploaded_by');
+    }
+
+    public function sourceFile(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'source_document_file_id');
+    }
+
+    public function routeStep(): BelongsTo
+    {
+        return $this->belongsTo(DocumentRouteStep::class, 'route_step_id');
     }
 }

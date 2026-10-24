@@ -1,0 +1,217 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1540" viewBox="0 0 1800 1540" role="img" aria-labelledby="title desc">
+  <title id="title">Developer flow for QR email OTP document processing</title>
+  <desc id="desc">A Laravel-oriented developer flowchart covering the signed tracking page, OTP challenge, document-scoped session, transactional receipt, approval, signing, forwarding, persistence, audit, queues, and external iPluma callback.</desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0f172a" flood-opacity="0.10"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#475569"/>
+    </marker>
+    <style>
+      .bg{fill:#f8fafc}.lane-a{fill:#f0f9ff}.lane-b{fill:#f8fafc}.lane-c{fill:#f5f3ff}.lane-d{fill:#f0fdf4}.lane-border{stroke:#cbd5e1;stroke-width:1.5}.title{font:700 31px Arial,sans-serif;fill:#0f172a}.subtitle{font:400 15px Arial,sans-serif;fill:#475569}.lane-title{font:700 15px Arial,sans-serif;letter-spacing:1px;fill:#334155}.heading{font:700 17px Arial,sans-serif;fill:#0f172a}.copy{font:400 13px Arial,sans-serif;fill:#475569}.code{font:600 12px ui-monospace,SFMono-Regular,Menlo,monospace;fill:#334155}.small{font:700 11px Arial,sans-serif;fill:#64748b}.white-heading{font:700 17px Arial,sans-serif;fill:#fff}.white-copy{font:400 13px Arial,sans-serif;fill:#dbeafe}.card{fill:#fff;stroke:#cbd5e1;stroke-width:2;filter:url(#shadow)}.blue{fill:#e0f2fe;stroke:#0284c7;stroke-width:2;filter:url(#shadow)}.indigo{fill:#ede9fe;stroke:#7c3aed;stroke-width:2;filter:url(#shadow)}.green{fill:#dcfce7;stroke:#16a34a;stroke-width:2;filter:url(#shadow)}.amber{fill:#fef3c7;stroke:#d97706;stroke-width:2;filter:url(#shadow)}.red{fill:#fee2e2;stroke:#dc2626;stroke-width:2;filter:url(#shadow)}.dark{fill:#0f4c81;stroke:#0f4c81;stroke-width:2;filter:url(#shadow)}.line{fill:none;stroke:#475569;stroke-width:2.5;marker-end:url(#arrow)}.dash{fill:none;stroke:#64748b;stroke-width:2.5;stroke-dasharray:7 7;marker-end:url(#arrow)}.divider{stroke:#cbd5e1;stroke-width:2}.phase{font:700 13px Arial,sans-serif;letter-spacing:1.2px;fill:#64748b}.note{fill:#fff;stroke:#94a3b8;stroke-width:1.5;stroke-dasharray:5 5}
+    </style>
+  </defs>
+
+  <rect class="bg" width="1800" height="1540" rx="24"/>
+  <text class="title" x="900" y="46" text-anchor="middle">Developer Flow — QR Email OTP Document Processing</text>
+  <text class="subtitle" x="900" y="73" text-anchor="middle">Proposed Laravel request lifecycle using existing route, user, document, trail, file, audit, queue, and locking patterns.</text>
+
+  <rect class="lane-a lane-border" x="30" y="100" width="300" height="1190" rx="18"/>
+  <rect class="lane-b lane-border" x="350" y="100" width="390" height="1190" rx="18"/>
+  <rect class="lane-c lane-border" x="760" y="100" width="350" height="1190" rx="18"/>
+  <rect class="lane-d lane-border" x="1130" y="100" width="640" height="1190" rx="18"/>
+
+  <text class="lane-title" x="180" y="132" text-anchor="middle">CLIENT / INERTIA UI</text>
+  <text class="lane-title" x="545" y="132" text-anchor="middle">ROUTES / CONTROLLERS</text>
+  <text class="lane-title" x="935" y="132" text-anchor="middle">AUTH / POLICIES</text>
+  <text class="lane-title" x="1450" y="132" text-anchor="middle">SERVICES / DATABASE / QUEUES</text>
+
+  <text class="phase" x="48" y="174">A · OPEN TRACKING PAGE</text>
+  <rect class="blue" x="60" y="194" width="240" height="82" rx="14"/>
+  <text class="heading" x="180" y="226" text-anchor="middle">Scan QR</text>
+  <text class="copy" x="180" y="251" text-anchor="middle">GET signed tracking URL</text>
+
+  <path class="line" d="M300 235H380"/>
+  <rect class="card" x="380" y="184" width="330" height="102" rx="14"/>
+  <text class="code" x="545" y="215" text-anchor="middle">GET /track/{trackingNumber}</text>
+  <text class="copy" x="545" y="240" text-anchor="middle">middleware: signed + throttle:30,1</text>
+  <text class="copy" x="545" y="263" text-anchor="middle">PublicDocumentTrackingController@show</text>
+
+  <path class="line" d="M710 235H790"/>
+  <rect class="indigo" x="790" y="184" width="290" height="102" rx="14"/>
+  <text class="heading" x="935" y="216" text-anchor="middle">Tracking gate</text>
+  <text class="copy" x="935" y="241" text-anchor="middle">Validate URL signature</text>
+  <text class="copy" x="935" y="263" text-anchor="middle">Apply public request limit</text>
+
+  <path class="line" d="M1080 235H1160"/>
+  <rect class="green" x="1160" y="174" width="580" height="122" rx="14"/>
+  <text class="heading" x="1450" y="207" text-anchor="middle">Load tracking projection</text>
+  <text class="copy" x="1450" y="232" text-anchor="middle">Document + routes + steps + offices + trails</text>
+  <text class="code" x="1450" y="255" text-anchor="middle">pending route AND available step?</text>
+  <text class="copy" x="1450" y="278" text-anchor="middle">Render public state; never expose restricted files</text>
+
+  <line class="divider" x1="48" y1="322" x2="1752" y2="322"/>
+  <text class="phase" x="48" y="352">B · REQUEST OTP</text>
+
+  <rect class="blue" x="60" y="370" width="240" height="86" rx="14"/>
+  <text class="heading" x="180" y="402" text-anchor="middle">Submit official email</text>
+  <text class="copy" x="180" y="428" text-anchor="middle">Receive document form</text>
+
+  <path class="line" d="M300 413H380"/>
+  <rect class="card" x="380" y="360" width="330" height="106" rx="14"/>
+  <text class="code" x="545" y="391" text-anchor="middle">POST /track/{no}/access-otp</text>
+  <text class="copy" x="545" y="416" text-anchor="middle">signed URL + CSRF + OTP throttle</text>
+  <text class="copy" x="545" y="439" text-anchor="middle">Normalize email; always return generic result</text>
+
+  <path class="line" d="M710 413H790"/>
+  <rect class="indigo" x="790" y="352" width="290" height="122" rx="14"/>
+  <text class="heading" x="935" y="386" text-anchor="middle">ResolveDocumentOtpUser</text>
+  <text class="copy" x="935" y="412" text-anchor="middle">Existing active, unlocked user</text>
+  <text class="copy" x="935" y="434" text-anchor="middle">Verified email + receiving role</text>
+  <text class="copy" x="935" y="456" text-anchor="middle">user.office_id = available step office</text>
+
+  <path class="line" d="M1080 413H1160"/>
+  <rect class="green" x="1160" y="346" width="270" height="134" rx="14"/>
+  <text class="heading" x="1295" y="379" text-anchor="middle">Eligible</text>
+  <text class="copy" x="1295" y="404" text-anchor="middle">Generate secure PIN</text>
+  <text class="copy" x="1295" y="426" text-anchor="middle">Store keyed code_hash</text>
+  <text class="copy" x="1295" y="448" text-anchor="middle">Bind user + document + step</text>
+  <text class="copy" x="1295" y="470" text-anchor="middle">Invalidate older challenge</text>
+
+  <path class="line" d="M1430 413H1480"/>
+  <rect class="amber" x="1480" y="360" width="260" height="106" rx="14"/>
+  <text class="heading" x="1610" y="391" text-anchor="middle">Queue OTP email</text>
+  <text class="copy" x="1610" y="416" text-anchor="middle">Job → EmailNotificationMailer</text>
+  <text class="copy" x="1610" y="439" text-anchor="middle">No document attachment</text>
+
+  <path class="dash" d="M1295 480V508H545V490"/>
+  <text class="small" x="1035" y="501">INELIGIBLE: SAME GENERIC RESPONSE, NO EMAIL</text>
+
+  <line class="divider" x1="48" y1="520" x2="1752" y2="520"/>
+  <text class="phase" x="48" y="550">C · VERIFY OTP AND CREATE SCOPE</text>
+
+  <rect class="blue" x="60" y="568" width="240" height="88" rx="14"/>
+  <text class="heading" x="180" y="601" text-anchor="middle">Submit 6-digit PIN</text>
+  <text class="copy" x="180" y="628" text-anchor="middle">Challenge identifier + code</text>
+
+  <path class="line" d="M300 612H380"/>
+  <rect class="card" x="380" y="558" width="330" height="108" rx="14"/>
+  <text class="code" x="545" y="589" text-anchor="middle">POST /access-otp/{id}/verify</text>
+  <text class="copy" x="545" y="614" text-anchor="middle">Verification throttle + CSRF</text>
+  <text class="copy" x="545" y="637" text-anchor="middle">Lock challenge row; count failed attempts</text>
+
+  <path class="line" d="M710 612H790"/>
+  <rect class="indigo" x="790" y="550" width="290" height="124" rx="14"/>
+  <text class="heading" x="935" y="582" text-anchor="middle">Recheck identity + route</text>
+  <text class="copy" x="935" y="607" text-anchor="middle">Unused, unexpired, correct hash</text>
+  <text class="copy" x="935" y="629" text-anchor="middle">User/office/role still eligible</text>
+  <text class="copy" x="935" y="651" text-anchor="middle">Route step still available</text>
+
+  <path class="line" d="M1080 612H1160"/>
+  <rect class="dark" x="1160" y="542" width="580" height="140" rx="14"/>
+  <text class="white-heading" x="1450" y="576" text-anchor="middle">CreateDocumentScopedSession</text>
+  <text class="white-copy" x="1450" y="602" text-anchor="middle">Rotate Laravel session ID; consume OTP challenge</text>
+  <text class="white-copy" x="1450" y="625" text-anchor="middle">Store user_id + document_id + route_step_id + office_id</text>
+  <text class="white-copy" x="1450" y="648" text-anchor="middle">auth_method=email_otp + verified_at + expires_at</text>
+  <text class="white-copy" x="1450" y="670" text-anchor="middle">Scope middleware rejects unrelated document and expired access</text>
+
+  <line class="divider" x1="48" y1="708" x2="1752" y2="708"/>
+  <text class="phase" x="48" y="738">D · RECEIVE INSIDE ONE TRANSACTION</text>
+
+  <rect class="blue" x="60" y="756" width="240" height="90" rx="14"/>
+  <text class="heading" x="180" y="790" text-anchor="middle">Confirm receipt</text>
+  <text class="copy" x="180" y="817" text-anchor="middle">User explicitly confirms custody</text>
+
+  <path class="line" d="M300 801H380"/>
+  <rect class="card" x="380" y="746" width="330" height="110" rx="14"/>
+  <text class="code" x="545" y="778" text-anchor="middle">POST /track/{no}/receive</text>
+  <text class="copy" x="545" y="803" text-anchor="middle">signed + CSRF + QR-scope middleware</text>
+  <text class="copy" x="545" y="826" text-anchor="middle">or normal auth + active.user</text>
+
+  <path class="line" d="M710 801H790"/>
+  <rect class="indigo" x="790" y="740" width="290" height="122" rx="14"/>
+  <text class="heading" x="935" y="773" text-anchor="middle">Receive policy</text>
+  <text class="copy" x="935" y="798" text-anchor="middle">User can receive</text>
+  <text class="copy" x="935" y="820" text-anchor="middle">Matching office and document scope</text>
+  <text class="copy" x="935" y="842" text-anchor="middle">Not archived / legacy review</text>
+
+  <path class="line" d="M1080 801H1160"/>
+  <rect class="green" x="1160" y="724" width="580" height="154" rx="14"/>
+  <text class="heading" x="1450" y="757" text-anchor="middle">ReceiveDocumentForOffice transaction</text>
+  <text class="copy" x="1450" y="782" text-anchor="middle">SELECT FOR UPDATE: document + routes + route steps</text>
+  <text class="code" x="1450" y="805" text-anchor="middle">recheck route=pending AND step=available AND office match</text>
+  <text class="copy" x="1450" y="828" text-anchor="middle">Create receipt trail; step → in_progress; set received_by/at</text>
+  <text class="copy" x="1450" y="851" text-anchor="middle">Document → pending / awaiting_approval; write audit; COMMIT</text>
+
+  <path class="dash" d="M1450 878V912"/>
+  <rect class="amber" x="1160" y="912" width="580" height="74" rx="14"/>
+  <text class="heading" x="1450" y="943" text-anchor="middle">After commit</text>
+  <text class="copy" x="1450" y="967" text-anchor="middle">Dispatch receipt/route notifications; return fresh action projection</text>
+
+  <line class="divider" x1="48" y1="1010" x2="1752" y2="1010"/>
+  <text class="phase" x="48" y="1040">E · PROCESS THE RECEIVED DOCUMENT</text>
+
+  <rect class="blue" x="60" y="1058" width="240" height="92" rx="14"/>
+  <text class="heading" x="180" y="1092" text-anchor="middle">Choose action</text>
+  <text class="copy" x="180" y="1119" text-anchor="middle">Approve, sign, forward,</text>
+  <text class="copy" x="180" y="1139" text-anchor="middle">request changes, or reject</text>
+
+  <path class="line" d="M300 1104H380"/>
+  <rect class="card" x="380" y="1048" width="330" height="112" rx="14"/>
+  <text class="heading" x="545" y="1080" text-anchor="middle">Action endpoint</text>
+  <text class="code" x="545" y="1105" text-anchor="middle">/approval | /signed-copy | /forward</text>
+  <text class="copy" x="545" y="1128" text-anchor="middle">CSRF + scope + purpose throttle</text>
+  <text class="copy" x="545" y="1150" text-anchor="middle">Validate request and uploaded file</text>
+
+  <path class="line" d="M710 1104H790"/>
+  <rect class="indigo" x="790" y="1042" width="290" height="124" rx="14"/>
+  <text class="heading" x="935" y="1074" text-anchor="middle">Action policy</text>
+  <text class="copy" x="935" y="1099" text-anchor="middle">Approver/forwarder/uploader role</text>
+  <text class="copy" x="935" y="1121" text-anchor="middle">Same office + in_progress step</text>
+  <text class="copy" x="935" y="1143" text-anchor="middle">Exact file version + signature rule</text>
+
+  <path class="line" d="M1080 1104H1160"/>
+  <rect class="green" x="1160" y="1036" width="580" height="138" rx="14"/>
+  <text class="heading" x="1450" y="1068" text-anchor="middle">Action dispatcher</text>
+  <text class="copy" x="1450" y="1093" text-anchor="middle">Recheck locked route state inside the selected service transaction</text>
+  <text class="copy" x="1450" y="1116" text-anchor="middle">Write trail + route-step transition + document state + audit</text>
+  <text class="copy" x="1450" y="1139" text-anchor="middle">Commit once; stale/racing request receives safe conflict response</text>
+
+  <path class="line" d="M1450 1174V1210H235V1240"/>
+  <path class="line" d="M1450 1174V1210H675V1240"/>
+  <path class="line" d="M1450 1174V1210H1125V1240"/>
+  <path class="line" d="M1450 1174V1210H1565V1240"/>
+
+  <rect class="green" x="45" y="1240" width="380" height="164" rx="16"/>
+  <text class="heading" x="235" y="1274" text-anchor="middle">Approve — no signature</text>
+  <text class="copy" x="235" y="1299" text-anchor="middle">DecideDocumentRouteStep</text>
+  <text class="copy" x="235" y="1321" text-anchor="middle">Bind approved document_file_id/version</text>
+  <text class="copy" x="235" y="1343" text-anchor="middle">Activate next step or finish route</text>
+  <text class="copy" x="235" y="1365" text-anchor="middle">Audit + notify after commit</text>
+
+  <rect class="blue" x="465" y="1240" width="420" height="164" rx="16"/>
+  <text class="heading" x="675" y="1274" text-anchor="middle">Required signing</text>
+  <text class="copy" x="675" y="1299" text-anchor="middle">Wet: validate PDF → private storage → checksum</text>
+  <text class="copy" x="675" y="1321" text-anchor="middle">Create immutable signed DocumentFile</text>
+  <text class="copy" x="675" y="1343" text-anchor="middle">iPluma: queue submit → signed callback</text>
+  <text class="copy" x="675" y="1365" text-anchor="middle">Advance only after signed file is accepted</text>
+
+  <rect class="amber" x="925" y="1240" width="400" height="164" rx="16"/>
+  <text class="heading" x="1125" y="1274" text-anchor="middle">Forward</text>
+  <text class="copy" x="1125" y="1299" text-anchor="middle">ForwardDocumentRoute transaction</text>
+  <text class="copy" x="1125" y="1321" text-anchor="middle">Validate offices, range, approvers, no loop</text>
+  <text class="copy" x="1125" y="1343" text-anchor="middle">Create child route + available steps</text>
+  <text class="copy" x="1125" y="1365" text-anchor="middle">Parent → waiting_on_branch; queue notices</text>
+
+  <rect class="red" x="1365" y="1240" width="390" height="164" rx="16"/>
+  <text class="heading" x="1560" y="1274" text-anchor="middle">Changes requested / rejected</text>
+  <text class="copy" x="1560" y="1299" text-anchor="middle">Require and store remarks</text>
+  <text class="copy" x="1560" y="1321" text-anchor="middle">Set decision on active route step</text>
+  <text class="copy" x="1560" y="1343" text-anchor="middle">Pause remaining active route steps</text>
+  <text class="copy" x="1560" y="1365" text-anchor="middle">Return to origin or close as rejected</text>
+
+  <rect class="note" x="250" y="1434" width="1300" height="72" rx="14"/>
+  <text class="heading" x="900" y="1463" text-anchor="middle">Cross-cutting rule</text>
+  <text class="copy" x="900" y="1487" text-anchor="middle">Never trust IDs or status from the browser. Resolve from the signed URL and scoped session, authorize again, lock rows, recheck state, commit once, then notify.</text>
+</svg>

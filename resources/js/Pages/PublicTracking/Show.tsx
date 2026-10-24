@@ -1,4 +1,8 @@
-import { Head } from '@inertiajs/react';
+import WorkspaceDialog from '@/Components/WorkspaceDialog';
+import { Head, router, usePage } from '@inertiajs/react';
+import { ArrowDown, ArrowUp, Download, Eye, FileSignature, Search, Send, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
 
 type Trail = {
     action?: string | null;
@@ -41,6 +45,34 @@ type TrackedDocument = {
     trails: Trail[];
 };
 
+type WorkflowFile = { id: number; name: string; type: string; size_bytes: number; is_pdf: boolean; view_url?: string | null; download_url: string };
+type WorkflowOption = { id: number; name: string };
+type QrWorkflow = {
+    state: 'public' | 'otp_pending' | 'verified';
+    can_start: boolean;
+    masked_email?: string | null;
+    request_otp_url: string;
+    verify_otp_url?: string | null;
+    resend_otp_url?: string | null;
+    resend_available_at?: string | null;
+    session_end_url: string;
+    user?: { name: string; office?: string | null; role?: string | null } | null;
+    expires_at?: string | null;
+    step_status?: string | null;
+    can_receive: boolean;
+    can_approve: boolean;
+    can_forward: boolean;
+    receive_url?: string | null;
+    decision_url?: string | null;
+    wet_signed_url?: string | null;
+    forward_url?: string | null;
+    signature_status?: string | null;
+    ipluma_available: boolean;
+    files: WorkflowFile[];
+    action_types: WorkflowOption[];
+    offices: WorkflowOption[];
+};
+
 const routeStepLabels: Record<string, string> = {
     waiting: 'Waiting',
     available: 'Waiting to receive',
@@ -72,7 +104,7 @@ const LANE_BG = ['bg-blue-50', 'bg-sky-50', 'bg-violet-50', 'bg-amber-50'];
 
 const findTerminalTrail = (trails: Trail[]) => trails.find((trail) => trail.status?.toLowerCase() === 'terminal');
 
-export default function Show({ document }: { document: TrackedDocument }) {
+export default function Show({ document, workflow }: { document: TrackedDocument; workflow: QrWorkflow }) {
     return (
         <>
             <Head title={`Track ${document.tracking_number}`} />
@@ -101,6 +133,8 @@ export default function Show({ document }: { document: TrackedDocument }) {
                             <Detail label="Date created" value={document.created_at} />
                         </dl>
                     </section>
+
+                    {workflow.can_start && <QrWorkflowPanel workflow={workflow} document={document} />}
 
                     {document.route_tree?.length || document.route_steps?.length || findTerminalTrail(document.trails) ? <RouteBranchMap document={document} /> : null}
 
@@ -155,6 +189,310 @@ export default function Show({ document }: { document: TrackedDocument }) {
             </main>
         </>
     );
+}
+
+function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; document: TrackedDocument }) {
+    const page = usePage();
+    const errors = (page.props.errors ?? {}) as Record<string, string>;
+    const success = (page.props.flash as { success?: string } | undefined)?.success;
+    const [email, setEmail] = useState('');
+    const [code, setCode] = useState('');
+    const [remarks, setRemarks] = useState('');
+    const [signedFile, setSignedFile] = useState<File | null>(null);
+    const [actionTypeId, setActionTypeId] = useState('');
+    const [otherAction, setOtherAction] = useState('');
+    const [officeIds, setOfficeIds] = useState<string[]>([]);
+    const [routingMode, setRoutingMode] = useState<'sequential' | 'parallel'>('sequential');
+    const [reviewOpen, setReviewOpen] = useState(false);
+    const [forwardOpen, setForwardOpen] = useState(false);
+    const [officeSearch, setOfficeSearch] = useState('');
+    const [documentSource, setDocumentSource] = useState<'current' | 'upload'>('current');
+    const [forwardFile, setForwardFile] = useState<File | null>(null);
+    const [forwardError, setForwardError] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [resendRemaining, setResendRemaining] = useState(0);
+
+    useEffect(() => {
+        const updateRemaining = () => {
+            if (!workflow.resend_available_at) {
+                setResendRemaining(0);
+                return;
+            }
+
+            setResendRemaining(Math.max(0, Math.ceil((new Date(workflow.resend_available_at).getTime() - Date.now()) / 1000)));
+        };
+
+        updateRemaining();
+        const timer = window.setInterval(updateRemaining, 1000);
+        return () => window.clearInterval(timer);
+    }, [workflow.resend_available_at]);
+
+    const post = (url: string | null | undefined, data: Record<string, any> = {}, forceFormData = false, onSuccess?: () => void) => {
+        if (!url || busy) return;
+        setBusy(true);
+        router.post(url, data, { preserveScroll: true, forceFormData, onFinish: () => setBusy(false), onSuccess });
+    };
+
+    const submitEmail = (event: FormEvent) => {
+        event.preventDefault();
+        post(workflow.request_otp_url, { email });
+    };
+    const submitCode = (event: FormEvent) => {
+        event.preventDefault();
+        post(workflow.verify_otp_url, { code });
+    };
+
+    const toggleOffice = (officeId: string) => {
+        setForwardError('');
+        setOfficeIds((current) => current.includes(officeId)
+            ? current.filter((id) => id !== officeId)
+            : current.length < 30 ? [...current, officeId] : current);
+    };
+
+    const moveOffice = (officeId: string, direction: -1 | 1) => {
+        setOfficeIds((current) => {
+            const from = current.indexOf(officeId);
+            const to = from + direction;
+            if (from < 0 || to < 0 || to >= current.length) return current;
+            const next = [...current];
+            [next[from], next[to]] = [next[to], next[from]];
+            return next;
+        });
+    };
+
+    const submitForward = (event: FormEvent) => {
+        event.preventDefault();
+        const selectedAction = workflow.action_types.find((option) => String(option.id) === actionTypeId);
+        const needsOtherAction = selectedAction?.name.trim().toLowerCase() === 'others';
+        if (!actionTypeId || officeIds.length === 0 || (needsOtherAction && !otherAction.trim())) {
+            setForwardError('Complete the required fields before submitting.');
+            return;
+        }
+        if (documentSource === 'upload' && !forwardFile) {
+            setForwardError('Choose a file to upload.');
+            return;
+        }
+        if (forwardFile && forwardFile.size > 102400 * 1024) {
+            setForwardError('The selected file must be 100 MB or smaller.');
+            return;
+        }
+        if (forwardFile && !/\.(pdf|jpe?g|png|docx?)$/i.test(forwardFile.name)) {
+            setForwardError('Choose a PDF, JPG, PNG, DOC, or DOCX file.');
+            return;
+        }
+
+        setForwardError('');
+        post(workflow.forward_url, {
+            action_type_id: actionTypeId,
+            other_action: needsOtherAction ? otherAction.trim() : '',
+            to_office_ids: officeIds,
+            routing_mode: routingMode,
+            remarks,
+            document_source: documentSource,
+            file: documentSource === 'upload' ? forwardFile : null,
+        }, true, () => setForwardOpen(false));
+    };
+
+    const filteredOffices = workflow.offices.filter((office) => office.name.toLowerCase().includes(officeSearch.trim().toLowerCase()));
+    const qrErrors = Object.values(errors);
+
+    return <><section className="mt-5 rounded-2xl border border-blue-200 bg-white p-5 shadow-sm sm:p-7" aria-labelledby="qr-actions-title">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-blue-700">Secure QR processing</p>
+                <h2 id="qr-actions-title" className="mt-1 text-lg font-semibold text-slate-900">Receive and process this document</h2>
+                <p className="mt-1 text-sm text-slate-600">Use the official email attached to your existing DOTS account.</p>
+            </div>
+            {workflow.state === 'verified' && <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Email verified</span>}
+        </div>
+
+        {success && <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{success}</p>}
+        {Object.keys(errors).length > 0 && <div className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            {Object.values(errors).map((error, index) => <p key={index}>{error}</p>)}
+        </div>}
+
+        {workflow.state === 'public' && <form onSubmit={submitEmail} className="mt-5 space-y-3">
+            <label className="block text-sm font-medium text-slate-800" htmlFor="official-email">Registered official email</label>
+            <input id="official-email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)}
+                className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-blue-500" placeholder="name@ncip.gov.ph" />
+            <button disabled={busy} className="w-full rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60">
+                {busy ? 'Sending…' : 'Send verification code'}
+            </button>
+            <p className="text-xs text-slate-500">The email must exactly match an active and eligible DOTS account for the current office route step.</p>
+        </form>}
+
+        {workflow.state === 'otp_pending' && <form onSubmit={submitCode} className="mt-5 space-y-3">
+            <p className="text-sm text-slate-700">Enter the 6-digit code sent to <strong>{workflow.masked_email}</strong>.</p>
+            <label className="block text-sm font-medium text-slate-800" htmlFor="otp-code">Verification code</label>
+            <input id="otp-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required value={code}
+                onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))}
+                className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-center font-mono text-xl tracking-[0.35em] focus:border-blue-500 focus:ring-blue-500" />
+            <button disabled={busy} className="w-full rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60">
+                {busy ? 'Checking…' : 'Verify and continue'}
+            </button>
+            <button type="button" disabled={busy || resendRemaining > 0} onClick={() => post(workflow.resend_otp_url)}
+                className="w-full rounded-xl border border-blue-200 px-4 py-2 text-sm font-medium text-blue-700 disabled:opacity-60">
+                {resendRemaining > 0 ? `Send a new code in ${resendRemaining}s` : 'Send a new code'}
+            </button>
+            <button type="button" onClick={() => router.delete(workflow.session_end_url, { preserveScroll: true })}
+                className="w-full rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">Use a different email</button>
+        </form>}
+
+        {workflow.state === 'verified' && <div className="mt-5 space-y-5">
+            <div className="rounded-xl bg-blue-50 p-4 text-sm text-blue-950">
+                <p className="font-semibold">{workflow.user?.name}</p>
+                <p className="mt-0.5 text-blue-800">{workflow.user?.office || 'No office'} · Route step: {routeStepLabel(workflow.step_status || 'unknown')}</p>
+                <p className="mt-2 text-xs text-blue-700">This access is limited to this document and expires automatically.</p>
+            </div>
+
+            {workflow.can_receive && <button type="button" disabled={busy} onClick={() => post(workflow.receive_url)}
+                className="w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60">Mark physical document as received</button>}
+
+            {(workflow.can_approve || workflow.can_forward) && <div className="grid gap-3 sm:grid-cols-2">
+                {workflow.can_approve && <button type="button" disabled={busy} onClick={() => setReviewOpen(true)} className="dots-button-primary justify-center py-3 disabled:opacity-60">
+                    <FileSignature size={17} aria-hidden="true" /> Review and Decide
+                </button>}
+                {workflow.can_forward && <button type="button" disabled={busy} onClick={() => setForwardOpen(true)} className="dots-button-secondary justify-center py-3 disabled:opacity-60">
+                    <Send size={17} aria-hidden="true" /> Forward
+                </button>}
+            </div>}
+
+            {!workflow.can_receive && !workflow.can_approve && workflow.step_status === 'available' && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Your DOTS role cannot receive this available route step.</p>}
+            <button type="button" onClick={() => router.delete(workflow.session_end_url, { preserveScroll: true })} className="text-sm font-medium text-slate-600 hover:underline">End secure QR session</button>
+        </div>}
+    </section>
+
+    <WorkspaceDialog open={reviewOpen} onClose={() => setReviewOpen(false)} labelledBy="qr-review-title" width="max-w-3xl" busy={busy}>
+        <section aria-busy={busy}>
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
+                <div className="min-w-0">
+                    <h2 id="qr-review-title" className="break-words text-lg font-semibold text-foreground">{document.title || 'Document details'}</h2>
+                    <p className="mt-1 break-all font-mono text-sm text-muted">{document.tracking_number}</p>
+                </div>
+                <button type="button" onClick={() => setReviewOpen(false)} aria-label="Close document review" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground"><X size={19} /></button>
+            </div>
+
+            <div className="space-y-6 p-5 sm:p-6">
+                <section aria-labelledby="qr-files-title">
+                    <h3 id="qr-files-title" className="font-semibold text-foreground">Document files and versions</h3>
+                    {workflow.files.length > 0 ? <ul className="mt-3 divide-y divide-border rounded-xl border border-border bg-background">
+                        {workflow.files.map((file) => <li key={file.id} className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm">
+                            <div className="min-w-0"><p className="break-words font-medium text-foreground">{file.name}</p><p className="mt-0.5 text-xs capitalize text-muted">{file.type} · {(file.size_bytes / 1024).toFixed(1)} KB</p></div>
+                            <div className="flex shrink-0 flex-wrap gap-2">
+                                {file.view_url && <a href={file.view_url} target="_blank" rel="noreferrer" className="dots-button-secondary px-3 py-2"><Eye size={15} /> View</a>}
+                                <a href={file.download_url} className="dots-button-secondary px-3 py-2"><Download size={15} /> Download</a>
+                                {file.type === 'original' && file.is_pdf && workflow.signature_status === 'needs_signature' && <button type="button" disabled title="Available after approval." className="dots-button-secondary cursor-not-allowed px-3 py-2 opacity-50"><FileSignature size={15} aria-hidden="true" /> Sign with iPluma</button>}
+                                {file.type === 'original' && file.is_pdf && workflow.signature_status === 'sent_to_ipluma' && <span className="inline-flex items-center gap-1.5 rounded-lg bg-warning-soft px-3 py-2 text-xs font-medium text-warning"><FileSignature size={15} aria-hidden="true" /> Sent to iPluma</span>}
+                                {file.type === 'original' && file.is_pdf && workflow.signature_status === 'signed' && <span className="inline-flex items-center gap-1.5 rounded-lg bg-success-soft px-3 py-2 text-xs font-medium text-success"><FileSignature size={15} aria-hidden="true" /> Signed</span>}
+                            </div>
+                        </li>)}
+                    </ul> : <p className="mt-3 rounded-lg bg-background p-3 text-sm text-muted">No document files are available.</p>}
+                </section>
+
+                <section className="rounded-xl border border-border bg-background p-4" aria-label="Approval and signing status">
+                    <div><h3 className="font-semibold text-foreground">Approval and signing</h3><p className="mt-1 text-sm text-muted">Review the attached files before recording a decision.</p></div>
+                    <div className="mt-4 space-y-3">
+                        <label htmlFor="qr-approval-remarks" className="block text-sm font-medium text-foreground">Remarks</label>
+                        <textarea id="qr-approval-remarks" maxLength={4000} rows={3} value={remarks} onChange={(event) => setRemarks(event.target.value)} className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm" placeholder="Add a note for this decision" />
+                        {qrErrors.length > 0 && <div role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{qrErrors.map((error, index) => <p key={index}>{error}</p>)}</div>}
+
+                        {workflow.signature_status === 'needs_signature' && <div className="rounded-xl border border-warning/30 bg-warning-soft p-4">
+                            <p className="text-sm font-semibold text-foreground">A signed copy is required</p>
+                            <p className="mt-1 text-xs text-muted">Scan the wet-signed paper as a clear PDF. The upload becomes a new immutable version and approves this step.</p>
+                            <input type="file" accept="application/pdf,.pdf" onChange={(event) => setSignedFile(event.target.files?.[0] ?? null)} className="mt-3 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
+                        </div>}
+
+                        <div className="flex flex-wrap justify-end gap-2">
+                            <button type="button" disabled={busy} onClick={() => post(workflow.decision_url, { decision: 'rejected', remarks }, false, () => setReviewOpen(false))} className="dots-button-secondary text-danger disabled:opacity-50">Reject</button>
+                            <button type="button" disabled={busy} onClick={() => post(workflow.decision_url, { decision: 'changes_requested', remarks }, false, () => setReviewOpen(false))} className="dots-button-secondary disabled:opacity-50">Request changes</button>
+                            {workflow.signature_status === 'needs_signature'
+                                ? <button type="button" disabled={busy || !signedFile} onClick={() => post(workflow.wet_signed_url, { signed_file: signedFile, remarks }, true, () => setReviewOpen(false))} className="dots-button-primary disabled:opacity-50">Upload signed PDF and approve</button>
+                                : <button type="button" disabled={busy} onClick={() => post(workflow.decision_url, { decision: 'approved', remarks }, false, () => setReviewOpen(false))} className="dots-button-primary disabled:opacity-50">Approve</button>}
+                        </div>
+                    </div>
+                </section>
+            </div>
+            <div className="sticky bottom-0 flex justify-end border-t border-border bg-surface px-5 py-4 sm:px-6"><button type="button" onClick={() => setReviewOpen(false)} className="dots-button-secondary">Close</button></div>
+        </section>
+    </WorkspaceDialog>
+
+    <WorkspaceDialog open={forwardOpen} onClose={() => setForwardOpen(false)} labelledBy="qr-forward-title" width="max-w-3xl" busy={busy}>
+        <form onSubmit={submitForward} aria-busy={busy}>
+            <fieldset disabled={busy} className="min-w-0">
+                <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
+                    <div><h2 id="qr-forward-title" className="text-lg font-semibold text-foreground">Forward document</h2><p className="mt-1 text-sm text-muted">Choose where this document should go next.</p></div>
+                    <button type="button" onClick={() => setForwardOpen(false)} aria-label="Close forwarding dialog" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground"><X size={19} /></button>
+                </div>
+
+                <div className="space-y-6 p-5 sm:p-6">
+                    <section className="grid gap-4 sm:grid-cols-2" aria-label="Forwarding details">
+                        <div>
+                            <label htmlFor="qr-action-type" className="mb-1 block text-sm font-medium text-foreground">Action required <span className="text-danger">*</span></label>
+                            <select id="qr-action-type" required value={actionTypeId} onChange={(event) => { setActionTypeId(event.target.value); setOtherAction(''); setForwardError(''); }} className="w-full rounded-lg border border-border bg-surface py-2 pl-3 pr-10 text-sm">
+                                <option value="">Select action</option>{workflow.action_types.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+                            </select>
+                        </div>
+                        {workflow.action_types.find((option) => String(option.id) === actionTypeId)?.name.trim().toLowerCase() === 'others' && <div>
+                            <label htmlFor="qr-other-action" className="mb-1 block text-sm font-medium text-foreground">Please specify <span className="text-danger">*</span></label>
+                            <input id="qr-other-action" required maxLength={255} value={otherAction} onChange={(event) => { setOtherAction(event.target.value); setForwardError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
+                        </div>}
+
+                        <div className="sm:col-span-2">
+                            <p className="mb-2 text-sm font-medium text-foreground">Approval flow</p>
+                            <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Approval flow">
+                                {([['sequential', 'Sequential approval', 'Offices review in order.'], ['parallel', 'Parallel approval', 'All selected offices can review independently.']] as const).map(([mode, label, description]) => <button key={mode} type="button" aria-pressed={routingMode === mode} onClick={() => setRoutingMode(mode)} className={`rounded-xl border p-3 text-left ${routingMode === mode ? 'border-primary bg-secondary' : 'border-border bg-surface'}`}><span className="block text-sm font-semibold text-foreground">{label}</span><span className="mt-1 block text-xs text-muted">{description}</span></button>)}
+                            </div>
+                        </div>
+
+                        <div className="sm:col-span-2">
+                            <p className="mb-2 text-sm font-medium text-foreground">Required offices <span className="text-danger">*</span><span className="ml-2 text-xs font-normal text-muted">Choose up to 30.</span></p>
+                            <div className="mb-2 flex h-11 items-center gap-2 rounded-xl border border-border bg-surface px-3 text-muted focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
+                                <Search size={17} className="shrink-0" /><label htmlFor="qr-office-search" className="sr-only">Search required offices</label>
+                                <input id="qr-office-search" type="search" value={officeSearch} onChange={(event) => setOfficeSearch(event.target.value)} placeholder="Search offices…" className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-foreground placeholder:text-muted focus:ring-0" />
+                                {officeSearch && <button type="button" onClick={() => setOfficeSearch('')} className="rounded-md p-1 text-muted hover:bg-secondary"><X size={15} /></button>}
+                            </div>
+                            <div className="grid max-h-52 gap-2 overflow-y-auto rounded-xl border border-border bg-background p-2 sm:grid-cols-2">
+                                {filteredOffices.map((office) => {
+                                    const selected = officeIds.includes(String(office.id));
+                                    return <label key={office.id} className={`flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2 text-sm ${officeIds.length >= 30 && !selected ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${selected ? 'border-primary bg-secondary' : 'border-border bg-surface'}`}>
+                                        <input type="checkbox" checked={selected} disabled={officeIds.length >= 30 && !selected} onChange={() => toggleOffice(String(office.id))} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
+                                        <span className="text-foreground">{office.name}</span>
+                                    </label>;
+                                })}
+                                {filteredOffices.length === 0 && <p className="p-2 text-sm text-muted sm:col-span-2">No offices match your search.</p>}
+                            </div>
+                            <p className="mt-2 text-xs text-muted">{officeIds.length}/30 offices selected</p>
+                        </div>
+
+                        {routingMode === 'sequential' && officeIds.length > 0 && <div className="sm:col-span-2">
+                            <p className="mb-2 text-sm font-medium text-foreground">Route order</p>
+                            <ol className="space-y-2">{officeIds.map((officeId, index) => <li key={officeId} className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3">
+                                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-white">{index + 1}</span>
+                                <span className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">{workflow.offices.find((office) => String(office.id) === officeId)?.name}</span>
+                                <button type="button" disabled={index === 0} onClick={() => moveOffice(officeId, -1)} aria-label="Move office up" className="rounded-md p-2 text-muted hover:bg-secondary disabled:opacity-30"><ArrowUp size={15} /></button>
+                                <button type="button" disabled={index === officeIds.length - 1} onClick={() => moveOffice(officeId, 1)} aria-label="Move office down" className="rounded-md p-2 text-muted hover:bg-secondary disabled:opacity-30"><ArrowDown size={15} /></button>
+                                <button type="button" onClick={() => toggleOffice(officeId)} aria-label="Remove office" className="rounded-md p-2 text-muted hover:bg-danger-soft hover:text-danger"><X size={15} /></button>
+                            </li>)}</ol>
+                        </div>}
+
+                        <div className="sm:col-span-2"><label htmlFor="qr-forward-remarks" className="mb-1 block text-sm font-medium text-foreground">Remarks</label><textarea id="qr-forward-remarks" maxLength={250} rows={3} value={remarks} onChange={(event) => setRemarks(event.target.value)} className="w-full resize-y rounded-lg border border-border px-3 py-2 text-sm" /><p className="mt-1 text-right text-xs text-muted">{remarks.length}/250</p></div>
+
+                        <div className="sm:col-span-2">
+                            <p className="mb-2 text-sm font-medium text-foreground">Document version</p>
+                            <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Document version source">
+                                <button type="button" aria-pressed={documentSource === 'current'} onClick={() => { setDocumentSource('current'); setForwardFile(null); setForwardError(''); }} className={`rounded-lg border px-3 py-2 text-sm font-medium ${documentSource === 'current' ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>Keep current document</button>
+                                <button type="button" aria-pressed={documentSource === 'upload'} onClick={() => { setDocumentSource('upload'); setForwardError(''); }} className={`rounded-lg border px-3 py-2 text-sm font-medium ${documentSource === 'upload' ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>Upload new version</button>
+                            </div>
+                            {documentSource === 'current' ? <p className="text-xs text-muted">Forward with the current document version.</p> : <><label htmlFor="qr-forward-file" className="mb-1 block text-sm font-medium text-foreground">New version</label><input id="qr-forward-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => { setForwardFile(event.target.files?.[0] ?? null); setForwardError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" /><p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Maximum 100 MB.</p></>}
+                        </div>
+                    </section>
+                    {(forwardError || qrErrors.length > 0) && <div role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{forwardError && <p>{forwardError}</p>}{qrErrors.map((error, index) => <p key={index}>{error}</p>)}</div>}
+                </div>
+
+                <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-surface px-5 py-4 sm:px-6"><button type="button" onClick={() => setForwardOpen(false)} className="dots-button-secondary">Cancel</button><button type="submit" className="dots-button-primary">{busy ? 'Forwarding…' : 'Forward document'}</button></div>
+            </fieldset>
+        </form>
+    </WorkspaceDialog></>;
 }
 
 function RouteBranchMap({ document }: { document: TrackedDocument }) {

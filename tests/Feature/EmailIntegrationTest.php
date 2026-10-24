@@ -193,6 +193,39 @@ class EmailIntegrationTest extends TestCase
         $this->assertStringContainsString('SMTP test body', $message->getTextBody());
     }
 
+    public function test_document_otp_uses_branded_html_and_is_sent_when_optional_notifications_are_paused(): void
+    {
+        config([
+            'mail.default' => 'array',
+            'mail.from.address' => 'dots@example.test',
+            'mail.from.name' => 'DOTS',
+            'qr_document.otp_ttl_minutes' => 10,
+        ]);
+        Mail::purge('array');
+
+        app(EmailNotificationMailer::class)->sendSecurityCode(
+            'recipient@example.test',
+            'Test Receiver',
+            '481205',
+            'DOTS-OTP-001',
+        );
+
+        $transport = Mail::mailer('array')->getSymfonyTransport();
+        $this->assertInstanceOf(ArrayTransport::class, $transport);
+        $this->assertCount(1, $transport->messages());
+
+        $message = $transport->messages()->first()->getOriginalMessage();
+        $this->assertSame('[DOTS] Verification code for DOTS-OTP-001', $message->getSubject());
+        $this->assertSame('document-otp', $message->getHeaders()->get('X-DOTS-Security')?->getBodyAsString());
+        $this->assertStringContainsString('Document Tracking System', $message->getHtmlBody());
+        $this->assertStringContainsString('Verify your DOTS access', $message->getHtmlBody());
+        $this->assertStringContainsString('481205', $message->getHtmlBody());
+        $this->assertStringContainsString('DOTS-OTP-001', $message->getHtmlBody());
+        $this->assertStringContainsString('Expires in 10 minutes', $message->getHtmlBody());
+        $this->assertStringContainsString('481205', $message->getTextBody());
+        $this->assertStringContainsString('DOTS-OTP-001', $message->getTextBody());
+    }
+
     public function test_notification_mailer_rejects_direct_sends_while_paused(): void
     {
         config([

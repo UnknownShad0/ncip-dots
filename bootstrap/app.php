@@ -24,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'system.maintenance' => \App\Http\Middleware\EnsureSystemMaintenanceAllowsAccess::class,
             'super.admin' => \App\Http\Middleware\EnsureSuperAdmin::class,
             'active.user' => \App\Http\Middleware\EnsureActiveUser::class,
+            'qr.document' => \App\Http\Middleware\EnsureQrDocumentAccess::class,
         ]);
 
         //
