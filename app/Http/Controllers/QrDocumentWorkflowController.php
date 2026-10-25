@@ -7,6 +7,7 @@ use App\Models\DocumentAccessOtpChallenge;
 use App\Models\User;
 use App\Services\AuditTrailWriter;
 use App\Services\EmailNotificationMailer;
+use App\Services\EmailNotificationSettings;
 use App\Services\QrDocumentAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -140,7 +141,7 @@ class QrDocumentWorkflowController extends Controller
             $eligible = $user ? app(QrDocumentAccess::class)->eligibleStep($document->load('routes.steps'), $user) : null;
             if ($user && $eligible) {
                 $this->ensureResendCooldownHasElapsed($document, $user, 'code');
-                $pending['challenge_id'] = $this->issueChallenge($request, $document, $user, $eligible[1]->id);
+                $pending['challenge_id'] = $this->issueChallenge($request, $document, $user, $eligible[1]->id, 'code');
                 $pending['resend_available_at'] = now()
                     ->addSeconds((int) config('qr_document.resend_cooldown_seconds', 60))
                     ->toIso8601String();
@@ -268,8 +269,20 @@ class QrDocumentWorkflowController extends Controller
         return app(DocumentController::class)->downloadFile($document->id, $file);
     }
 
-    private function issueChallenge(Request $request, Document $document, User $user, int $stepId): string
+    private function issueChallenge(
+        Request $request,
+        Document $document,
+        User $user,
+        int $stepId,
+        string $validationKey = 'email',
+    ): string
     {
+        if (! app(EmailNotificationSettings::class)->automatedEnabled()) {
+            throw ValidationException::withMessages([
+                $validationKey => 'Email delivery is currently paused by the DOTS administrator. A verification code cannot be sent until email delivery is enabled.',
+            ]);
+        }
+
         DocumentAccessOtpChallenge::query()
             ->where('document_id', $document->id)
             ->where('user_id', $user->id)

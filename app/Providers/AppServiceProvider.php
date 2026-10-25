@@ -64,10 +64,6 @@ class AppServiceProvider extends ServiceProvider
             ->by('qr-action:'.$request->session()->getId().'|'.$request->route('trackingNumber')));
 
         Event::listen(MessageSending::class, function (MessageSending $event): bool {
-            if ($event->message->getHeaders()->has('X-DOTS-Security')) {
-                return true;
-            }
-
             if (app(EmailNotificationSettings::class)->automatedEnabled()) {
                 return true;
             }

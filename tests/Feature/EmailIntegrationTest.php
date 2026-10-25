@@ -193,7 +193,7 @@ class EmailIntegrationTest extends TestCase
         $this->assertStringContainsString('SMTP test body', $message->getTextBody());
     }
 
-    public function test_document_otp_uses_branded_html_and_is_sent_when_optional_notifications_are_paused(): void
+    public function test_document_otp_uses_branded_html_when_email_delivery_is_enabled(): void
     {
         config([
             'mail.default' => 'array',
@@ -202,6 +202,7 @@ class EmailIntegrationTest extends TestCase
             'qr_document.otp_ttl_minutes' => 10,
         ]);
         Mail::purge('array');
+        app(EmailNotificationSettings::class)->setAutomatedEnabled(true, null);
 
         app(EmailNotificationMailer::class)->sendSecurityCode(
             'recipient@example.test',
@@ -224,6 +225,33 @@ class EmailIntegrationTest extends TestCase
         $this->assertStringContainsString('Expires in 10 minutes', $message->getHtmlBody());
         $this->assertStringContainsString('481205', $message->getTextBody());
         $this->assertStringContainsString('DOTS-OTP-001', $message->getTextBody());
+    }
+
+    public function test_document_otp_is_blocked_while_email_delivery_is_paused(): void
+    {
+        config([
+            'mail.default' => 'array',
+            'mail.from.address' => 'dots@example.test',
+            'mail.from.name' => 'DOTS',
+        ]);
+        Mail::purge('array');
+
+        try {
+            app(EmailNotificationMailer::class)->sendSecurityCode(
+                'recipient@example.test',
+                'Test Receiver',
+                '481205',
+                'DOTS-OTP-001',
+            );
+
+            $this->fail('The paused email setting should block document OTP messages.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('Email notifications are paused.', $exception->getMessage());
+        }
+
+        $transport = Mail::mailer('array')->getSymfonyTransport();
+        $this->assertInstanceOf(ArrayTransport::class, $transport);
+        $this->assertCount(0, $transport->messages());
     }
 
     public function test_notification_mailer_rejects_direct_sends_while_paused(): void
@@ -260,6 +288,13 @@ class EmailIntegrationTest extends TestCase
 
         $transport = Mail::mailer('array')->getSymfonyTransport();
         $this->assertInstanceOf(ArrayTransport::class, $transport);
+        $this->assertCount(0, $transport->messages());
+
+        Mail::raw('Blocked security body', function ($message): void {
+            $message->to('recipient@example.test')->subject('Blocked security subject');
+            $message->getHeaders()->addTextHeader('X-DOTS-Security', 'document-otp');
+        });
+
         $this->assertCount(0, $transport->messages());
 
         app(EmailNotificationSettings::class)->setAutomatedEnabled(true, null);

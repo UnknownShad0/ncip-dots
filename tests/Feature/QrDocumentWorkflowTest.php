@@ -9,8 +9,11 @@ use App\Models\Office;
 use App\Models\Range;
 use App\Models\User;
 use App\Services\EmailNotificationMailer;
+use App\Services\EmailNotificationSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Mail\Transport\ArrayTransport;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -20,6 +23,13 @@ use Tests\TestCase;
 class QrDocumentWorkflowTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        app(EmailNotificationSettings::class)->setAutomatedEnabled(true, null);
+    }
 
     public function test_only_an_eligible_existing_dots_user_gets_a_real_challenge(): void
     {
@@ -38,6 +48,30 @@ class QrDocumentWorkflowTest extends TestCase
             ]);
 
         $this->assertDatabaseCount('document_access_otp_challenges', 1);
+    }
+
+    public function test_paused_email_delivery_explains_why_otp_cannot_be_sent(): void
+    {
+        config([
+            'mail.default' => 'array',
+            'mail.from.address' => 'dots@example.test',
+            'mail.from.name' => 'DOTS',
+        ]);
+        Mail::purge('array');
+        app(EmailNotificationSettings::class)->setAutomatedEnabled(false, null);
+        [$user, $document] = $this->scenario(roleId: 3, suffix: 'EMAIL-PAUSED');
+
+        $this->post($this->signedOtpUrl($document), ['email' => $user->email])
+            ->assertRedirect()
+            ->assertSessionHasErrors([
+                'email' => 'Email delivery is currently paused by the DOTS administrator. A verification code cannot be sent until email delivery is enabled.',
+            ]);
+
+        $this->assertDatabaseCount('document_access_otp_challenges', 0);
+
+        $transport = Mail::mailer('array')->getSymfonyTransport();
+        $this->assertInstanceOf(ArrayTransport::class, $transport);
+        $this->assertCount(0, $transport->messages());
     }
 
     public function test_finalized_but_unrouted_document_does_not_offer_qr_processing(): void

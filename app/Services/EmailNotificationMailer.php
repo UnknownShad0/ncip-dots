@@ -23,7 +23,7 @@ class EmailNotificationMailer
 
     public function sendSecurityCode(string $recipient, string $recipientName, string $code, string $trackingNumber): void
     {
-        $this->validateSecurityDelivery($recipient);
+        $this->validateDelivery($recipient);
         $subject = $this->safeSubject('[DOTS] Verification code for '.$trackingNumber);
         $data = [
             'productName' => 'Document Tracking System',
@@ -176,18 +176,6 @@ class EmailNotificationMailer
         $issues = $this->configurationIssues();
         if ($issues !== []) {
             throw new RuntimeException('Email notifications are not configured: '.implode(', ', $issues).'.');
-        }
-    }
-
-    private function validateSecurityDelivery(string $recipient): void
-    {
-        if (! filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
-            throw new RuntimeException('The verification recipient email address is invalid.');
-        }
-
-        $issues = $this->configurationIssues();
-        if ($issues !== []) {
-            throw new RuntimeException('Email delivery is not configured: '.implode(', ', $issues).'.');
         }
     }
 
