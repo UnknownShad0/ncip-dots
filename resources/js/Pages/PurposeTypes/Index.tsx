@@ -186,8 +186,8 @@ export default function PurposeTypesIndex({
                 <section className="no-print">
                     <div className="mb-5"><h2 className="text-lg font-semibold text-foreground">Purpose types</h2><p className="mt-1 text-sm text-muted">Manage the classifications assigned to documents.</p></div>
 
-                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-                        <label className="relative block">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                        <label className="relative col-span-2 block sm:col-span-1">
                         <span className="sr-only">Search purpose types</span>
                         <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                         <input
@@ -202,7 +202,7 @@ export default function PurposeTypesIndex({
                         <button
                             type="button"
                             onClick={handlePrint}
-                            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-foreground transition hover:bg-secondary"
+                            className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border bg-surface px-2 text-xs font-semibold text-foreground transition hover:bg-secondary sm:px-4 sm:text-sm"
                         >
                             <Printer aria-hidden="true" className="h-4 w-4" />
                             Print
@@ -211,7 +211,7 @@ export default function PurposeTypesIndex({
                         <button
                             type="button"
                             onClick={openCreate}
-                            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary-hover"
+                            className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-primary px-2 text-xs font-semibold text-white transition hover:bg-primary-hover sm:px-4 sm:text-sm"
                         >
                             <Plus aria-hidden="true" className="h-4 w-4" />
                             New Purpose Type
@@ -223,8 +223,8 @@ export default function PurposeTypesIndex({
                     <div className="flex items-center justify-between border-b border-border bg-background px-5 py-3 text-sm text-muted">
                         <span>{sortedPurposeTypes.length} {sortedPurposeTypes.length === 1 ? 'purpose type' : 'purpose types'}</span>
                     </div>
-                    <div className="overflow-x-auto">
-                    <table className="min-w-full text-left text-sm">
+                    <div className="overflow-x-auto" role="region" aria-label="Purpose types register" tabIndex={0}>
+                    <table className="dots-responsive-table w-full min-w-[680px] text-left text-sm">
                         <thead className="bg-background text-[#555752]">
                             <tr>
                                 <th className="px-4 py-3 font-semibold">
@@ -249,7 +249,7 @@ export default function PurposeTypesIndex({
                         <tbody>
                             {paginatedPurposeTypes.length === 0 ? (
                                 <tr>
-                                    <td colSpan={4} className="px-4 py-8 text-center text-muted">
+                                    <td colSpan={4} className="dots-responsive-empty px-4 py-8 text-center text-muted">
                                         No purpose types found.
                                     </td>
                                 </tr>
@@ -262,13 +262,13 @@ export default function PurposeTypesIndex({
                                             key={`${row.id ?? 'row'}-${index}`}
                                             className="border-t border-border transition-colors hover:bg-background"
                                         >
-                                            <td className="px-4 py-3 font-medium text-foreground">
+                                            <td data-label="Name" className="px-4 py-3 font-medium text-foreground">
                                                 {row.name}
                                             </td>
-                                            <td className="px-4 py-3 text-muted">
+                                            <td data-label="Description" className="px-4 py-3 text-muted">
                                                 {row.description || '—'}
                                             </td>
-                                            <td className="px-4 py-3">
+                                            <td data-label="Status" className="px-4 py-3">
                                                 <span
                                                     className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
                                                         Number(row.is_active) === 1
@@ -279,7 +279,7 @@ export default function PurposeTypesIndex({
                                                     {Number(row.is_active) === 1 ? 'Active' : 'Inactive'}
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-3 no-print">
+                                            <td data-label="Actions" className="px-4 py-3 no-print">
                                                 <button
                                                     type="button"
                                                     onClick={() => openEdit(row)}
@@ -408,7 +408,7 @@ export default function PurposeTypesIndex({
                                 </label>
                             </div>
 
-                            <div className="flex justify-end gap-2">
+                            <div className="grid grid-cols-2 gap-2 [&>button]:min-h-11 [&>button]:w-full sm:flex sm:justify-end sm:[&>button]:w-auto">
                                 <button
                                     type="button"
                                     onClick={() => { if (!processing) closeModal(); }}

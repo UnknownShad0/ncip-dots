@@ -77,7 +77,7 @@ export default function PrivacyNoticeModal({ open, onClose, onAcknowledge }: { o
                 </div>
                 <footer className="flex flex-col-reverse gap-3 border-t border-border bg-surface px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
                     <p className="text-xs text-muted">Your privacy is important to us.</p>
-                    <div className="flex justify-end gap-2"><button type="button" onClick={onClose} className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground transition hover:bg-secondary">Close</button><button type="button" onClick={onAcknowledge} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:opacity-90">I Understand</button></div>
+                    <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end"><button type="button" onClick={onClose} className="min-h-11 w-full rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground transition hover:bg-secondary sm:w-auto">Close</button><button type="button" onClick={onAcknowledge} className="min-h-11 w-full rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:opacity-90 sm:w-auto">I Understand</button></div>
                 </footer>
             </DialogPanel>
         </div>

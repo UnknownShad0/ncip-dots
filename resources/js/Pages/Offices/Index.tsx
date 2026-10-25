@@ -261,8 +261,8 @@ export default function OfficesIndex({
                         <p className="mt-1 text-sm text-muted">Manage offices and their organizational relationships.</p>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-                        <label className="relative block">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                        <label className="relative col-span-2 block sm:col-span-1">
                             <span className="sr-only">Search offices</span>
                             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                             <input
@@ -277,7 +277,7 @@ export default function OfficesIndex({
                         <button
                             type="button"
                             onClick={handlePrint}
-                            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-foreground transition hover:bg-secondary"
+                            className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border bg-surface px-2 text-xs font-semibold text-foreground transition hover:bg-secondary sm:px-4 sm:text-sm"
                         >
                             <Printer aria-hidden="true" className="h-4 w-4" />
                             Print
@@ -286,7 +286,7 @@ export default function OfficesIndex({
                         <button
                             type="button"
                             onClick={openCreate}
-                            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary-hover"
+                            className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-primary px-2 text-xs font-semibold text-white transition hover:bg-primary-hover sm:px-4 sm:text-sm"
                         >
                             <Plus aria-hidden="true" className="h-4 w-4" />
                             New Office
@@ -298,8 +298,8 @@ export default function OfficesIndex({
                     <div className="flex items-center justify-between border-b border-border bg-background px-5 py-3 text-sm text-muted">
                         <span>{sortedOffices.length} {sortedOffices.length === 1 ? 'office' : 'offices'}</span>
                     </div>
-                    <div className="overflow-x-auto">
-                    <table className="min-w-full text-left text-sm">
+                    <div className="overflow-x-auto" role="region" aria-label="Offices register" tabIndex={0}>
+                    <table className="dots-responsive-table w-full min-w-[900px] text-left text-sm">
                         <thead className="bg-background text-[#555752]">
                             <tr>
                                 <th className="px-4 py-3 font-semibold">
@@ -339,7 +339,7 @@ export default function OfficesIndex({
                         <tbody>
                             {paginatedOffices.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-4 py-8 text-center text-muted">
+                                    <td colSpan={6} className="dots-responsive-empty px-4 py-8 text-center text-muted">
                                         No offices found.
                                     </td>
                                 </tr>
@@ -349,13 +349,13 @@ export default function OfficesIndex({
 
                                     return (
                                         <tr key={`${row.id ?? 'row'}-${index}`} className="border-t border-border transition-colors hover:bg-background">
-                                            <td className="px-4 py-3 font-medium text-foreground">{row.name}</td>
+                                            <td data-label="Name" className="px-4 py-3 font-medium text-foreground">{row.name}</td>
                                             {/* <td className="px-4 py-3 text-muted">{row.short_name || '—'}</td> */}
-                                            <td className="px-4 py-3 text-muted">{row.code || '—'}</td>
-                                            <td className="px-4 py-3 text-muted">{row.email || '—'}</td>
-                                            <td className="px-4 py-3 text-muted">{row.location || '—'}</td>
-                                            <td className="px-4 py-3 text-muted">{row.range_name || '—'}</td>
-                                            <td className="px-4 py-3 no-print">
+                                            <td data-label="Code" className="px-4 py-3 text-muted">{row.code || '—'}</td>
+                                            <td data-label="Email" className="px-4 py-3 text-muted">{row.email || '—'}</td>
+                                            <td data-label="Office address" className="px-4 py-3 text-muted">{row.location || '—'}</td>
+                                            <td data-label="Range" className="px-4 py-3 text-muted">{row.range_name || '—'}</td>
+                                            <td data-label="Actions" className="px-4 py-3 no-print">
                                                 <button
                                                     type="button"
                                                     onClick={() => openEdit(row)}
@@ -539,7 +539,7 @@ export default function OfficesIndex({
                                 {emailError && <p id="office-email-error" className="mt-1 text-sm text-red-600">{emailError}</p>}
                             </div>
 
-                            <div className="flex justify-end gap-2">
+                            <div className="grid grid-cols-2 gap-2 [&>button]:min-h-11 [&>button]:w-full sm:flex sm:justify-end sm:[&>button]:w-auto">
                                 <button
                                     type="button"
                                     onClick={() => { if (!processing) closeModal(); }}

@@ -73,7 +73,7 @@ export default function Index({
                                 Choose a source to find and continue a draft.
                             </p>
                         </div>
-                        <form onSubmit={submitSearch} className="flex w-full gap-2 sm:w-auto">
+                        <form onSubmit={submitSearch} className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                             <label className="relative min-w-0 flex-1 sm:w-72">
                                 <span className="sr-only">Search {sourceLabel} drafts</span>
                                 <Search
@@ -88,20 +88,20 @@ export default function Index({
                                     className="h-11 w-full rounded-lg border-border pl-9 text-sm"
                                 />
                             </label>
-                            <button type="submit" className="dots-button-secondary">
+                            <button type="submit" className="dots-button-secondary w-full sm:w-auto">
                                 Search
                             </button>
                         </form>
                     </div>
 
-                    <div className="flex gap-2 border-b border-border px-5 pt-3" role="tablist" aria-label="Draft source">
+                    <div className="grid grid-cols-2 gap-2 border-b border-border px-3 pt-3 sm:px-5" role="tablist" aria-label="Draft source">
                         <Link
                             href={route("drafts.index", { source: "tracking" })}
                             role="tab"
                             aria-selected={source === "tracking"}
                             className={`rounded-t-lg border border-b-0 px-4 py-2.5 text-sm font-semibold ${source === "tracking" ? "border-border bg-background text-primary" : "border-transparent text-muted hover:bg-background"}`}
                         >
-                            Document Tracking
+                            <span className="sm:hidden">Tracking</span><span className="hidden sm:inline">Document Tracking</span>
                         </Link>
                         <Link
                             href={route("drafts.index", { source: "generation" })}
@@ -109,7 +109,7 @@ export default function Index({
                             aria-selected={source === "generation"}
                             className={`rounded-t-lg border border-b-0 px-4 py-2.5 text-sm font-semibold ${source === "generation" ? "border-border bg-background text-primary" : "border-transparent text-muted hover:bg-background"}`}
                         >
-                            Document Generation
+                            <span className="sm:hidden">Generation</span><span className="hidden sm:inline">Document Generation</span>
                         </Link>
                     </div>
 

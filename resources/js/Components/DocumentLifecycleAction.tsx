@@ -30,9 +30,9 @@ export default function DocumentLifecycleAction({ action, url, title, iconOnly =
                 <p className="break-words text-sm text-muted">{title || 'Untitled document'}</p>
                 <p className="text-sm text-muted">{action === 'delete' ? 'This draft will be removed from your drafts list.' : action === 'archive' ? 'This document will move to Archives. Its contents and history will be preserved.' : 'This document will return to its active workflow.'}</p>
                 {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-                <div className="flex justify-end gap-2">
-                    <button type="button" className="dots-button-secondary" disabled={busy} onClick={() => setOpen(false)}>Cancel</button>
-                    <button type="button" className="dots-button-primary" disabled={busy} onClick={confirm}>{busy ? 'Saving…' : label}</button>
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+                    <button type="button" className="dots-button-secondary w-full sm:w-auto" disabled={busy} onClick={() => setOpen(false)}>Cancel</button>
+                    <button type="button" className="dots-button-primary w-full sm:w-auto" disabled={busy} onClick={confirm}>{busy ? 'Saving…' : label}</button>
                 </div>
             </div>
         </WorkspaceDialog>

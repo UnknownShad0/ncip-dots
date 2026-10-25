@@ -102,10 +102,10 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
                 </DialogPanel>
             </Dialog>
             <div className="flex min-w-0 flex-1 flex-col">
-                <header className="dots-topbar flex min-h-20 items-center gap-3 border-b border-primary-hover bg-primary px-4 text-primary-foreground sm:px-6">
+                <header className="dots-topbar flex min-h-16 items-center gap-1.5 border-b border-primary-hover bg-primary px-2 text-primary-foreground sm:min-h-20 sm:gap-3 sm:px-6">
                     <button type="button" onClick={toggleSidebar} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} className="hidden rounded-lg p-2 text-primary-foreground/80 hover:bg-white/10 hover:text-white lg:block">{collapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}</button>
                     <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open navigation" className="rounded-lg p-2 text-primary-foreground/80 hover:bg-white/10 hover:text-white lg:hidden"><Menu size={20} /></button>
-                    <div className="dots-topbar-title min-w-0 flex-1 py-4">{header}</div>
+                    <div className="dots-topbar-title min-w-0 flex-1 py-3 sm:py-4">{header}</div>
                     <div className="dots-office-meta hidden min-w-0 max-w-56 items-center gap-2 border-r border-border pr-4 text-muted xl:flex"><Building2 size={16} className="shrink-0" /><span className="truncate" title={[user.office_display_name, user.range].filter(Boolean).join(' · ')}>{user.office_display_name || 'Office not assigned'}</span></div>
                     <DropdownMenu as="div" className="relative shrink-0">
                         <MenuButton className="relative rounded-lg p-2 text-primary-foreground/80 transition hover:bg-white/10 hover:text-white" aria-label={`Notifications${notificationCounts?.total ? `, ${notificationCounts.total} items` : ''}`}>
@@ -125,7 +125,7 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
                         </MenuItems>
                     </DropdownMenu>
                     <DropdownMenu as="div" className="relative shrink-0">
-                        <MenuButton className="flex items-center gap-2 rounded-lg p-2 text-primary-foreground hover:bg-white/10" aria-label="Account menu">
+                        <MenuButton className="flex items-center gap-1 rounded-lg p-1.5 text-primary-foreground hover:bg-white/10 sm:gap-2 sm:p-2" aria-label="Account menu">
                             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 font-semibold text-white">{String(displayName).charAt(0).toUpperCase()}</span>
                             <span className="hidden text-left leading-tight md:block"><span className="block max-w-32 truncate font-semibold">{displayName}</span><span className="text-xs text-primary-foreground/70">{user.role || 'Account'}</span></span><ChevronDown size={14} className="text-primary-foreground/70" />
                         </MenuButton>
@@ -136,7 +136,7 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
                         </MenuItems>
                     </DropdownMenu>
                 </header>
-                <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-6">
+                <main className="min-w-0 flex-1 p-3 sm:p-6 lg:p-6">
                     {systemMaintenance && <div role={systemMaintenance.mode === 'full' ? 'alert' : 'status'} className={`mx-auto mb-5 flex max-w-[1200px] items-start gap-3 rounded-xl border p-4 ${systemMaintenance.mode === 'full' ? 'border-danger/30 bg-danger-soft text-danger' : 'border-warning/30 bg-warning-soft text-warning'}`}>
                         <Wrench size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
                         <div><p className="font-semibold">{systemMaintenance.mode === 'full' ? 'Full maintenance is active' : 'Scheduled maintenance'}</p>

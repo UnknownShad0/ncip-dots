@@ -230,13 +230,13 @@ export default function Index({ search: initialSearch = '', readyDocuments = [],
                 <div>
                     <p className="max-w-2xl text-sm text-muted">Track documents that need your action, follow your submissions, and find approved files.</p>
                 </div>
-                <form onSubmit={submitSearch} className="flex w-full gap-2 sm:max-w-md">
+                <form onSubmit={submitSearch} className="flex w-full flex-col gap-2 sm:max-w-md sm:flex-row">
                     <label className="sr-only" htmlFor="workflow-search">Search workflow</label>
                     <div className="relative min-w-0 flex-1">
                         <Search size={17} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
                         <input id="workflow-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search title or tracking number" className="h-11 w-full rounded-lg border border-border bg-surface pl-10 pr-3 text-sm" />
                     </div>
-                    <button type="submit" className="dots-button-primary min-h-11">Search</button>
+                    <button type="submit" className="dots-button-primary min-h-11 w-full sm:w-auto">Search</button>
                 </form>
             </div>
 
@@ -245,15 +245,15 @@ export default function Index({ search: initialSearch = '', readyDocuments = [],
                     key={key}
                     type="button"
                     onClick={() => setActiveQueue(key)}
-                    className="flex min-h-11 w-full items-center gap-3 p-4 text-left transition-colors hover:bg-background sm:p-5"
+                    className="grid min-h-11 w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-4 text-left transition-colors hover:bg-background sm:flex sm:items-center sm:p-5"
                 >
                     <Icon size={20} className="shrink-0 text-primary" aria-hidden="true" />
                     <span className="min-w-0 flex-1">
-                        <span className="block font-semibold text-foreground">{label}</span>
+                        <span className="flex items-start justify-between gap-2 sm:block"><span className="font-semibold text-foreground">{label}</span><span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs tabular-nums text-primary sm:hidden">{count}</span></span>
                         <span className="mt-1 block text-sm text-muted">{description}</span>
                     </span>
-                    <span className="shrink-0 text-sm tabular-nums text-muted">{count} {count === 1 ? 'document' : 'documents'}</span>
-                    <ChevronRight size={18} className="shrink-0 text-muted" aria-hidden="true" />
+                    <span className="hidden shrink-0 text-sm tabular-nums text-muted sm:block">{count} {count === 1 ? 'document' : 'documents'}</span>
+                    <ChevronRight size={18} className="hidden shrink-0 text-muted sm:block" aria-hidden="true" />
                 </button>)}
             </div> : <div className="space-y-4">
             <button type="button" onClick={() => setActiveQueue(null)} className="dots-button-secondary inline-flex min-h-10 items-center gap-2">

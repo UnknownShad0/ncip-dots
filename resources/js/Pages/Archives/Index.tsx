@@ -161,11 +161,11 @@ export default function ArchivesIndex({ source = 'tracking', documents, canFilte
                 <p className="text-sm text-muted">Browse archived documents.</p>
 
                 <section aria-busy={updating} className="rounded-xl border border-border bg-surface p-5">
-                    <div className="mb-5 flex gap-2 border-b border-border" role="tablist" aria-label="Archive source">
+                    <div className="mb-5 grid grid-cols-2 gap-2 border-b border-border" role="tablist" aria-label="Archive source">
                         {(['tracking', 'generation'] as const).map(value => (
                             <Link key={value} href={route('archives.index', { source: value })} role="tab" aria-selected={source === value}
                                 className={`rounded-t-lg border border-b-0 px-4 py-2.5 text-sm font-semibold ${source === value ? 'border-border bg-background text-primary' : 'border-transparent text-muted hover:bg-background'}`}>
-                                {value === 'tracking' ? 'Document Tracking' : 'Document Generation'}
+                                <span className="sm:hidden">{value === 'tracking' ? 'Tracking' : 'Generation'}</span><span className="hidden sm:inline">{value === 'tracking' ? 'Document Tracking' : 'Document Generation'}</span>
                             </Link>
                         ))}
                     </div>
@@ -218,13 +218,13 @@ export default function ArchivesIndex({ source = 'tracking', documents, canFilte
                                     </select>
                                 </label>
                                 </>}
-                                <form onSubmit={event => { event.preventDefault(); updateFilters(String(filters.office_id ?? ''), String(filters.year ?? ''), filters.sort); }} className="flex min-w-0 gap-2">
+                                <form onSubmit={event => { event.preventDefault(); updateFilters(String(filters.office_id ?? ''), String(filters.year ?? ''), filters.sort); }} className="flex min-w-0 flex-col gap-2 sm:flex-row">
                                     <label className="relative min-w-0 flex-1 sm:flex-none">
                                         <span className="sr-only">Search archived documents</span>
                                         <Search size={15} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
                                         <input type="search" aria-label="Search archived documents" value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder={source === 'generation' ? "Title or document type" : "Title or tracking no."} maxLength={100} className="h-11 w-full rounded-lg border-border pl-9 text-sm sm:w-56" />
                                     </label>
-                                    <button type="submit" className="inline-flex h-11 shrink-0 items-center justify-center rounded-lg border border-border bg-background px-3 text-sm font-medium text-foreground hover:bg-secondary">Search</button>
+                                    <button type="submit" className="inline-flex h-11 w-full shrink-0 items-center justify-center rounded-lg border border-border bg-background px-3 text-sm font-medium text-foreground hover:bg-secondary sm:w-auto">Search</button>
                                 </form>
                             </div>
                         )}
@@ -293,7 +293,7 @@ export default function ArchivesIndex({ source = 'tracking', documents, canFilte
                             <p className="mt-1 break-all font-mono text-sm text-muted">{viewingDocument.tracking_number || 'Tracking number unavailable'}</p>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
-                            {viewingDocument.is_finalized && <button type="button" onClick={() => printDisposition(viewingDocument)} disabled={printLoadingId === viewingDocument.id} className="dots-button-secondary px-3" aria-label="Print disposition form">{printLoadingId === viewingDocument.id ? <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Printer size={16} aria-hidden="true" />} Print disposition</button>}
+                            {viewingDocument.is_finalized && <button type="button" onClick={() => printDisposition(viewingDocument)} disabled={printLoadingId === viewingDocument.id} className="dots-button-secondary hidden px-3 sm:inline-flex" aria-label="Print disposition form">{printLoadingId === viewingDocument.id ? <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Printer size={16} aria-hidden="true" />} Print disposition</button>}
                             <button type="button" onClick={() => setViewingDocument(null)} aria-label="Close document details" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground"><X size={19} aria-hidden="true" /></button>
                         </div>
                     </div>
@@ -309,7 +309,10 @@ export default function ArchivesIndex({ source = 'tracking', documents, canFilte
                         </section>}
                         <DocumentRouteProgress document={viewingDocument} />
                     </div>
-                    <div className="sticky bottom-0 flex justify-end border-t border-border bg-surface px-5 py-4 sm:px-6"><button type="button" onClick={() => setViewingDocument(null)} className="dots-button-secondary">Close</button></div>
+                    <div className="sticky bottom-0 grid grid-cols-2 gap-2 border-t border-border bg-surface px-5 py-4 sm:flex sm:justify-end sm:px-6">
+                        {viewingDocument.is_finalized && <button type="button" onClick={() => printDisposition(viewingDocument)} disabled={printLoadingId === viewingDocument.id} className="dots-button-secondary w-full sm:hidden" aria-label="Print disposition form">{printLoadingId === viewingDocument.id ? <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Printer size={16} aria-hidden="true" />} Print</button>}
+                        <button type="button" onClick={() => setViewingDocument(null)} className={`dots-button-secondary w-full sm:w-auto ${viewingDocument.is_finalized ? '' : 'col-span-2'}`}>Close</button>
+                    </div>
                 </section>}
             </WorkspaceDialog>
             {printDocument && <DocumentDispositionPrint document={printDocument} />}
@@ -359,7 +362,7 @@ function ArchiveDocumentReferenceDetails({ document, loading = false }: { docume
             {document.files?.length ? <ul className="mt-3 space-y-2">{document.files.map(file => <li key={file.id} className="rounded-xl border border-border bg-surface p-3 sm:p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex min-w-0 items-start gap-3"><span className="mt-0.5 rounded-lg bg-secondary p-2 text-primary"><FileText size={17} aria-hidden="true" /></span><div className="min-w-0"><p className="break-words text-sm font-semibold text-foreground">{file.name}</p><div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted"><span>{file.type === 'original' ? 'Primary document' : file.type === 'supporting' ? 'Supporting file' : file.type}</span>{file.is_pdf && <><span aria-hidden="true">·</span><span>PDF</span></>}{file.uploaded_at && <><span aria-hidden="true">·</span><span>{file.uploaded_at}</span></>}{!file.url && !file.view_url && <span className="text-warning">File not available</span>}</div></div></div>
-                    <div className="flex flex-wrap items-center gap-2 sm:shrink-0">{file.view_url && <a href={file.view_url} target="_blank" rel="noopener noreferrer" className="dots-button-secondary min-h-9 px-3 py-1.5 text-xs"><Eye size={14} aria-hidden="true" />View</a>}{file.url && <a href={file.url} className="dots-button-secondary min-h-9 px-3 py-1.5 text-xs"><Download size={14} aria-hidden="true" />Download</a>}{file.type === 'original' && file.is_pdf && document.signature_status === 'needs_signature' && <button type="button" disabled title={document.approval_status === 'approved' ? 'iPluma file submission is not connected yet.' : 'Available after approval.'} className="dots-button-secondary min-h-9 px-3 py-1.5 text-xs"><FileSignature size={14} aria-hidden="true" />Sign with iPluma</button>}{file.type === 'signed' && <span className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-success-soft px-3 py-1.5 text-xs font-medium text-success"><FileSignature size={14} aria-hidden="true" />Signed</span>}</div>
+                    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:shrink-0 sm:flex-wrap">{file.view_url && <a href={file.view_url} target="_blank" rel="noopener noreferrer" className="dots-button-secondary min-h-9 w-full px-3 py-1.5 text-xs sm:w-auto"><Eye size={14} aria-hidden="true" />View</a>}{file.url && <a href={file.url} className="dots-button-secondary min-h-9 w-full px-3 py-1.5 text-xs sm:w-auto"><Download size={14} aria-hidden="true" />Download</a>}{file.type === 'original' && file.is_pdf && document.signature_status === 'needs_signature' && <button type="button" disabled title={document.approval_status === 'approved' ? 'iPluma file submission is not connected yet.' : 'Available after approval.'} className="dots-button-secondary col-span-2 min-h-9 w-full px-3 py-1.5 text-xs sm:w-auto"><FileSignature size={14} aria-hidden="true" />Sign with iPluma</button>}{file.type === 'signed' && <span className="col-span-2 inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-success-soft px-3 py-1.5 text-xs font-medium text-success sm:w-auto"><FileSignature size={14} aria-hidden="true" />Signed</span>}</div>
                 </div>
             </li>)}</ul> : loading ? null : document.file_url ? <div className="mt-2 flex flex-wrap items-center gap-2"><span className="break-all text-sm font-medium text-foreground">{document.file_name || 'Attached file'}</span><a href={document.file_url} className="dots-button-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs"><Download size={14} aria-hidden="true" />Download</a></div> : <p className="mt-1 text-sm text-foreground">No file attached.</p>}
         </div>

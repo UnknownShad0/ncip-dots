@@ -714,7 +714,7 @@ export default function Index({
             <div className="mx-auto max-w-[1440px] space-y-6">
                 <div className="flex items-center gap-2 print:hidden">
                     <p className="text-sm text-muted">
-                        "Create and edit generated documents. Finalize a completed file when it is ready to attach in Routing."
+                        Create and edit generated documents. Finalize a completed file when it is ready to attach in Routing.
                     </p>
                     <InfoTip label="Document creation">
                         Save your work as a draft while editing. Finalizing
@@ -746,8 +746,8 @@ export default function Index({
                     >
                         <form onSubmit={saveDraft} aria-busy={saving}>
                             <fieldset disabled={saving} className="min-w-0">
-                                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-surface px-5 py-4">
-                                    <label className="min-w-0 flex-1 sm:max-w-xl" htmlFor="document-title">
+                                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-surface px-3 py-4 sm:px-5">
+                                    <label className="min-w-0 flex-1 basis-full sm:basis-auto sm:max-w-xl" htmlFor="document-title">
                                         <span className="mb-1 block text-xs font-medium text-muted">Document filename</span>
                                         <span className={`flex h-10 min-w-0 items-center overflow-hidden rounded-lg border bg-background focus-within:ring-2 focus-within:ring-primary/20 ${errors.title ? "border-danger" : "border-border"}`}>
                                             <input
@@ -779,10 +779,10 @@ export default function Index({
                                         </span>
                                         {errors.title && <span id="document-title-error" className="mt-1 block text-xs text-danger">{errors.title}</span>}
                                     </label>
-                                    <div id="document-actions" className="flex flex-wrap items-center gap-2">
+                                    <div id="document-actions" className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
                                         <span
                                             role="status"
-                                            className="mr-2 text-xs text-muted"
+                                            className="col-span-2 text-xs text-muted sm:col-auto sm:mr-2"
                                         >
                                             {saving
                                                 ? "Saving…"
@@ -798,7 +798,7 @@ export default function Index({
                                             onClick={() =>
                                                 guardChanges(startNew)
                                             }
-                                            className="rounded-lg px-3 py-2 text-sm text-muted hover:bg-secondary"
+                                            className="inline-flex min-h-11 w-full items-center justify-center whitespace-nowrap rounded-lg px-3 py-2 text-sm text-muted hover:bg-secondary sm:w-auto"
                                         >
                                             <FilePlus2
                                                 size={16}
@@ -811,7 +811,7 @@ export default function Index({
                                             onClick={() => {
                                                 if (preparedDocumentTitle()) setPreviewOpen(true);
                                             }}
-                                            className="rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:bg-background"
+                                            className="inline-flex min-h-11 w-full items-center justify-center whitespace-nowrap rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:bg-background sm:w-auto"
                                         >
                                             <Eye
                                                 size={16}
@@ -822,7 +822,7 @@ export default function Index({
                                         <button
                                             type="submit"
                                             disabled={saving}
-                                            className="inline-flex items-center rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-background disabled:opacity-50"
+                                            className="inline-flex min-h-11 w-full items-center justify-center whitespace-nowrap rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground hover:bg-background disabled:opacity-50 sm:w-auto"
                                         >
                                             <Save
                                                 size={16}
@@ -835,15 +835,15 @@ export default function Index({
                                             onClick={finalizeDocument}
                                             disabled={saving}
                                             title="Finalize this generated document for attachment in Routing"
-                                            className="inline-flex items-center rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground shadow-sm hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                                            className="col-span-2 inline-flex min-h-11 w-full items-center justify-center whitespace-nowrap rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground shadow-sm hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                                         >
                                             <FileCheck2 size={16} className="mr-2" aria-hidden="true" />
                                             Finalize for Routing
                                         </button>
                                     </div>
                                 </div>
-                                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-5 py-3">
-                                    <label className="flex items-center gap-3 text-sm text-muted">
+                                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-3 py-3 sm:px-5">
+                                    <label className="flex w-full flex-col items-start gap-1.5 text-sm text-muted sm:w-auto sm:flex-row sm:items-center sm:gap-3">
                                         Document type
                                         <select
                                             aria-label="Document type"
@@ -860,7 +860,7 @@ export default function Index({
                                                 setContent(current => ({ ...current, template: savedTemplate?.typeId === next ? savedTemplate.template : documentTypes.find(type => String(type.id) === next)?.template }));
                                                 setDirty(true);
                                             }}
-                                            className="max-w-[260px] rounded-lg border-border bg-surface py-1.5 text-sm"
+                                            className="w-full rounded-lg border-border bg-surface py-1.5 text-sm sm:max-w-[260px]"
                                         >
                                             <option value="">
                                                 Select document type
@@ -876,7 +876,7 @@ export default function Index({
                                             ))}
                                         </select>
                                     </label>
-                                    <label className="flex items-center gap-3 text-sm text-muted">
+                                    <label className="flex w-full items-center justify-between gap-3 text-sm text-muted sm:w-auto sm:justify-start">
                                         Template
                                         <select
                                             aria-label="Page template"
@@ -907,7 +907,7 @@ export default function Index({
                                         </ul>
                                     </div>
                                 )}
-                                <div className="overflow-x-auto px-3 py-4 sm:px-5 sm:py-5">
+                                <div className="min-w-0 px-3 py-4 sm:px-5 sm:py-5">
                                     <DocumentPaper
                                         content={content}
                                         onChange={change}
@@ -1013,11 +1013,11 @@ export default function Index({
                         <div className="max-h-[70vh] overflow-auto rounded-lg border border-border bg-surface p-3 sm:p-6">
                             {previewOpen && <DocumentPdfPreview fileName={`${normalizeDocumentTitle(documentTitle)}.pdf`} payload={{ draft_id: editing, title: normalizeDocumentTitle(documentTitle), document_type_id: typeId, content }} />}
                         </div>
-                        <div className="mt-4 flex flex-wrap justify-end gap-2">
+                        <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
                             <button
                                 type="button"
                                 onClick={() => setPreviewOpen(false)}
-                                className="dots-button-secondary"
+                                className="dots-button-secondary w-full sm:w-auto"
                             >
                                 Back to editing
                             </button>
@@ -1027,7 +1027,7 @@ export default function Index({
                                     setPreviewOpen(false);
                                     window.setTimeout(() => document.getElementById("document-actions")?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
                                 }}
-                                className="dots-button-primary"
+                                className="dots-button-primary w-full sm:w-auto"
                             >
                                 Looks good — close preview
                             </button>
@@ -1099,18 +1099,18 @@ export default function Index({
                                         ? "Your current edits will be saved as a new version and submitted."
                                         : "The saved version will be submitted for review."}
                                 </p>
-                                <div className="flex justify-end gap-2">
+                                <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
                                     <button
                                         type="button"
                                         onClick={() => setSubmissionTarget(null)}
-                                        className="dots-button-secondary"
+                                        className="dots-button-secondary w-full sm:w-auto"
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         type="submit"
                                         disabled={!submissionOfficeId || saving}
-                                        className="dots-button-accent inline-flex items-center gap-2"
+                                        className="dots-button-accent inline-flex w-full items-center gap-2 sm:w-auto"
                                     >
                                         <Send size={16} aria-hidden="true" />
                                         Submit for approval
@@ -1158,31 +1158,33 @@ export default function Index({
                                 <DocumentPdfPreview draftId={reviewing.id} />
                             </div>
                             {previewMode === "approved" ? null : reviewing.can_decide ? (
-                                <div className="mt-4 flex flex-wrap justify-end gap-2">
-                                    <button
-                                        onClick={() =>
-                                            decision(
-                                                reviewing,
-                                                "revision_requested",
-                                            )
-                                        }
-                                        className="rounded-lg bg-warning px-4 py-2 text-sm text-white"
-                                    >
-                                        Request revision
-                                    </button>
-                                    <button
-                                        onClick={() =>
-                                            decision(reviewing, "rejected")
-                                        }
-                                        className="rounded-lg bg-danger px-4 py-2 text-sm text-white"
-                                    >
-                                        Reject
-                                    </button>
+                                <div className="mt-4 space-y-2">
+                                    <div className="grid grid-cols-2 items-stretch gap-2">
+                                        <button
+                                            onClick={() =>
+                                                decision(
+                                                    reviewing,
+                                                    "revision_requested",
+                                                )
+                                            }
+                                            className="min-h-11 w-full rounded-lg bg-warning px-2 py-2 text-sm font-semibold text-white"
+                                        >
+                                            Request revision
+                                        </button>
+                                        <button
+                                            onClick={() =>
+                                                decision(reviewing, "rejected")
+                                            }
+                                            className="min-h-11 w-full rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white"
+                                        >
+                                            Reject
+                                        </button>
+                                    </div>
                                     <button
                                         onClick={() =>
                                             decision(reviewing, "approved")
                                         }
-                                        className="rounded-lg bg-success px-4 py-2 text-sm text-white"
+                                        className="min-h-11 w-full rounded-lg bg-success px-4 py-2 text-sm font-semibold text-white"
                                     >
                                         Approve
                                     </button>
@@ -1278,11 +1280,11 @@ export default function Index({
                                         {actionError}
                                     </p>
                                 )}
-                                <div className="flex flex-wrap justify-end gap-2">
+                                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
                                     <button
                                         type="button"
                                         onClick={() => setPendingDecision(null)}
-                                        className="dots-button-secondary"
+                                        className="dots-button-secondary w-full sm:w-auto"
                                     >
                                         Cancel
                                     </button>
@@ -1290,8 +1292,8 @@ export default function Index({
                                         type="submit"
                                         className={
                                             pendingDecision.value === "rejected"
-                                                ? "dots-button bg-danger text-white"
-                                                : "dots-button-accent"
+                                                ? "dots-button w-full bg-danger text-white sm:w-auto"
+                                                : "dots-button-accent w-full sm:w-auto"
                                         }
                                     >
                                         {saving ? "Saving…" : decisionLabel}

@@ -165,6 +165,24 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
 
     const [pages, setPages] = useState(1);
     const [toolbarTarget, setToolbarTarget] = useState<HTMLDivElement | null>(null);
+    const sheetHostRef = useRef<HTMLDivElement>(null);
+    const [fitScale, setFitScale] = useState(1);
+    const [documentZoom, setDocumentZoom] = useState<number | null>(null);
+    const displayScale = documentZoom ?? fitScale;
+
+    useLayoutEffect(() => {
+        const host = sheetHostRef.current;
+        if (!host) return;
+
+        const updateFitScale = () => {
+            const availableWidth = host.clientWidth;
+            setFitScale(Math.min(1, Math.max(.3, (availableWidth - 2) / 816)));
+        };
+        updateFitScale();
+        const observer = new ResizeObserver(updateFitScale);
+        observer.observe(host);
+        return () => observer.disconnect();
+    }, []);
     const header = <header className="document-header">
             {template?.header_mode === 'logos' ? <div className="logo-header">
                 <img src={template.header_images[0].src} alt={template.header_images[0].alt} />
@@ -182,7 +200,7 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
 
     return <div className="document-editor-workspace">
         <div ref={setToolbarTarget} className="document-editor-tools sticky top-0 z-20 mb-6 rounded-lg bg-background p-2 print:hidden" />
-        <div className="mb-3 flex items-center justify-between gap-3 print:hidden">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 print:hidden">
             {editable ? <select
                 aria-label="Add field"
                 value=""
@@ -192,11 +210,25 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
                 <option value="">+ Add field</option>
                 {addable.map(key => <option key={key} value={key}>{key === 'for' ? 'FOR' : key.toUpperCase()}</option>)}
             </select> : <span />}
-            <p className="text-xs text-muted" aria-live="polite">{pages} {pages === 1 ? 'page' : 'pages'}</p>
+            <div className="flex flex-wrap items-center justify-end gap-1.5 text-xs text-muted">
+                <span className="mr-1" aria-live="polite">{pages} {pages === 1 ? 'page' : 'pages'}</span>
+                <button type="button" onClick={() => setDocumentZoom(Math.max(.3, displayScale - .1))} disabled={displayScale <= .3} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface font-semibold text-foreground" aria-label="Zoom document out">−</button>
+                <span className="min-w-12 text-center tabular-nums">{Math.round(displayScale * 100)}%</span>
+                <button type="button" onClick={() => setDocumentZoom(Math.min(1.5, displayScale + .1))} disabled={displayScale >= 1.5} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface font-semibold text-foreground" aria-label="Zoom document in">+</button>
+                <button type="button" onClick={() => setDocumentZoom(null)} aria-pressed={documentZoom === null} className="inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-surface px-2.5 font-semibold text-foreground aria-pressed:bg-secondary aria-pressed:text-primary">Fit</button>
+                <button type="button" onClick={() => setDocumentZoom(1)} aria-pressed={documentZoom === 1} className="hidden min-h-9 items-center justify-center rounded-lg border border-border bg-surface px-2.5 font-semibold text-foreground aria-pressed:bg-secondary aria-pressed:text-primary sm:inline-flex">100%</button>
+            </div>
         </div>
+        <div ref={sheetHostRef} className="document-sheet-host w-full overflow-x-auto" tabIndex={0} role="region" aria-label="Document writing surface; use the zoom controls or scroll horizontally">
+        <div className="document-sheet-scale" style={{ zoom: displayScale }}>
         <article className="document-editor-sheet" data-page-count={pages} aria-label="Document writing surface" style={{ height: pages * PAGE_STEP - PAGE_GAP }}>
         <style>{`
-            .document-editor-workspace { width:8.5in; margin:auto; }
+            .document-editor-workspace { width:100%; min-width:0; margin:auto; }
+            .document-sheet-scale { width:8.5in; margin:0 auto; transform-origin:top left; }
+            @media print {
+                .document-editor-workspace, .document-sheet-host { width:8.5in; overflow:visible !important; }
+                .document-sheet-scale { width:8.5in; margin:0; zoom:1 !important; }
+            }
             .document-editor-sheet { position:relative; box-sizing:border-box; width:8.5in; color:#111; font:11pt/1.55 'Document Arial',sans-serif; tab-size:4; }
             .document-editor-sheet *, .document-editor-sheet *::before, .document-editor-sheet *::after { box-sizing:border-box; }
             .document-editor-sheet p, .document-editor-sheet h2, .document-editor-sheet h3 { margin:0; }
@@ -334,5 +366,5 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
             </div>
         </div>}
         </div>
-    </article></div>;
+    </article></div></div></div>;
 }

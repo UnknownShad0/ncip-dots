@@ -376,14 +376,14 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
                 <section aria-labelledby="qr-files-title">
                     <h3 id="qr-files-title" className="font-semibold text-foreground">Document files and versions</h3>
                     {workflow.files.length > 0 ? <ul className="mt-3 divide-y divide-border rounded-xl border border-border bg-background">
-                        {workflow.files.map((file) => <li key={file.id} className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm">
+                        {workflow.files.map((file) => <li key={file.id} className="flex flex-col gap-3 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                             <div className="min-w-0"><p className="break-words font-medium text-foreground">{file.name}</p><p className="mt-0.5 text-xs capitalize text-muted">{file.type} · {(file.size_bytes / 1024).toFixed(1)} KB</p></div>
-                            <div className="flex shrink-0 flex-wrap gap-2">
-                                {file.view_url && <a href={file.view_url} target="_blank" rel="noreferrer" className="dots-button-secondary px-3 py-2"><Eye size={15} /> View</a>}
-                                <a href={file.download_url} className="dots-button-secondary px-3 py-2"><Download size={15} /> Download</a>
-                                {file.type === 'original' && file.is_pdf && workflow.signature_status === 'needs_signature' && <button type="button" disabled title="Available after approval." className="dots-button-secondary cursor-not-allowed px-3 py-2 opacity-50"><FileSignature size={15} aria-hidden="true" /> Sign with iPluma</button>}
-                                {file.type === 'original' && file.is_pdf && workflow.signature_status === 'sent_to_ipluma' && <span className="inline-flex items-center gap-1.5 rounded-lg bg-warning-soft px-3 py-2 text-xs font-medium text-warning"><FileSignature size={15} aria-hidden="true" /> Sent to iPluma</span>}
-                                {file.type === 'signed' && <span className="inline-flex items-center gap-1.5 rounded-lg bg-success-soft px-3 py-2 text-xs font-medium text-success"><FileSignature size={15} aria-hidden="true" /> Signed</span>}
+                            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:shrink-0 sm:flex-wrap">
+                                {file.view_url && <a href={file.view_url} target="_blank" rel="noreferrer" className="dots-button-secondary w-full px-3 py-2 sm:w-auto"><Eye size={15} /> View</a>}
+                                <a href={file.download_url} className="dots-button-secondary w-full px-3 py-2 sm:w-auto"><Download size={15} /> Download</a>
+                                {file.type === 'original' && file.is_pdf && workflow.signature_status === 'needs_signature' && <button type="button" disabled title="Available after approval." className="dots-button-secondary col-span-2 w-full cursor-not-allowed px-3 py-2 opacity-50 sm:w-auto"><FileSignature size={15} aria-hidden="true" /> Sign with iPluma</button>}
+                                {file.type === 'original' && file.is_pdf && workflow.signature_status === 'sent_to_ipluma' && <span className="col-span-2 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg bg-warning-soft px-3 py-2 text-xs font-medium text-warning sm:w-auto"><FileSignature size={15} aria-hidden="true" /> Sent to iPluma</span>}
+                                {file.type === 'signed' && <span className="col-span-2 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg bg-success-soft px-3 py-2 text-xs font-medium text-success sm:w-auto"><FileSignature size={15} aria-hidden="true" /> Signed</span>}
                             </div>
                         </li>)}
                     </ul> : <p className="mt-3 rounded-lg bg-background p-3 text-sm text-muted">No document files are available.</p>}
@@ -402,17 +402,19 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
                             <input type="file" accept="application/pdf,.pdf" onChange={(event) => setSignedFile(event.target.files?.[0] ?? null)} className="mt-3 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
                         </div>}
 
-                        <div className="flex flex-wrap justify-end gap-2">
-                            <button type="button" disabled={busy} onClick={() => post(workflow.decision_url, { decision: 'rejected', remarks }, false, () => setReviewOpen(false))} className="dots-button-secondary text-danger disabled:opacity-50">Reject</button>
-                            <button type="button" disabled={busy} onClick={() => post(workflow.decision_url, { decision: 'changes_requested', remarks }, false, () => setReviewOpen(false))} className="dots-button-secondary disabled:opacity-50">Request changes</button>
+                        <div className="space-y-2">
+                            <div className="grid grid-cols-2 items-stretch gap-2">
+                                <button type="button" disabled={busy} onClick={() => post(workflow.decision_url, { decision: 'rejected', remarks }, false, () => setReviewOpen(false))} className="dots-button-secondary w-full text-danger disabled:opacity-50">Reject</button>
+                                <button type="button" disabled={busy} onClick={() => post(workflow.decision_url, { decision: 'changes_requested', remarks }, false, () => setReviewOpen(false))} className="dots-button-secondary w-full px-2 disabled:opacity-50">Request changes</button>
+                            </div>
                             {workflow.signature_status === 'needs_signature'
-                                ? <button type="button" disabled={busy || !signedFile} onClick={() => post(workflow.wet_signed_url, { signed_file: signedFile, remarks }, true, () => setReviewOpen(false))} className="dots-button-primary disabled:opacity-50">Upload signed PDF and approve</button>
-                                : <button type="button" disabled={busy} onClick={() => post(workflow.decision_url, { decision: 'approved', remarks }, false, () => setReviewOpen(false))} className="dots-button-primary disabled:opacity-50">Approve</button>}
+                                ? <button type="button" disabled={busy || !signedFile} onClick={() => post(workflow.wet_signed_url, { signed_file: signedFile, remarks }, true, () => setReviewOpen(false))} className="dots-button-primary w-full disabled:opacity-50">Upload signed PDF and approve</button>
+                                : <button type="button" disabled={busy} onClick={() => post(workflow.decision_url, { decision: 'approved', remarks }, false, () => setReviewOpen(false))} className="dots-button-primary w-full disabled:opacity-50">Approve</button>}
                         </div>
                     </div>
                 </section>
             </div>
-            <div className="sticky bottom-0 flex justify-end border-t border-border bg-surface px-5 py-4 sm:px-6"><button type="button" onClick={() => setReviewOpen(false)} className="dots-button-secondary">Close</button></div>
+            <div className="sticky bottom-0 flex justify-end border-t border-border bg-surface px-5 py-4 sm:px-6"><button type="button" onClick={() => setReviewOpen(false)} className="dots-button-secondary w-full sm:w-auto">Close</button></div>
         </section>
     </WorkspaceDialog>
 
@@ -489,7 +491,7 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
                     {(forwardError || qrErrors.length > 0) && <div role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{forwardError && <p>{forwardError}</p>}{qrErrors.map((error, index) => <p key={index}>{error}</p>)}</div>}
                 </div>
 
-                <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-surface px-5 py-4 sm:px-6"><button type="button" onClick={() => setForwardOpen(false)} className="dots-button-secondary">Cancel</button><button type="submit" className="dots-button-primary">{busy ? 'Forwarding…' : 'Forward document'}</button></div>
+                <div className="sticky bottom-0 grid grid-cols-2 gap-2 border-t border-border bg-surface px-5 py-4 sm:flex sm:justify-end sm:px-6"><button type="button" onClick={() => setForwardOpen(false)} className="dots-button-secondary w-full sm:w-auto">Cancel</button><button type="submit" className="dots-button-primary w-full sm:w-auto">{busy ? 'Forwarding…' : 'Forward document'}</button></div>
             </fieldset>
         </form>
     </WorkspaceDialog></>;
@@ -545,7 +547,7 @@ function RouteBranchMap({ document }: { document: TrackedDocument }) {
             </div>
         </div>
 
-        <div className="p-5 sm:p-7">
+        <div className="p-4 sm:p-7">
             <div className="rounded-xl border border-blue-100 bg-slate-50 p-3.5 sm:p-4">
                 <div className="flex items-center gap-3">
                     <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-700 text-sm font-bold text-white">S</span>
@@ -652,7 +654,7 @@ function PublicRouteGroup({ route, depth, round, continues = false }: { route: P
                         const childParallel = child.mode === 'parallel';
                         const childStyle = `${LANE_BORDER[childLane]} ${childParallel ? 'border-dashed' : 'border-solid'}`;
 
-                        return <div key={child.id} className="relative ml-8 pt-2">
+                        return <div key={child.id} className="relative ml-4 pt-2 sm:ml-8">
                             {/* Connector: drops from the parent card's bottom edge into the child lane (8 + 24 + 8 = 40px) */}
                             <span className={`absolute left-[6px] top-0 h-10 w-0 border-l-2 ${childStyle}`} aria-hidden="true" />
                             {/* Elbow into the label pill, at the pill's vertical center (8 + 12 = 20px) */}

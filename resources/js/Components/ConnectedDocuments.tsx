@@ -209,8 +209,8 @@ export default function ConnectedDocuments({ documents = [], system }: { documen
                         </p>
                     </div>
 
-                    <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Shared documents table">
-                        <table className="min-w-full text-left text-sm">
+                    <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Shared documents register">
+                        <table className="dots-responsive-table w-full min-w-[900px] text-left text-sm">
                             <thead className="bg-background text-muted">
                                 <tr>
                                     
@@ -226,14 +226,14 @@ export default function ConnectedDocuments({ documents = [], system }: { documen
                             <tbody>
                                 {paginatedDocuments.length === 0 ? (
                                     <tr>
-                                        <td colSpan={7} className="px-4 py-12 text-center text-muted">
+                                        <td colSpan={7} className="dots-responsive-empty px-4 py-12 text-center text-muted">
                                             {search || status !== 'ALL' ? `No ${system} documents match these filters.` : `No shared records available from ${system}.`}
                                         </td>
                                     </tr>
                                 ) : paginatedDocuments.map((doc) => (
                                     <tr key={doc.dotsId} className="border-t border-border transition-colors hover:bg-background">
                                         
-                                        <td className="px-4 py-4">
+                                        <td data-label="Document" className="px-4 py-4">
                                             <div className="flex items-start gap-2.5">
                                                 {/* <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary"><FileText size={16} aria-hidden="true" /></span> */}
                                                 <div className="min-w-0">
@@ -242,15 +242,15 @@ export default function ConnectedDocuments({ documents = [], system }: { documen
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-4 py-4">
+                                        <td data-label="Originator" className="px-4 py-4">
                                             <p className="font-medium text-foreground">{doc.originatorName}</p>
                                             <p className="mt-1 break-all text-xs text-muted">{doc.originatorEmail}</p>
                                         </td>
-                                        <td className="whitespace-nowrap px-4 py-4 text-muted">{doc.uploadedAt || '—'}</td>
-                                        <td className="whitespace-nowrap px-4 py-4 text-muted">{doc.sharedAt || '—'}</td>
-                                        <td className="px-4 py-3 align-top">{renderSignerSummary(doc)}</td>
-                                        <td className="whitespace-nowrap px-4 py-4">{statusBadge(doc.status)}</td>
-                                        <td className="px-4 py-4 no-print">
+                                        <td data-label="Uploaded at" className="whitespace-nowrap px-4 py-4 text-muted">{doc.uploadedAt || '—'}</td>
+                                        <td data-label="Shared at" className="whitespace-nowrap px-4 py-4 text-muted">{doc.sharedAt || '—'}</td>
+                                        <td data-label="Signers" className="px-4 py-3 align-top">{renderSignerSummary(doc)}</td>
+                                        <td data-label="Status" className="whitespace-nowrap px-4 py-4">{statusBadge(doc.status)}</td>
+                                        <td data-label="Actions" className="px-4 py-4 no-print">
                                             <button
                                                 type="button"
                                                 onClick={() => setSelected(doc)}
@@ -323,9 +323,9 @@ export default function ConnectedDocuments({ documents = [], system }: { documen
                                 </div>
                                 {selected.signingTrails.length === 0 ? (
                                     <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">No signing trail is available for this document.</p>
-                                ) : (
-                                    <div className="overflow-x-auto rounded-xl border border-border">
-                                        <table className="min-w-full text-left text-sm">
+                                ) : <>
+                                    <div className="overflow-x-auto rounded-xl border border-border" tabIndex={0} role="region" aria-label="Signer details register">
+                                        <table className="dots-responsive-table w-full min-w-[760px] text-left text-sm">
                                             <thead className="bg-background text-muted"><tr><th scope="col" className="px-3 py-3 font-semibold">Step</th><th scope="col" className="px-3 py-3 font-semibold">Signer</th><th scope="col" className="px-3 py-3 font-semibold">Email</th><th scope="col" className="whitespace-nowrap px-3 py-3 font-semibold">Signed At</th><th scope="col" className="px-3 py-3 font-semibold">Status</th><th scope="col" className="px-3 py-3 font-semibold">Remarks</th></tr></thead>
                                             <tbody>
                                                 {selected.signingTrails.map((trail) => {
@@ -336,19 +336,19 @@ export default function ConnectedDocuments({ documents = [], system }: { documen
 
                                                     return (
                                                         <tr key={`${selected.dotsId}-${trail.step}`} className="border-t border-border align-top">
-                                                            <td className="px-3 py-3 font-medium text-foreground">{trail.step}</td>
-                                                            <td className="px-3 py-3 font-medium text-foreground">{trail.name}</td>
-                                                            <td className="max-w-[220px] break-all px-3 py-3 text-muted">{trail.email}</td>
-                                                            <td className="whitespace-nowrap px-3 py-3 text-muted">{trail.signedAt || '—'}</td>
-                                                            <td className="px-3 py-3"><span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold ${trailTone}`}><TrailIcon size={13} aria-hidden="true" />{trailLabel}</span></td>
-                                                            <td className="min-w-[160px] whitespace-pre-wrap px-3 py-3 text-muted">{trail.remarks || '—'}</td>
+                                                            <td data-label="Step" className="px-3 py-3 font-medium text-foreground">{trail.step}</td>
+                                                            <td data-label="Signer" className="px-3 py-3 font-medium text-foreground">{trail.name}</td>
+                                                            <td data-label="Email" className="max-w-[220px] break-all px-3 py-3 text-muted">{trail.email}</td>
+                                                            <td data-label="Signed at" className="whitespace-nowrap px-3 py-3 text-muted">{trail.signedAt || '—'}</td>
+                                                            <td data-label="Status" className="px-3 py-3"><span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold ${trailTone}`}><TrailIcon size={13} aria-hidden="true" />{trailLabel}</span></td>
+                                                            <td data-label="Remarks" className="min-w-[160px] whitespace-pre-wrap px-3 py-3 text-muted">{trail.remarks || '—'}</td>
                                                         </tr>
                                                     );
                                                 })}
                                             </tbody>
                                         </table>
                                     </div>
-                                )}
+                                </>}
                             </section>
                         </div>
                     </section>)}

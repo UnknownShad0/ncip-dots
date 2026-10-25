@@ -214,19 +214,19 @@ export default function UserAccountsIndex({
             <Head title="User Accounts" />
             <div className="mx-auto max-w-[1440px] space-y-5 print:border-0 print:shadow-none">
                 {flash.warning && <p role="alert" className="rounded-lg bg-warning-soft p-3 text-sm text-warning">{flash.warning}</p>}
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <p className="text-sm text-muted">Manage access, office assignments, and account status.</p>
                     </div>
-                    <div className="flex gap-2 print:hidden">
-                        <button type="button" onClick={() => window.print()} className="dots-button-secondary">Print</button>
-                        <button type="button" onClick={() => { closeModal(); setAccountType('employee'); setLookupOpen(true); setIsCreateOpen(true); }} className="dots-button-primary">New user</button>
+                    <div className="grid w-full grid-cols-2 gap-2 print:hidden sm:w-auto">
+                        <button type="button" onClick={() => window.print()} className="dots-button-secondary w-full">Print</button>
+                        <button type="button" onClick={() => { closeModal(); setAccountType('employee'); setLookupOpen(true); setIsCreateOpen(true); }} className="dots-button-primary w-full">New user</button>
                     </div>
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-                    <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search users..." aria-label="Search users" className="h-11 w-full max-w-sm rounded-lg border-border bg-surface text-sm" />
-                    <label className="text-sm text-muted">Rows per page{' '}
+                    <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search users..." aria-label="Search users" className="h-11 w-full rounded-lg border-border bg-surface text-sm sm:max-w-sm" />
+                    <label className="flex w-full items-center justify-between text-sm text-muted sm:w-auto sm:justify-start">Rows per page{' '}
                         <select value={perPage} onChange={(event) => { setPerPage(Number(event.target.value)); setPage(1); }} className="ml-2 h-11 rounded-lg border-border bg-surface text-sm">
                             {[10, 25, 50].map((count) => <option key={count} value={count}>{count}</option>)}
                         </select>
@@ -237,8 +237,8 @@ export default function UserAccountsIndex({
                     <div className="flex items-center justify-between border-b border-border bg-background px-5 py-3 text-sm text-muted">
                         <span>{visibleUsers.length} {visibleUsers.length === 1 ? 'user' : 'users'}</span>
                     </div>
-                    <div className="overflow-x-auto" role="region" aria-label="User accounts table; scroll horizontally for more columns" tabIndex={0}>
-                    <table className="min-w-full text-left text-sm">
+                    <div className="overflow-x-auto" role="region" aria-label="User accounts register" tabIndex={0}>
+                    <table className="dots-responsive-table w-full min-w-[980px] text-left text-sm">
                         <thead className="bg-background text-muted"><tr>
                             <th className="px-4 py-3 font-semibold">{sortButton('Name', 'name')}</th>
                             <th className="px-4 py-3 font-semibold">{sortButton('Username', 'username')}</th>
@@ -249,19 +249,19 @@ export default function UserAccountsIndex({
                             <th className="px-4 py-3 font-semibold print:hidden">Actions</th>
                         </tr></thead>
                         <tbody>
-                            {pageUsers.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-muted">No users found.</td></tr> : pageUsers.map((user) => (
+                            {pageUsers.length === 0 ? <tr><td colSpan={7} className="dots-responsive-empty px-4 py-8 text-center text-muted">No users found.</td></tr> : pageUsers.map((user) => (
                                 <tr key={`${user.source}:${user.id}`} className="border-t border-border transition-colors hover:bg-background">
-                                    <td className="px-4 py-3 font-medium text-foreground">{user.name}</td>
-                                    <td className="px-4 py-3 text-muted">{user.username || '—'}</td>
-                                    <td className="px-4 py-3 text-muted">{user.email}</td>
-                                    <td className="px-4 py-3 text-muted">{user.role || '—'}</td>
-                                    <td className="px-4 py-3 text-muted">{user.office_name || 'No office'}</td>
-                                    <td className="px-4 py-3">
+                                    <td data-label="Name" className="px-4 py-3 font-medium text-foreground">{user.name}</td>
+                                    <td data-label="Username" className="px-4 py-3 text-muted">{user.username || '—'}</td>
+                                    <td data-label="Email" className="px-4 py-3 text-muted">{user.email}</td>
+                                    <td data-label="Role" className="px-4 py-3 text-muted">{user.role || '—'}</td>
+                                    <td data-label="Office" className="px-4 py-3 text-muted">{user.office_name || 'No office'}</td>
+                                    <td data-label="Status" className="px-4 py-3">
                                         <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${user.password_setup_pending && user.account_status === 'Active' ? 'bg-warning-soft text-warning' : user.account_status === 'Active' ? 'bg-success-soft text-success' : user.account_status === 'Locked' ? 'bg-danger-soft text-danger' : 'bg-secondary text-muted'}`}>
                                             {user.password_setup_pending && user.account_status === 'Active' ? 'Pending' : user.account_status}
                                         </span>
                                     </td>
-                                    <td className="px-4 py-3 print:hidden">
+                                    <td data-label="Actions" className="px-4 py-3 print:hidden">
                                         <button type="button" onClick={() => openEdit(user)} disabled={user.source === 'Legacy DB'} title={user.source === 'Legacy DB' ? 'Legacy accounts are read-only' : undefined} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${user.source === 'Legacy DB' ? 'cursor-not-allowed bg-secondary text-muted' : 'bg-primary text-primary-foreground hover:bg-primary-hover'}`}>Edit</button>
                                     </td>
                                 </tr>
@@ -285,8 +285,8 @@ export default function UserAccountsIndex({
                     <div className="flex items-center justify-between border-b border-border pb-3"><h3 id="user-account-modal-title" className="text-lg font-semibold text-foreground">{editingRow ? 'Edit User Account' : 'New User Account'}</h3><button type="button" onClick={closeModal} className="rounded-lg px-3 py-2 text-sm text-muted hover:bg-secondary hover:text-foreground">Close</button></div>
                     {!editingRow && accountType === 'employee' && <div className="space-y-4">
                         {(!lookup || lookupOpen) && <div className="space-y-3 rounded-xl border border-border bg-background p-4">
-                            <div className="flex items-end gap-2"><div className="flex-1"><Field label="Search employee by code or name"><input value={employeeCode} onChange={(e) => { lookupVersion.current++; setEmployeeCode(e.target.value); setEmployeeMatches([]); setLookupError(''); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (employeeCode.trim() && !lookupBusy) void searchEmployee(); } }} placeholder="Enter employee code or name" className="w-full rounded-lg border-border bg-surface" /></Field></div>
-                                <button type="button" disabled={lookupBusy || !employeeCode.trim()} onClick={() => void searchEmployee()} className="dots-button-primary disabled:opacity-50">{lookupBusy ? 'Searching...' : 'Search'}</button>
+                            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"><div className="min-w-0"><Field label="Search employee by code or name"><input value={employeeCode} onChange={(e) => { lookupVersion.current++; setEmployeeCode(e.target.value); setEmployeeMatches([]); setLookupError(''); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (employeeCode.trim() && !lookupBusy) void searchEmployee(); } }} placeholder="Enter employee code or name" className="w-full rounded-lg border-border bg-surface" /></Field></div>
+                                <button type="button" disabled={lookupBusy || !employeeCode.trim()} onClick={() => void searchEmployee()} className="dots-button-primary w-full disabled:opacity-50 sm:w-auto">{lookupBusy ? 'Searching...' : 'Search'}</button>
                             </div>
                             {lookupError && <p role="alert" className="text-sm text-danger">{lookupError}</p>}
                             {employeeMatches.length > 0 && <div className="max-h-64 overflow-y-auto rounded-lg border border-border bg-surface" role="listbox" aria-label="Matching HRIS employees">
@@ -338,7 +338,7 @@ export default function UserAccountsIndex({
                     </div>}
                     {Object.entries(errors).filter(([key]) => !['firstname', 'lastname', 'role_id', 'officeId', 'office_table_id', 'password', 'password_confirmation', 'account_status', 'user'].includes(key)).map(([key, message]) => <p key={key} className="text-sm text-danger">{message}</p>)}
                     {errors.user && <p className="text-sm text-danger">{errors.user}</p>}
-                    <div className="flex justify-end gap-2 border-t border-border pt-4"><button type="button" onClick={closeModal} className="dots-button-secondary">Cancel</button><button disabled={processing || (!editingRow && (!accountType || (accountType === 'dots' && !form.email) || (accountType === 'employee' && (!lookup || lookupOpen || lookupBusy || !selectedOffice?.range_name || !officeTableId || !form.employee_role || !form.email))))} className="dots-button-primary disabled:opacity-50">{processing ? 'Saving...' : 'Save account'}</button></div>
+                    <div className="grid grid-cols-2 gap-2 border-t border-border pt-4"><button type="button" onClick={closeModal} className="dots-button-secondary w-full">Cancel</button><button disabled={processing || (!editingRow && (!accountType || (accountType === 'dots' && !form.email) || (accountType === 'employee' && (!lookup || lookupOpen || lookupBusy || !selectedOffice?.range_name || !officeTableId || !form.employee_role || !form.email))))} className="dots-button-primary w-full disabled:opacity-50">{processing ? 'Saving...' : 'Save account'}</button></div>
                 </form>
             </div>}
             {successAlert && <WorkspaceAlert {...successAlert} onClose={() => setSuccessAlert(null)} />}

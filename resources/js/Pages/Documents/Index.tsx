@@ -948,8 +948,8 @@ export default function DocumentsIndex({
 
 
             <style>{`
-                .urgent-document-row > td,
-                .urgent-document-row:hover > td {
+                .dots-responsive-table tbody .urgent-document-row > td,
+                .dots-responsive-table tbody .urgent-document-row:hover > td {
                     background-color: rgb(var(--color-danger-soft)) !important;
                 }
                 .urgent-document-row > td:first-child {
@@ -1027,8 +1027,8 @@ export default function DocumentsIndex({
                             <p className="text-sm text-muted">{totalDocuments === 0 ? 'No results' : `Showing ${pagination?.from ?? 0}–${pagination?.to ?? 0} of ${totalDocuments} documents`}</p>
                         </div>
                     </div>
-                <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Documents table; scroll horizontally for more columns">
-                    <table aria-busy={showListUpdating} className="dots-document-table w-full min-w-[880px] table-fixed text-left text-sm">
+                <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Documents register">
+                    <table aria-busy={showListUpdating} className="dots-document-table dots-responsive-table w-full min-w-[880px] table-fixed text-left text-sm">
                     <colgroup><col className="w-[17%]" /><col /><col className="w-[12%]" /><col className="w-[9%]" /><col className="w-[12%]" /><col className="w-[19%]" /><col className="w-36" /></colgroup>
                     <thead className="bg-background text-muted">
                             <tr>
@@ -1069,7 +1069,7 @@ export default function DocumentsIndex({
                         <tbody>
                             {paginatedDocuments.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-3 py-12 text-center text-muted">
+                                    <td colSpan={7} className="dots-responsive-empty px-3 py-12 text-center text-muted">
                                         {search || statusFilter !== 'all' ? 'No matching documents. Try another search or status.' : 'No documents yet. Select New document to register one.'}
                                     </td>
                                 </tr>
@@ -1083,22 +1083,22 @@ export default function DocumentsIndex({
                                             key={document.id ?? `${document.tracking_number ?? 'doc'}-${index}`}
                                             className={`${isUrgent ? 'urgent-document-row' : ''} border-t border-border transition-colors hover:bg-background`}
                                         >
-                                            <td className="break-words px-3 py-4 text-xs font-semibold text-primary">
-                                                <span className="break-all font-mono">{document.tracking_number || 'N/A'}</span>
+                                            <td data-label="Tracking No." className="break-words px-3 py-4 text-xs font-semibold text-primary">
+                                                <span className="font-mono [overflow-wrap:anywhere]">{document.tracking_number || 'N/A'}</span>
                                                 {document.needs_review && <span className="mt-2 block text-xs font-semibold text-warning">Needs review</span>}
                                                 {isUrgent && <span className="mt-2 inline-flex rounded bg-danger-soft px-2 py-0.5 font-sans text-xs font-semibold text-danger">Urgent</span>}
                                                 {isLegacy && <span className="mt-1 block font-sans text-xs font-normal text-muted">Legacy</span>}
                                             </td>
-                                            <td className="break-words px-3 py-4 font-medium text-foreground">
+                                            <td data-label="Title" className="break-words px-3 py-4 font-medium text-foreground">
                                                 <button type="button" onClick={() => openDocumentDetails(document)} className="max-w-full break-words text-left font-semibold hover:text-primary hover:underline">{document.title || 'Untitled'}</button>
                                             </td>
-                                            <td className="break-words px-3 py-4 text-muted">
+                                            <td data-label="Document type" className="break-words px-3 py-4 text-muted">
                                                 {getDocumentTypeName(document) || '—'}
                                             </td>
-                                            <td className="break-words px-3 py-4 text-muted">
+                                            <td data-label="Origin" className="break-words px-3 py-4 text-muted">
                                                 {document.origin_type || '—'}
                                             </td>
-                                            <td className="px-3 py-4">
+                                            <td data-label="Status" className="px-3 py-4">
                                                 <span
                                                     className={`inline-block max-w-full break-words rounded-md px-2 py-1 text-xs font-semibold capitalize ${getStatusClasses(
                                                         document.status
@@ -1107,14 +1107,14 @@ export default function DocumentsIndex({
                                                     {document.status || 'draft'}
                                                 </span>
                                             </td>
-                                            <td className="break-words px-3 py-3">
+                                            <td data-label="Last activity" className="break-words px-3 py-3">
                                                 {document.last_transaction_summary ? <div className="flex flex-col gap-1.5">
                                                     <span className="text-xs font-medium text-foreground">{document.last_transaction_summary.action || document.last_transaction_summary.status || 'Transaction'}</span>
                                                     <span className="text-xs text-muted">{[document.last_transaction_summary.from_office_short_name || document.last_transaction_summary.from_office, document.last_transaction_summary.to_office_short_name || document.last_transaction_summary.to_office].filter(Boolean).join(' → ') || document.last_transaction_summary.holder_short_name || document.last_transaction_summary.holder || 'Office not recorded'}</span>
                                                     <span className="text-xs text-muted">{document.last_transaction_summary.created_at || document.last_transaction_summary.created_by || '—'}</span>
                                                 </div> : <span className="text-sm text-muted">No transactions</span>}
                                             </td>
-                                            <td className="sticky right-0 z-10 border-l border-border bg-surface px-3 py-3 no-print">
+                                            <td data-label="Actions" className="sticky right-0 z-10 border-l border-border bg-surface px-3 py-3 no-print">
                                                 <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
                                                     {document.can_receive && <button type="button" disabled={processing} aria-label="Receive document" title="Receive document" onClick={() => requestDocumentAction('Receive document?', `Confirm receipt of ${document.tracking_number || 'this document'}?`, 'Receive', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/receive`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ variant: 'error', title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document received', message: 'Document received successfully.' }) }); })} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-primary transition hover:border-primary/40 hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Inbox size={17} aria-hidden="true" /></button>}
                                                     {document.can_approve && <button type="button" disabled={processing} aria-label="Review and decide document" title="Review and decide" onClick={() => openDocumentDetails(document)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"><FileSignature size={17} aria-hidden="true" /></button>}
@@ -1186,8 +1186,8 @@ export default function DocumentsIndex({
                                 <p className="mt-1 break-words text-sm text-muted">{viewingRow.tracking_number || 'Tracking number unavailable'}</p>
                             </div>
                             <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
-                                {viewingRow.editable_route && <button type="button" onClick={() => openRouteEditor(viewingRow)} className="dots-button-secondary px-3" aria-label="Edit remaining approval route"><Pencil size={16} aria-hidden="true" /> Edit route</button>}
-                                {viewingRow.is_finalized && <button type="button" onClick={() => printDisposition(viewingRow)} className="dots-button-secondary px-3" aria-label="Print disposition form"><Printer size={16} aria-hidden="true" /> Print disposition</button>}
+                                {viewingRow.editable_route && <button type="button" onClick={() => openRouteEditor(viewingRow)} className="dots-button-secondary hidden px-3 sm:inline-flex" aria-label="Edit remaining approval route"><Pencil size={16} aria-hidden="true" /> Edit route</button>}
+                                {viewingRow.is_finalized && <button type="button" onClick={() => printDisposition(viewingRow)} className="dots-button-secondary hidden px-3 sm:inline-flex" aria-label="Print disposition form"><Printer size={16} aria-hidden="true" /> Print disposition</button>}
                                 <button type="button" onClick={closeDocumentDetails} aria-label="Close document details" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
                                     <X size={19} aria-hidden="true" />
                                 </button>
@@ -1207,18 +1207,22 @@ export default function DocumentsIndex({
                                     <label htmlFor="approval-remarks" className="block text-sm font-medium text-foreground">Remarks</label>
                                     <textarea id="approval-remarks" maxLength={4000} rows={3} value={approvalRemarks} onChange={(event) => setApprovalRemarks(event.target.value)} className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm" placeholder="Add a note for this decision" />
                                     {approvalError && <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{approvalError}</p>}
-                                    <div className="flex flex-wrap justify-end gap-2">
-                                        <button type="button" disabled={processing} onClick={() => decideDocument('rejected')} className="dots-button-secondary text-danger disabled:opacity-50">Reject</button>
-                                        <button type="button" disabled={processing} onClick={() => decideDocument('changes_requested')} className="dots-button-secondary disabled:opacity-50">Request changes</button>
-                                        <button type="button" disabled={processing} onClick={() => decideDocument('approved')} className="dots-button-primary disabled:opacity-50">Approve</button>
+                                    <div className="space-y-2">
+                                        <div className="grid grid-cols-2 items-stretch gap-2">
+                                            <button type="button" disabled={processing} onClick={() => decideDocument('rejected')} className="dots-button-secondary w-full text-danger disabled:opacity-50">Reject</button>
+                                            <button type="button" disabled={processing} onClick={() => decideDocument('changes_requested')} className="dots-button-secondary w-full px-2 disabled:opacity-50">Request changes</button>
+                                        </div>
+                                        <button type="button" disabled={processing} onClick={() => decideDocument('approved')} className="dots-button-primary w-full disabled:opacity-50">Approve</button>
                                     </div>
                                 </form>}
                                 {viewingRow.signature_status === 'needs_signature' && viewingRow.approval_status !== 'approved' && <p className="mt-3 text-xs text-muted">Only the primary PDF is eligible; iPluma submission is not connected yet.</p>}
                             </section>}
                             <DocumentRouteProgress document={viewingRow} />
                         </div>
-                        <div className="sticky bottom-0 flex justify-end border-t border-border bg-surface px-5 py-4 sm:px-6">
-                            <button type="button" onClick={closeDocumentDetails} className="dots-button-secondary">Close</button>
+                        <div className="sticky bottom-0 grid grid-cols-2 gap-2 border-t border-border bg-surface px-5 py-4 sm:flex sm:justify-end sm:px-6">
+                            {viewingRow.editable_route && <button type="button" onClick={() => openRouteEditor(viewingRow)} className="dots-button-secondary w-full sm:hidden" aria-label="Edit remaining approval route"><Pencil size={16} aria-hidden="true" /> Edit route</button>}
+                            {viewingRow.is_finalized && <button type="button" onClick={() => printDisposition(viewingRow)} className="dots-button-secondary w-full sm:hidden" aria-label="Print disposition form"><Printer size={16} aria-hidden="true" /> Print</button>}
+                            <button type="button" onClick={closeDocumentDetails} className={`dots-button-secondary w-full sm:w-auto ${(Boolean(viewingRow.editable_route) === Boolean(viewingRow.is_finalized)) ? 'col-span-2' : ''}`}>Close</button>
                         </div>
                     </section>
                 )}
@@ -1334,9 +1338,9 @@ export default function DocumentsIndex({
                                 {routeEditError && <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{routeEditError}</p>}
                             </div>
 
-                            <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-surface px-5 py-4 sm:px-6">
-                                <button type="button" onClick={closeRouteEditor} className="dots-button-secondary">Cancel</button>
-                                <button type="submit" className="dots-button-primary">{processing ? 'Saving…' : 'Save route changes'}</button>
+                            <div className="sticky bottom-0 grid grid-cols-2 gap-2 border-t border-border bg-surface px-5 py-4 sm:flex sm:justify-end sm:px-6">
+                                <button type="button" onClick={closeRouteEditor} className="dots-button-secondary w-full sm:w-auto">Cancel</button>
+                                <button type="submit" className="dots-button-primary w-full sm:w-auto">{processing ? 'Saving…' : 'Save route changes'}</button>
                             </div>
                         </fieldset>
                     </form>
@@ -1355,7 +1359,7 @@ export default function DocumentsIndex({
                                 <p className="mt-1 text-sm text-muted">Choose where this document should go next.</p>
                             </div>
                             <div className="flex shrink-0 items-center gap-2">
-                                {releasingRow.is_finalized && <button type="button" onClick={() => printDisposition(releasingRow)} className="dots-button-secondary px-3" aria-label="Print disposition form"><Printer size={16} aria-hidden="true" /> Print disposition</button>}
+                                {releasingRow.is_finalized && <button type="button" onClick={() => printDisposition(releasingRow)} className="dots-button-secondary hidden px-3 sm:inline-flex" aria-label="Print disposition form"><Printer size={16} aria-hidden="true" /> Print disposition</button>}
                                 <button type="button" onClick={closeRelease} aria-label="Close forwarding dialog" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
                                     <X size={19} aria-hidden="true" />
                                 </button>
@@ -1482,9 +1486,10 @@ export default function DocumentsIndex({
                             {releaseError && <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{releaseError}</p>}
                         </div>
 
-                        <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-surface px-5 py-4 sm:px-6">
-                            <button type="button" onClick={closeRelease} className="dots-button-secondary">Cancel</button>
-                            <button type="submit" className="dots-button-primary">{processing ? 'Forwarding…' : 'Forward document'}</button>
+                        <div className="sticky bottom-0 grid grid-cols-2 gap-2 border-t border-border bg-surface px-5 py-4 sm:flex sm:justify-end sm:px-6">
+                            {releasingRow.is_finalized && <button type="button" onClick={() => printDisposition(releasingRow)} className="dots-button-secondary col-span-2 w-full sm:hidden" aria-label="Print disposition form"><Printer size={16} aria-hidden="true" /> Print</button>}
+                            <button type="button" onClick={closeRelease} className="dots-button-secondary w-full sm:w-auto">Cancel</button>
+                            <button type="submit" className="dots-button-primary w-full sm:w-auto">{processing ? 'Forwarding…' : 'Forward document'}</button>
                         </div>
                     </fieldset></form>
                 )}
@@ -1651,16 +1656,16 @@ export default function DocumentsIndex({
                                 <label className="inline-flex items-center gap-2 text-sm text-foreground"><input type="checkbox" checked={form.notify_by_email} onChange={(e) => setForm({ ...form, notify_by_email: e.target.checked })} /> Email me</label>
                             </div>
 
-                            <div className="sticky bottom-0 -mx-5 flex flex-wrap justify-end gap-2 border-t border-border bg-surface px-5 py-4 sm:-mx-6 sm:px-6">
+                            <div className="sticky bottom-0 -mx-5 grid grid-cols-2 gap-2 border-t border-border bg-surface px-5 py-4 sm:-mx-6 sm:flex sm:justify-end sm:px-6">
                                 <button
                                     type="button"
                                     onClick={requestCloseForm}
-                                    className="dots-button-secondary"
+                                    className="dots-button-secondary w-full sm:w-auto"
                                 >
                                     Cancel
                                 </button>
 
-                                <button type="submit" name="is_finalized" value="1" className="dots-button-primary">Create Routing Record</button>
+                                <button type="submit" name="is_finalized" value="1" className="dots-button-primary w-full sm:w-auto">Create Routing Record</button>
                             </div>
                             </fieldset>
                         </form>
@@ -1990,12 +1995,12 @@ function DocumentReferenceDetails({ document, loading = false }: { document: Doc
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
-                                            {file.view_url && <a href={file.view_url} target="_blank" rel="noopener noreferrer" className="dots-button-secondary min-h-9 px-3 py-1.5 text-xs"><Eye size={14} aria-hidden="true" />View</a>}
-                                            {file.url && <a href={file.url} className="dots-button-secondary min-h-9 px-3 py-1.5 text-xs"><Download size={14} aria-hidden="true" />Download</a>}
-                                            {file.type === 'original' && file.is_pdf && document.signature_status === 'needs_signature' && <button type="button" disabled title={document.approval_status === 'approved' ? 'iPluma file submission is not connected yet.' : 'Available after approval.'} className="dots-button-secondary min-h-9 px-3 py-1.5 text-xs"><FileSignature size={14} aria-hidden="true" />Sign with iPluma</button>}
-                                            {file.type === 'original' && file.is_pdf && document.signature_status === 'sent_to_ipluma' && <span className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-warning-soft px-3 py-1.5 text-xs font-medium text-warning"><FileSignature size={14} aria-hidden="true" />Sent to iPluma</span>}
-                                            {file.type === 'signed' && <span className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-success-soft px-3 py-1.5 text-xs font-medium text-success"><FileSignature size={14} aria-hidden="true" />Signed</span>}
+                                        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:shrink-0 sm:flex-wrap">
+                                            {file.view_url && <a href={file.view_url} target="_blank" rel="noopener noreferrer" className="dots-button-secondary min-h-9 w-full px-3 py-1.5 text-xs sm:w-auto"><Eye size={14} aria-hidden="true" />View</a>}
+                                            {file.url && <a href={file.url} className="dots-button-secondary min-h-9 w-full px-3 py-1.5 text-xs sm:w-auto"><Download size={14} aria-hidden="true" />Download</a>}
+                                            {file.type === 'original' && file.is_pdf && document.signature_status === 'needs_signature' && <button type="button" disabled title={document.approval_status === 'approved' ? 'iPluma file submission is not connected yet.' : 'Available after approval.'} className="dots-button-secondary col-span-2 min-h-9 w-full px-3 py-1.5 text-xs sm:w-auto"><FileSignature size={14} aria-hidden="true" />Sign with iPluma</button>}
+                                            {file.type === 'original' && file.is_pdf && document.signature_status === 'sent_to_ipluma' && <span className="col-span-2 inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-warning-soft px-3 py-1.5 text-xs font-medium text-warning sm:w-auto"><FileSignature size={14} aria-hidden="true" />Sent to iPluma</span>}
+                                            {file.type === 'signed' && <span className="col-span-2 inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-success-soft px-3 py-1.5 text-xs font-medium text-success sm:w-auto"><FileSignature size={14} aria-hidden="true" />Signed</span>}
                                         </div>
                                     </div>
                                 </li>

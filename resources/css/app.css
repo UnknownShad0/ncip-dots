@@ -48,7 +48,11 @@
 }
 
 @layer base {
-    body { font-size: 19px; line-height: 27px; }
+    body { font-size: 16px; line-height: 24px; }
+
+    @media (min-width: 640px) {
+        body { font-size: 18px; line-height: 26px; }
+    }
 }
 
 @layer components {
@@ -74,3 +78,135 @@
 .dots-topbar-title :is(h1, h2, p) { color: rgb(var(--color-primary-foreground)); }
 .dots-office-meta { color: rgb(var(--color-primary-foreground) / 0.82); border-right-color: rgb(255 255 255 / 0.25); }
 .dots-blue-banner p { color: rgb(var(--color-primary-foreground) / 0.82); }
+
+@media (max-width: 639px) {
+    .dots-topbar-title :is(h1, h2) {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 1.25rem;
+        line-height: 1.75rem;
+    }
+
+    .dots-topbar-title p { display: none; }
+}
+
+@media (max-width: 767px) {
+    .dots-responsive-table {
+        min-width: 0 !important;
+        table-layout: auto !important;
+    }
+
+    .dots-responsive-table colgroup,
+    .dots-responsive-table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    .dots-responsive-table tbody {
+        display: grid;
+        gap: .75rem;
+        padding: .75rem;
+    }
+
+    .dots-responsive-table tbody tr {
+        display: block;
+        overflow: hidden;
+        border: 1px solid rgb(var(--color-border));
+        border-radius: .75rem;
+        background: rgb(var(--color-surface));
+    }
+
+    .dots-responsive-table tbody td {
+        position: static !important;
+        display: grid;
+        grid-template-columns: minmax(6.75rem, 38%) minmax(0, 1fr);
+        align-items: start;
+        gap: .75rem;
+        border: 0;
+        border-bottom: 1px solid rgb(var(--color-border));
+        padding: .75rem !important;
+        background: transparent !important;
+        overflow-wrap: anywhere;
+    }
+
+    .dots-responsive-table tbody td::before {
+        content: attr(data-label);
+        grid-column: 1;
+        grid-row: 1;
+        color: rgb(var(--color-muted));
+        font-size: .75rem;
+        font-weight: 600;
+        line-height: 1rem;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+
+    .dots-responsive-table tbody td > * { grid-column: 2; min-width: 0; }
+    .dots-responsive-table tbody td > :is(span, a, button) { max-width: 100%; justify-self: start; }
+    .dots-responsive-table tbody td[data-label="Status"] > * { width: fit-content; justify-self: start; }
+    .dots-responsive-table tbody td:last-child { border-bottom: 0; }
+    .dots-responsive-table tbody td[data-label="Actions"] { align-items: center; }
+    .dots-responsive-table tbody td[data-label="Actions"] > * { width: 100%; justify-self: stretch; }
+    .dots-responsive-table tbody td[data-label="Actions"] > :is(button, a) { min-height: 2.75rem; }
+    .dots-responsive-table tbody td.dots-responsive-empty {
+        display: block;
+        border-bottom: 0;
+        text-align: center;
+    }
+    .dots-responsive-table tbody td.dots-responsive-empty::before { content: none; }
+}
+
+/* A narrow print preview must still render the semantic table, not the phone card layout. */
+@media print {
+    .dots-responsive-table {
+        min-width: 100% !important;
+        table-layout: auto !important;
+    }
+
+    .dots-responsive-table colgroup {
+        position: static;
+        width: auto;
+        height: auto;
+        margin: 0;
+        overflow: visible;
+        clip: auto;
+        white-space: normal;
+        border: 0;
+    }
+
+    .dots-responsive-table thead {
+        position: static;
+        display: table-header-group;
+        width: auto;
+        height: auto;
+        margin: 0;
+        overflow: visible;
+        clip: auto;
+        white-space: normal;
+        border: 0;
+    }
+
+    .dots-responsive-table tbody { display: table-row-group; padding: 0; }
+    .dots-responsive-table tbody tr {
+        display: table-row;
+        overflow: visible;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+    }
+    .dots-responsive-table tbody td {
+        position: static !important;
+        display: table-cell;
+        border-bottom: 0;
+        background: transparent !important;
+    }
+    .dots-responsive-table tbody td::before { content: none; }
+}

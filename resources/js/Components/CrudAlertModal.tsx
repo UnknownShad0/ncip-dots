@@ -43,12 +43,12 @@ export default function CrudAlertModal({
                         <p id="crud-alert-message" className="mt-2 text-sm leading-6 text-muted">{message}</p>
                     </div>
                 </div>
-                <div className="mt-6 flex justify-end gap-2">
-                    {isConfirmation && <button type="button" onClick={onClose} className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-background">Cancel</button>}
+                <div className="mt-6 grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+                    {isConfirmation && <button type="button" onClick={onClose} className="min-h-11 w-full rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-background sm:w-auto">Cancel</button>}
                     <button
                         type="button"
                         onClick={isConfirmation ? onConfirm : onClose}
-                        className={`rounded-lg px-4 py-2 text-sm font-semibold text-white ${isDestructive ? 'bg-danger hover:bg-danger/90' : 'bg-primary hover:bg-primary-hover'}`}
+                        className={`${isConfirmation ? '' : 'col-span-2 '}min-h-11 w-full rounded-lg px-4 py-2 text-sm font-semibold text-white sm:w-auto ${isDestructive ? 'bg-danger hover:bg-danger/90' : 'bg-primary hover:bg-primary-hover'}`}
                     >
                         {isConfirmation ? confirmLabel : 'Done'}
                     </button>

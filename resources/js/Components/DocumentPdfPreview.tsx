@@ -33,9 +33,9 @@ export default function DocumentPdfPreview({ payload, draftId, fileName = 'docum
     if (error) return <p role="alert" className="rounded-lg bg-danger-soft p-4 text-sm text-danger">{error}</p>;
     if (!url) return <p role="status" className="p-8 text-center text-sm text-muted">Preparing PDF preview…</p>;
     return <div className="space-y-3">
-        <div className="flex flex-wrap justify-end gap-2">
-            <a href={url} target="_blank" rel="noopener noreferrer" className="dots-button-secondary">Open PDF / Print</a>
-            <a href={url} download={fileName} className="dots-button-primary">Download PDF</a>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+            <a href={url} target="_blank" rel="noopener noreferrer" className="dots-button-secondary w-full sm:w-auto">Open PDF / Print</a>
+            <a href={url} download={fileName} className="dots-button-primary w-full sm:w-auto">Download PDF</a>
         </div>
         <iframe title="Document PDF preview" src={url} className="h-[70vh] w-full rounded-lg border border-border bg-white" />
         <p className="text-xs text-muted">This PDF uses the same layout as the generated attachment. If the preview is unavailable, use Open PDF / Print.</p>

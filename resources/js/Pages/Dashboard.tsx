@@ -151,7 +151,7 @@ export default function Dashboard({
                         <div className="flex items-center gap-2"><h2 className="text-sm font-semibold">Within your access</h2><InfoTip label="About document totals">These counts can overlap. Released counts unique documents with a release transaction, not release events. Totals are independent of the analytics office filter. The receiving queue below contains only documents addressed to your office.</InfoTip></div>
                         {navigationVisibility?.all_documents === true && <Link href={route('documents.index')} className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-primary hover:underline">All documents <ChevronRight size={16} /></Link>}
                     </div>
-                    <dl className="grid grid-cols-2 lg:grid-cols-4">
+                    <dl className="grid grid-cols-1 min-[360px]:grid-cols-2 lg:grid-cols-4">
                         {cards.map(({ label, value, detail, color }) => <div key={label} className="p-4 sm:p-5">
                             <dt className="text-sm text-muted">{label}</dt>
                             <dd className={`mt-1 text-3xl font-semibold tabular-nums tracking-tight ${color}`}>{formatNumber(value)}</dd>

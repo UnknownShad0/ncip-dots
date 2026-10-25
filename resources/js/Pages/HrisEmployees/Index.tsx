@@ -114,11 +114,11 @@ export default function HrisEmployeesIndex({
                             <h2 className="text-xl font-semibold text-foreground">HRIS Employees</h2>
                             <p className="mt-1 text-sm text-muted">Local employee directory used for account lookup when HRIS is unavailable.</p>
                         </div>
-                        <div className="flex flex-wrap gap-2 print:hidden">
-                            <button type="button" onClick={() => window.print()} className="dots-button-secondary inline-flex items-center gap-2">
+                        <div className="grid w-full grid-cols-2 gap-2 print:hidden lg:w-auto">
+                            <button type="button" onClick={() => window.print()} className="dots-button-secondary w-full">
                                 <Printer size={16} aria-hidden="true" /> Print
                             </button>
-                            <button type="button" disabled={syncing} onClick={syncEmployees} className="dots-button-primary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50">
+                            <button type="button" disabled={syncing} onClick={syncEmployees} className="dots-button-primary w-full disabled:cursor-not-allowed disabled:opacity-50">
                                 <RefreshCw size={16} aria-hidden="true" className={syncing ? 'animate-spin' : ''} />
                                 {syncing ? 'Syncing...' : 'Sync from HRIS'}
                             </button>
@@ -147,18 +147,18 @@ export default function HrisEmployeesIndex({
                             <h3 className="font-semibold text-foreground">Employee directory</h3>
                             <p className="mt-1 text-sm text-muted">Search by name, employee code, username, division, or position.</p>
                         </div>
-                        <form onSubmit={submitSearch} className="flex gap-2 print:hidden">
+                        <form onSubmit={submitSearch} className="grid grid-cols-1 gap-2 print:hidden sm:flex">
                             <label className="relative min-w-0 flex-1 sm:w-80">
                                 <span className="sr-only">Search HRIS employees</span>
                                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
                                 <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search employees" className="h-11 w-full rounded-lg border-border pl-9 text-sm" />
                             </label>
-                            <button type="submit" className="dots-button-secondary">Search</button>
+                            <button type="submit" className="dots-button-secondary w-full sm:w-auto">Search</button>
                         </form>
                     </div>
 
-                    <div className="overflow-x-auto">
-                        <table className="w-full min-w-[900px] text-left text-sm">
+                    <div className="overflow-x-auto" role="region" aria-label="HRIS employee register" tabIndex={0}>
+                        <table className="dots-responsive-table w-full min-w-[900px] text-left text-sm">
                             <thead className="bg-background text-xs uppercase tracking-wide text-muted">
                                 <tr>
                                     <th className="px-4 py-3 font-semibold">Employee code</th>
@@ -172,16 +172,16 @@ export default function HrisEmployeesIndex({
                             </thead>
                             <tbody>
                                 {employees.data.length === 0 ? (
-                                    <tr><td colSpan={7} className="px-4 py-10 text-center text-muted">{directoryCount === 0 ? 'No local employee copy yet. Use Sync from HRIS to import the roster.' : 'No employees match this search.'}</td></tr>
+                                    <tr><td colSpan={7} className="dots-responsive-empty px-4 py-10 text-center text-muted">{directoryCount === 0 ? 'No local employee copy yet. Use Sync from HRIS to import the roster.' : 'No employees match this search.'}</td></tr>
                                 ) : employees.data.map((employee) => (
                                     <tr key={employee.employee_code} className="border-t border-border hover:bg-background">
-                                        <td className="whitespace-nowrap px-4 py-3 font-medium text-foreground">{employee.employee_code}</td>
-                                        <td className="px-4 py-3 text-foreground">{displayName(employee) || '—'}</td>
-                                        <td className="px-4 py-3 text-muted">{employee.username || '—'}</td>
-                                        <td className="px-4 py-3 text-muted">{employee.division || '—'}</td>
-                                        <td className="px-4 py-3 text-muted">{employee.position || '—'}</td>
-                                        <td className="px-4 py-3 text-muted">{employee.employment_status || '—'}</td>
-                                        <td className="whitespace-nowrap px-4 py-3 text-muted">{formatDate(employee.last_synced_at)}</td>
+                                        <td data-label="Employee code" className="whitespace-nowrap px-4 py-3 font-medium text-foreground">{employee.employee_code}</td>
+                                        <td data-label="Employee name" className="px-4 py-3 text-foreground">{displayName(employee) || '—'}</td>
+                                        <td data-label="Username" className="px-4 py-3 text-muted">{employee.username || '—'}</td>
+                                        <td data-label="Division" className="px-4 py-3 text-muted">{employee.division || '—'}</td>
+                                        <td data-label="Position" className="px-4 py-3 text-muted">{employee.position || '—'}</td>
+                                        <td data-label="Employment status" className="px-4 py-3 text-muted">{employee.employment_status || '—'}</td>
+                                        <td data-label="Last synced" className="whitespace-nowrap px-4 py-3 text-muted">{formatDate(employee.last_synced_at)}</td>
                                     </tr>
                                 ))}
                             </tbody>

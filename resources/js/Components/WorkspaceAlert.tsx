@@ -55,9 +55,9 @@ export default function WorkspaceAlert({ title, message, onClose, onConfirm, con
                 <p id="workspace-alert-message" className="mt-1 text-sm leading-relaxed text-muted">{message}</p>
             </div>
         </div>
-        <div className="flex justify-end gap-2 border-t border-border bg-background px-6 py-4">
-                {onConfirm && <button type="button" autoFocus onClick={onClose} className="dots-button-secondary">Cancel</button>}
-                <button type="button" onClick={onConfirm || onClose} className={isDestructive ? 'dots-button bg-danger text-white hover:bg-danger/90' : 'dots-button-primary'}>{onConfirm ? confirmLabel : 'Done'}</button>
+        <div className="grid grid-cols-2 gap-2 border-t border-border bg-background px-6 py-4 sm:flex sm:justify-end">
+                {onConfirm && <button type="button" autoFocus onClick={onClose} className="dots-button-secondary w-full sm:w-auto">Cancel</button>}
+                <button type="button" onClick={onConfirm || onClose} className={`${onConfirm ? '' : 'col-span-2 '}w-full sm:w-auto ${isDestructive ? 'dots-button bg-danger text-white hover:bg-danger/90' : 'dots-button-primary'}`}>{onConfirm ? confirmLabel : 'Done'}</button>
         </div>
     </WorkspaceDialog>;
 }

@@ -12,10 +12,10 @@ export const libraryLinks = [
 
 export default function LibraryNavigation() {
     const isDirectory = !libraryLinks.some(({ href }) => route().current(href));
-    return <nav aria-label="Library lists" className={isDirectory ? 'no-print divide-y divide-border rounded-lg border border-border bg-surface' : 'no-print mb-5 flex flex-wrap gap-1 border-b border-border pb-3'}>
+    return <nav aria-label="Library lists" className={isDirectory ? 'no-print divide-y divide-border rounded-lg border border-border bg-surface' : 'no-print mb-5 flex gap-1 overflow-x-auto border-b border-border pb-3'}>
         {libraryLinks.map(({ name, href, description, icon: Icon }) => {
             const active = route().current(href);
-            return <Link key={href} href={route(href)} aria-current={active ? 'page' : undefined} className={`flex min-h-11 items-center gap-3 rounded-md transition-colors ${isDirectory ? 'p-5 hover:bg-background' : `px-3 py-2 text-sm ${active ? 'bg-secondary font-semibold text-primary' : 'text-muted hover:bg-surface hover:text-foreground'}`}`}>
+            return <Link key={href} href={route(href)} aria-current={active ? 'page' : undefined} className={`flex min-h-11 items-center gap-3 rounded-md transition-colors ${isDirectory ? 'p-5 hover:bg-background' : `shrink-0 whitespace-nowrap px-3 py-2 text-sm ${active ? 'bg-secondary font-semibold text-primary' : 'text-muted hover:bg-surface hover:text-foreground'}`}`}>
                 {isDirectory && <Icon size={20} className="shrink-0 text-primary" aria-hidden="true" />}
                 <span className="min-w-0 flex-1"><span className={isDirectory ? 'block font-semibold text-foreground' : ''}>{name}</span>{isDirectory && <span className="mt-1 block text-sm text-muted">{description}</span>}</span>
                 {isDirectory && <ChevronRight size={18} className="shrink-0 text-muted" aria-hidden="true" />}

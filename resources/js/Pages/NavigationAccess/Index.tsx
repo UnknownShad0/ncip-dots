@@ -63,11 +63,12 @@ export default function NavigationAccessIndex({ groups, roles }: { groups: Navig
 
                 <form onSubmit={submit}>
                     <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+                        <p className="border-b border-border bg-background px-5 py-2 text-xs text-muted md:hidden">Swipe horizontally to review every role.</p>
                         <div className="overflow-x-auto" role="region" aria-label="Navigation visibility by role" tabIndex={0}>
-                            <table className="min-w-full text-left text-sm">
+                            <table className="min-w-[720px] text-left text-sm">
                                 <thead className="bg-background text-muted">
                                     <tr>
-                                        <th scope="col" className="px-5 py-3 font-semibold">Navigation item</th>
+                                        <th scope="col" className="sticky left-0 z-10 bg-background px-5 py-3 font-semibold">Navigation item</th>
                                         {roles.map((role) => <th key={role.id} scope="col" className="w-40 px-5 py-3 text-center font-semibold">{role.name}</th>)}
                                     </tr>
                                 </thead>
@@ -76,7 +77,7 @@ export default function NavigationAccessIndex({ groups, roles }: { groups: Navig
                                         {group.label && <tr><th colSpan={roles.length + 1} className="bg-background/70 px-5 py-2 text-xs font-semibold uppercase tracking-wider text-muted">{group.label}</th></tr>}
                                         {group.items.map((item) => (
                                             <tr key={item.key} className="hover:bg-background/60">
-                                                <th scope="row" className="px-5 py-3 font-medium text-foreground">{item.name}</th>
+                                                <th scope="row" className="sticky left-0 z-[1] bg-surface px-5 py-3 font-medium text-foreground">{item.name}</th>
                                                 {roles.map((role) => {
                                                     const checked = visibility[String(role.id)]?.[item.key] ?? false;
                                                     return <td key={role.id} className="px-5 py-3 text-center">
