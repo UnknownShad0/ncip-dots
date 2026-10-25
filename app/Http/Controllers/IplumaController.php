@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\DateTimePresenter;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
@@ -147,7 +148,7 @@ class IplumaController extends Controller
         }
 
         try {
-            return \Illuminate\Support\Carbon::parse($value)->format('M d, Y g:i A');
+            return DateTimePresenter::format($value, 'M d, Y g:i A') ?? $value;
         } catch (\Throwable $e) {
             return $value;
         }

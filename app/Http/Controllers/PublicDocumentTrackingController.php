@@ -6,6 +6,7 @@ use App\Models\ActionType;
 use App\Models\Document;
 use App\Models\Office;
 use App\Services\QrDocumentAccess;
+use App\Support\DateTimePresenter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
 use Inertia\Inertia;
@@ -109,13 +110,13 @@ class PublicDocumentTrackingController extends Controller
                     'document_type' => $document->other_document_type ?: $document->documentType?->name,
                     'purpose' => $document->other_purpose ?: $document->purposeType?->name,
                     'office_name' => $document->office?->name,
-                    'created_at' => $document->created_at?->format('F j, Y g:i A'),
+                    'created_at' => DateTimePresenter::format($document->created_at, 'F j, Y g:i A'),
                     'trails' => $document->trails->sortBy([['created_at', 'desc'], ['id', 'desc']])->values()->map(fn ($trail) => [
                         'action' => $trail->action ?: ucfirst((string) $trail->status),
                         'status' => $trail->status,
                         'from_office' => $trail->fromOffice?->name,
                         'to_office' => $trail->toOffice?->name,
-                        'created_at' => $trail->created_at?->format('F j, Y g:i A'),
+                        'created_at' => DateTimePresenter::format($trail->created_at, 'F j, Y g:i A'),
                     ]),
                 ],
             ]);

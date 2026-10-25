@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\SystemMaintenanceSetting;
 use App\Models\User;
+use App\Support\DateTimePresenter;
 use Illuminate\Support\Carbon;
 
 class SystemMaintenance
@@ -56,7 +57,7 @@ class SystemMaintenance
         return [
             'mode' => $mode,
             'message' => $setting->message,
-            'endsAt' => $setting->ends_at?->copy()->timezone(config('app.timezone'))->format('M j, Y g:i A T'),
+            'endsAt' => DateTimePresenter::formatWithLabel($setting->ends_at, 'M j, Y g:i A'),
         ];
     }
 
@@ -78,11 +79,11 @@ class SystemMaintenance
             'effectiveMode' => $effectiveMode,
             'status' => $status,
             'message' => $setting->message,
-            'startsAt' => $setting->starts_at?->copy()->timezone(config('app.timezone'))->format('Y-m-d\\TH:i'),
-            'endsAt' => $setting->ends_at?->copy()->timezone(config('app.timezone'))->format('Y-m-d\\TH:i'),
-            'startsAtLabel' => $setting->starts_at?->copy()->timezone(config('app.timezone'))->format('M j, Y g:i A T'),
-            'endsAtLabel' => $setting->ends_at?->copy()->timezone(config('app.timezone'))->format('M j, Y g:i A T'),
-            'updatedAtLabel' => $setting->updated_at?->copy()->timezone(config('app.timezone'))->format('M j, Y g:i A T'),
+            'startsAt' => DateTimePresenter::format($setting->starts_at, 'Y-m-d\\TH:i'),
+            'endsAt' => DateTimePresenter::format($setting->ends_at, 'Y-m-d\\TH:i'),
+            'startsAtLabel' => DateTimePresenter::formatWithLabel($setting->starts_at, 'M j, Y g:i A'),
+            'endsAtLabel' => DateTimePresenter::formatWithLabel($setting->ends_at, 'M j, Y g:i A'),
+            'updatedAtLabel' => DateTimePresenter::formatWithLabel($setting->updated_at, 'M j, Y g:i A'),
             'updatedBy' => $setting->updater?->name,
         ];
     }
@@ -91,7 +92,7 @@ class SystemMaintenance
     {
         return $value === null
             ? null
-            : Carbon::createFromFormat('Y-m-d\\TH:i', $value, config('app.timezone'));
+            : Carbon::createFromFormat('Y-m-d\\TH:i', $value, DateTimePresenter::timezone())->utc();
     }
 
     public function snapshot(SystemMaintenanceSetting $setting): array

@@ -2,6 +2,7 @@ import DocumentLifecycleAction from "@/Components/DocumentLifecycleAction";
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import DocumentDispositionPrint from '@/Components/DocumentDispositionPrint';
 import WorkspaceDialog from '@/Components/WorkspaceDialog';
+import { formatPhilippineDateTime } from '@/lib/dateTime';
 import { DocumentRouteProgress, type RouteTree, type RouteTreeStep } from '@/Pages/Documents/Index';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
@@ -248,7 +249,7 @@ export default function ArchivesIndex({ source = 'tracking', documents, canFilte
                                                 <span className="select-all font-mono text-xs">{document.tracking_number || 'No tracking number'}</span>
                                                 <span>{document.office?.name ?? 'Unassigned'}</span>
                                             </> : <span>{document.document_type || 'Generated document'}</span>}
-                                            <span>{document.archived_at ? `Archived ${new Date(document.archived_at).toLocaleString()}` : 'Archive date not recorded'}</span>
+                                            <span>{document.archived_at ? `Archived ${formatPhilippineDateTime(document.archived_at)}` : 'Archive date not recorded'}</span>
                                         </div>
                                     </div>
                                     <div className="flex shrink-0 items-center gap-2">

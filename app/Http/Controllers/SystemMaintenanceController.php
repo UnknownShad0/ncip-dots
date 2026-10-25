@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\AuditTrailWriter;
 use App\Services\NavigationAccess;
 use App\Services\SystemMaintenance;
+use App\Support\DateTimePresenter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,7 +20,7 @@ class SystemMaintenanceController extends Controller
     {
         return Inertia::render('SystemMaintenance/Index', [
             'settings' => $maintenance->forManagement(),
-            'timezone' => config('app.timezone'),
+            'timezone' => DateTimePresenter::timezone(),
         ]);
     }
 
@@ -97,7 +98,7 @@ class SystemMaintenanceController extends Controller
         $response = Inertia::render('SystemMaintenance/Show', [
             'mode' => $mode,
             'message' => $setting?->message ?: SystemMaintenance::DEFAULT_MESSAGE,
-            'endsAt' => $setting?->ends_at?->copy()->timezone(config('app.timezone'))->format('M j, Y g:i A T'),
+            'endsAt' => DateTimePresenter::formatWithLabel($setting?->ends_at, 'M j, Y g:i A'),
             'canManageSystemMaintenance' => $user->isSuperAdmin(),
         ])->toResponse($request);
 

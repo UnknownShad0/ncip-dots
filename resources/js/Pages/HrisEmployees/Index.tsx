@@ -1,5 +1,6 @@
 import LibraryLayout from '@/Layouts/LibraryLayout';
 import WorkspaceAlert from '@/Components/WorkspaceAlert';
+import { formatPhilippineDateTime } from '@/lib/dateTime';
 import { Head, router, usePage } from '@inertiajs/react';
 import { FormEvent, useState } from 'react';
 import { Printer, RefreshCw, Search } from 'lucide-react';
@@ -42,18 +43,6 @@ function displayName(employee: EmployeeRow): string {
     return [employee.first_name, employee.middle_name, employee.last_name, employee.ext_name]
         .filter(Boolean)
         .join(' ');
-}
-
-function formatDate(value: string | null | undefined): string {
-    if (!value) return '—';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-
-    return new Intl.DateTimeFormat('en-PH', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-        timeZone: 'Asia/Manila',
-    }).format(date);
 }
 
 export default function HrisEmployeesIndex({
@@ -134,7 +123,7 @@ export default function HrisEmployeesIndex({
                         </div>
                         <div className="rounded-lg bg-background px-4 py-3">
                             <p className="text-xs font-medium uppercase tracking-wide text-muted">Last successful sync</p>
-                            <p className="mt-1 text-sm font-semibold text-foreground">{lastSuccessfulSync ? formatDate(lastSuccessfulSync.finished_at) : 'Not synced yet'}</p>
+                            <p className="mt-1 text-sm font-semibold text-foreground">{lastSuccessfulSync ? formatPhilippineDateTime(lastSuccessfulSync.finished_at) : 'Not synced yet'}</p>
                             {lastSuccessfulSync && <p className="mt-0.5 text-xs text-muted">{lastSuccessfulSync.records_received.toLocaleString()} employees received</p>}
                         </div>
                     </div>
@@ -181,7 +170,7 @@ export default function HrisEmployeesIndex({
                                         <td data-label="Division" className="px-4 py-3 text-muted">{employee.division || '—'}</td>
                                         <td data-label="Position" className="px-4 py-3 text-muted">{employee.position || '—'}</td>
                                         <td data-label="Employment status" className="px-4 py-3 text-muted">{employee.employment_status || '—'}</td>
-                                        <td data-label="Last synced" className="whitespace-nowrap px-4 py-3 text-muted">{formatDate(employee.last_synced_at)}</td>
+                                        <td data-label="Last synced" className="whitespace-nowrap px-4 py-3 text-muted">{formatPhilippineDateTime(employee.last_synced_at)}</td>
                                     </tr>
                                 ))}
                             </tbody>

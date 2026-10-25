@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\DateTimePresenter;
 use Illuminate\Mail\Message;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -33,7 +34,7 @@ class EmailNotificationMailer
             'code' => $code,
             'trackingNumber' => $trackingNumber,
             'expiresMinutes' => (int) config('qr_document.otp_ttl_minutes', 10),
-            'requestedAt' => now()->format('F j, Y g:i A'),
+            'requestedAt' => DateTimePresenter::formatWithLabel(now(), 'F j, Y g:i A'),
         ];
 
         Mail::send(

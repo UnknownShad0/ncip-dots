@@ -20,6 +20,7 @@ use App\Services\DocumentPdf;
 use App\Services\EmailNotificationMailer;
 use App\Services\RenderedDocumentPdf;
 use App\Services\TrackingNumberPdfStamper;
+use App\Support\DateTimePresenter;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -96,9 +97,9 @@ class DocumentController extends Controller
                     'position' => $step->position,
                     'status' => $step->status,
                     'received_by' => $step->receiver?->name,
-                    'received_at' => $step->received_at?->format('F j Y h:i:s A'),
+                    'received_at' => DateTimePresenter::format($step->received_at, 'F j Y h:i:s A'),
                     'decided_by' => $step->decider?->name,
-                    'decided_at' => $step->decided_at?->format('F j Y h:i:s A'),
+                    'decided_at' => DateTimePresenter::format($step->decided_at, 'F j Y h:i:s A'),
                 ])->values(),
             ] : null,
             'route_mode' => $rootRoute?->mode,
@@ -113,9 +114,9 @@ class DocumentController extends Controller
                 'decision' => $step->decision,
                 'remarks' => $step->decision_remarks,
                 'received_by' => $step->receiver?->name,
-                'received_at' => $step->received_at?->format('F j Y h:i:s A'),
+                'received_at' => DateTimePresenter::format($step->received_at, 'F j Y h:i:s A'),
                 'decided_by' => $step->decider?->name,
-                'decided_at' => $step->decided_at?->format('F j Y h:i:s A'),
+                'decided_at' => DateTimePresenter::format($step->decided_at, 'F j Y h:i:s A'),
             ])->values() ?? [],
             'route_tree' => $this->serializeRouteTree($document),
             'file_name' => $latestFile?->original_name ?? $latestFile?->file_name,
@@ -127,7 +128,7 @@ class DocumentController extends Controller
                 'url' => $file->downloadUrl(),
                 'view_url' => $file->previewUrl(),
                 'is_pdf' => $file->isPdf(),
-                'uploaded_at' => $file->created_at?->toDateTimeString(),
+                'uploaded_at' => DateTimePresenter::format($file->created_at, 'M j, Y g:i A'),
             ])->values(),
             'transactions' => $document->trails->sortByDesc('id')->values()->map(fn (DocumentTrail $trail) => [
                 'action' => $trail->action ?: ucfirst(strtolower((string) $trail->status)),
@@ -144,7 +145,7 @@ class DocumentController extends Controller
                     (filled($trail->creator?->firstname) ? mb_substr(trim($trail->creator->firstname), 0, 1).'. ' : '').
                     ($trail->creator?->lastname ?? '')
                 ) ?: $trail->creator?->name,
-                'created_at' => $trail->created_at?->format('F j Y h:i:s A'),
+                'created_at' => DateTimePresenter::format($trail->created_at, 'F j Y h:i:s A'),
                 'created_at_timestamp' => $trail->created_at?->timestamp,
                 'id' => $trail->id,
             ]),
@@ -323,7 +324,7 @@ class DocumentController extends Controller
                     'tracking_number' => $document->trackingNo ?? '',
                     'tracking_url' => $document->trackingNo ? URL::signedRoute('documents.track', ['trackingNumber' => $document->trackingNo]) : null,
                     'title' => $document->title ?? '',
-                    'created_at' => $document->dateCreated?->format('F j Y h:i:s A'),
+                    'created_at' => DateTimePresenter::format($document->dateCreated, 'F j Y h:i:s A'),
                     'created_at_timestamp' => $document->dateCreated?->timestamp,
                     'status' => $status,
                     'office_name' => $legacyBureaus->get($originatingBureauId)?->longName ?? $legacyBureaus->get($originatingBureauId)?->shortName ?? '',
@@ -339,7 +340,7 @@ class DocumentController extends Controller
                         $transaction?->action,
                         $transaction?->status,
                         $legacyTransactionUsers->get($transaction?->createdBy) ?? $transaction?->createdBy,
-                        $transaction?->dateCreated?->format('M j, Y g:i A'),
+                        DateTimePresenter::format($transaction?->dateCreated, 'M j, Y g:i A'),
                     ),
                     'transactions' => $legacyTransactionsByDocument->get($document->trackingNo, collect())->map(fn ($trail) => [
                         'action' => $trail->action ?: ucfirst(strtolower((string) $trail->status)),
@@ -350,7 +351,7 @@ class DocumentController extends Controller
                         'holder' => $legacyBureaus->get($trail->holder)?->shortName ?? $legacyBureaus->get($trail->holder)?->longName,
                         'created_by' => $legacyTransactionUsers->get($trail->createdBy) ?? $trail->createdBy,
                         'created_by_short_name' => $legacyShortTransactionUsers->get($trail->createdBy) ?? $trail->createdBy,
-                        'created_at' => $trail->dateCreated?->format('F j Y h:i:s A'),
+                        'created_at' => DateTimePresenter::format($trail->dateCreated, 'F j Y h:i:s A'),
                     ])->values(),
                     'remarks' => $document->remarks ?? '',
                     'source' => 'Old DB',
@@ -414,7 +415,7 @@ class DocumentController extends Controller
                         'url' => $file->downloadUrl(),
                         'view_url' => $file->previewUrl(),
                         'is_pdf' => $file->isPdf(),
-                        'uploaded_at' => $file->created_at?->toDateTimeString(),
+                        'uploaded_at' => DateTimePresenter::format($file->created_at, 'M j, Y g:i A'),
                     ])->values(),
                     'origin_type' => $document->origin_type ?? '',
                     'last_transaction' => $this->formatTrailTransaction($document->latestTrail),
@@ -433,9 +434,9 @@ class DocumentController extends Controller
                             (filled($trail->creator?->firstname) ? mb_substr(trim($trail->creator->firstname), 0, 1).'. ' : '').
                             ($trail->creator?->lastname ?? '')
                         ) ?: $trail->creator?->name,
-                        'created_at' => $trail->created_at?->format('F j Y h:i:s A'),
+                        'created_at' => DateTimePresenter::format($trail->created_at, 'F j Y h:i:s A'),
                     ]),
-                    'created_at' => $document->created_at?->format('F j Y h:i:s A'),
+                    'created_at' => DateTimePresenter::format($document->created_at, 'F j Y h:i:s A'),
                     'created_at_timestamp' => $document->created_at?->timestamp,
                     'remarks' => $document->remarks ?? '',
                     'document_type_id' => $document->document_type_id,
@@ -648,9 +649,9 @@ class DocumentController extends Controller
                             (filled($latest->creator?->firstname) ? mb_substr(trim($latest->creator->firstname), 0, 1).'. ' : '').
                             ($latest->creator?->lastname ?? '')
                         ) ?: $latest->creator?->name,
-                        'created_at' => $latest->created_at?->format('F j Y h:i:s A'),
+                        'created_at' => DateTimePresenter::format($latest->created_at, 'F j Y h:i:s A'),
                     ] : null,
-                    'created_at' => $document->created_at?->format('F j Y h:i:s A'),
+                    'created_at' => DateTimePresenter::format($document->created_at, 'F j Y h:i:s A'),
                     'created_at_timestamp' => $document->created_at?->timestamp,
                     'remarks' => $document->remarks ?? '',
                     'document_type_id' => $document->document_type_id,
@@ -676,9 +677,9 @@ class DocumentController extends Controller
                         'decision' => $step->decision,
                         'remarks' => $step->decision_remarks,
                         'received_by' => $step->receiver?->name,
-                        'received_at' => $step->received_at?->format('F j Y h:i:s A'),
+                        'received_at' => DateTimePresenter::format($step->received_at, 'F j Y h:i:s A'),
                         'decided_by' => $step->decider?->name,
-                        'decided_at' => $step->decided_at?->format('F j Y h:i:s A'),
+                        'decided_at' => DateTimePresenter::format($step->decided_at, 'F j Y h:i:s A'),
                     ])->values() ?? [],
                     'route_tree' => $this->serializeRouteTree($document),
                     'can_approve' => $this->canApproveDocument($document, $user),
@@ -2229,9 +2230,9 @@ class DocumentController extends Controller
                             'decision' => $step->decision,
                             'remarks' => $step->decision_remarks,
                             'received_by' => $step->receiver?->name,
-                            'received_at' => $step->received_at?->format('F j Y h:i:s A'),
+                            'received_at' => DateTimePresenter::format($step->received_at, 'F j Y h:i:s A'),
                             'decided_by' => $step->decider?->name,
-                            'decided_at' => $step->decided_at?->format('F j Y h:i:s A'),
+                            'decided_at' => DateTimePresenter::format($step->decided_at, 'F j Y h:i:s A'),
                         ];
                     }
 
@@ -2281,7 +2282,7 @@ class DocumentController extends Controller
             $parts[] = 'by '.$trail->creator->name;
         }
         if ($trail->created_at) {
-            $parts[] = $trail->created_at->format('M j, Y g:i A');
+            $parts[] = DateTimePresenter::format($trail->created_at, 'M j, Y g:i A');
         }
 
         return implode(' · ', $parts);
@@ -2398,10 +2399,10 @@ class DocumentController extends Controller
         $username = auth()->user()?->username ?: 'unknown-user';
         $directory = implode('/', [
             'documents',
-            now()->format('m-Y'),
+            DateTimePresenter::format(now(), 'm-Y'),
             Str::slug($officeName) ?: 'office',
             Str::slug($username) ?: 'user',
-            now()->format('Ymd_His'),
+            DateTimePresenter::format(now(), 'Ymd_His'),
         ]);
         $path = $file->store($directory, 'document_private');
         if (! is_string($path) || $path === '') {

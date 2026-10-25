@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { formatPhilippineDateTime } from '@/lib/dateTime';
 import { Head, Link, router } from '@inertiajs/react';
 import { LoaderCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -212,7 +213,7 @@ export default function AuditTrailIndex({ trail = [], pagination, canFilterBurea
                                             </dl>}
                                         </div>
                                         <div className="shrink-0 text-xs text-slate-400 sm:whitespace-nowrap">
-                                            {entry.created_at ? new Date(entry.created_at).toLocaleString() : 'Date not recorded'}
+                                            {formatPhilippineDateTime(entry.created_at, 'Date not recorded')}
                                         </div>
                                     </div>
                                 </div>

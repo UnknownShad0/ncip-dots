@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\URL;
 use App\Services\AuditTrailWriter;
 use App\Models\Office;
 use App\Services\DocumentAccess;
+use App\Support\DateTimePresenter;
 use Inertia\Inertia;
 
 class ArchiveController extends Controller
@@ -67,8 +68,8 @@ class ArchiveController extends Controller
                 'status' => $document->status ?? 'archived',
                 'remarks' => $document->remarks ?? '',
                 'is_finalized' => (bool) $document->is_finalized,
-                'created_at' => $document->created_at?->format('F j Y h:i:s A'),
-                'archived_at' => $document->archived_at?->toDateTimeString(),
+                'created_at' => DateTimePresenter::format($document->created_at, 'F j Y h:i:s A'),
+                'archived_at' => $document->archived_at?->toISOString(),
                 'can_restore' => $this->canRestore($document),
             ]);
 
@@ -96,7 +97,7 @@ class ArchiveController extends Controller
             ->through(fn (DocumentCreationDraft $draft) => [
                 'id' => $draft->id, 'title' => $draft->title, 'status' => $draft->status,
                 'document_type' => $draft->documentType?->name,
-                'archived_at' => $draft->archived_at?->toDateTimeString(),
+                'archived_at' => $draft->archived_at?->toISOString(),
                 'can_restore' => true,
                 'preview_url' => route('document-creation.preview-submission', $draft),
             ]);

@@ -39,7 +39,7 @@ class DraftsController extends Controller
                 'title' => $draft->title,
                 'status' => $draft->status,
                 'document_type' => $draft->documentType?->name,
-                'created_at' => $draft->created_at?->toDateTimeString(),
+                'created_at' => $draft->created_at?->toISOString(),
             ])->values();
         } else {
             $access = app(DocumentAccess::class);
@@ -79,7 +79,7 @@ class DraftsController extends Controller
                 'status' => 'draft',
                 'document_type' => $document->documentType?->name,
                 'office' => $document->office?->short_name ?: $document->office?->name,
-                'created_at' => $document->created_at?->toDateTimeString(),
+                'created_at' => $document->created_at?->toISOString(),
             ])->values();
         }
 

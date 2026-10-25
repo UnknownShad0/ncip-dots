@@ -121,7 +121,7 @@ class UserAccountController extends Controller
                     'password_setup_pending' => $user->password === null,
                     'is_locked' => (bool) $user->is_locked,
                     'logged_in_status' => 'N',
-                    'last_login_at' => $user->last_login_at?->toDateTimeString(),
+                    'last_login_at' => $user->last_login_at?->toISOString(),
                     'source' => 'New DB',
                 ];
             });

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Document;
 use App\Models\DocumentCreationDraft;
 use App\Services\DocumentAccess;
+use App\Support\DateTimePresenter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -71,7 +72,7 @@ class DocumentWorkflowController extends Controller
                 'official_document_id' => $draft->official_document_id,
                 'can_edit' => $draft->status !== 'revision_requested',
                 'preview_url' => route('document-creation.preview-submission', $draft),
-                'updated_at' => $draft->updated_at?->format('M j, Y g:i A'),
+                'updated_at' => DateTimePresenter::format($draft->updated_at, 'M j, Y g:i A'),
             ])->values(),
             'readyPagination' => $this->pagination($ready),
             'mySubmissions' => $this->mapDocuments($submissions),
@@ -117,7 +118,7 @@ class DocumentWorkflowController extends Controller
             'approval_status' => $document->approval_status,
             'signature_status' => $document->signature_status,
             'office' => $document->latestTrail?->toOffice?->short_name ?: $document->latestTrail?->toOffice?->name,
-            'updated_at' => $document->updated_at?->format('M j, Y g:i A'),
+            'updated_at' => DateTimePresenter::format($document->updated_at, 'M j, Y g:i A'),
         ])->values()->all();
     }
 

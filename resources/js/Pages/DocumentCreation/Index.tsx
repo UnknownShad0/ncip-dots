@@ -20,6 +20,7 @@ import {
 import DocumentPaper, { type DocumentTemplate } from "@/Components/PaginatedDocument";
 import DocumentPdfPreview from "@/Components/DocumentPdfPreview";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
+import { formatPhilippineDateTime } from "@/lib/dateTime";
 import { Head, router } from "@inertiajs/react";
 import { FormEvent, useEffect, useState } from "react";
 
@@ -339,7 +340,7 @@ function DraftListSection({
                                     {draft.events.map((event, index) => (
                                         <li key={index} className="text-xs text-muted">
                                             {event.event} · {event.user?.short_name || event.user?.name || "Former user"}
-                                            {event.user?.office_short_name ? ` · ${event.user.office_short_name}` : ""} · {new Date(event.created_at).toLocaleString()}
+                                            {event.user?.office_short_name ? ` · ${event.user.office_short_name}` : ""} · {formatPhilippineDateTime(event.created_at)}
                                             {event.remarks ? ` — ${event.remarks}` : ""}
                                         </li>
                                     ))}

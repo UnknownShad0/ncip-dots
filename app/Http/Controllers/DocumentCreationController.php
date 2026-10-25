@@ -20,6 +20,7 @@ use App\Services\DocumentTemplates;
 use App\Services\EmailNotificationMailer;
 use App\Services\RichDocumentContent;
 use App\Services\TrackingNumberPdfStamper;
+use App\Support\DateTimePresenter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -580,7 +581,7 @@ class DocumentCreationController extends Controller
             $office = $request->user()->office;
             $officeName = trim((string) $office?->short_name) ?: ($office?->name ?: 'DOTS');
             $prefix = trim(preg_replace('/-+/', '-', preg_replace('/\s+/', '-', trim($officeName))), '-');
-            $document->update(['tracking_number' => $prefix.'-'.now()->format('y-m-d').'-'.str_pad((string) $document->id, 4, '0', STR_PAD_LEFT)]);
+            $document->update(['tracking_number' => $prefix.'-'.DateTimePresenter::format(now(), 'y-m-d').'-'.str_pad((string) $document->id, 4, '0', STR_PAD_LEFT)]);
             $document->trails()->create(['from_office_id' => $officeId, 'created_by' => $request->user()->id, 'status' => 'pending', 'action' => 'Registered from Document Creation']);
             $draft->update(['official_document_id' => $document->id, 'status' => 'registered']);
             $draft->events()->create(['user_id' => $request->user()->id, 'event' => 'Registered in DOTS', 'metadata' => ['document_id' => $document->id]]);

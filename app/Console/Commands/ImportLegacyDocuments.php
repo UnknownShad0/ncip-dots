@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\DateTimePresenter;
 use App\Services\AuditTrailWriter;
 use App\Services\LegacyDocumentImport;
 use Illuminate\Console\Command;
@@ -70,7 +71,7 @@ class ImportLegacyDocuments extends Command
         foreach ($report['issues'] as $reason => $issue) {
             $this->warn($reason.': '.$issue['count']);
         }
-        $path = 'legacy-import-reports/documents-'.now()->format('Ymd-His-u').'.json';
+        $path = 'legacy-import-reports/documents-'.DateTimePresenter::format(now(), 'Ymd-His-u').'.json';
         try {
             if (! Storage::disk('local')->put($path, json_encode($report, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR))) {
                 throw new \RuntimeException('Report could not be saved.');

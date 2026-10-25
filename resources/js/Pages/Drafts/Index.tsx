@@ -1,5 +1,6 @@
 import DocumentLifecycleAction from "@/Components/DocumentLifecycleAction";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
+import { formatPhilippineDate } from "@/lib/dateTime";
 import { Head, Link, router } from "@inertiajs/react";
 import { FileText, Pencil, Search } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
@@ -137,7 +138,7 @@ export default function Index({
                                             {draft.document_type && <span>{draft.document_type}</span>}
                                             {draft.tracking_number && <span>Tracking no. {draft.tracking_number}</span>}
                                             {draft.office && <span>{draft.office}</span>}
-                                            {draft.created_at && <time dateTime={draft.created_at}>{new Date(draft.created_at).toLocaleDateString()}</time>}
+                                            {draft.created_at && <time dateTime={draft.created_at}>{formatPhilippineDate(draft.created_at)}</time>}
                                         </div>
                                         <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
                                             Draft

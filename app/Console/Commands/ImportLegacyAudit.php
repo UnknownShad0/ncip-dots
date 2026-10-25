@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\DateTimePresenter;
 use App\Services\AuditTrailWriter;
 use App\Services\LegacyAuditImport;
 use Illuminate\Console\Command;
@@ -74,7 +75,7 @@ class ImportLegacyAudit extends Command
         }
         $this->info($report['source'].' → '.$report['target']);
         $this->table(['Total source', 'New', 'Existing', 'New without actor', 'New without date'], [[$report['total'], $report['new'], $report['existing'], $report['without_actor'], $report['missing_date']]]);
-        $path = 'legacy-import-reports/audit-'.now()->format('Ymd-His-u').'.json';
+        $path = 'legacy-import-reports/audit-'.DateTimePresenter::format(now(), 'Ymd-His-u').'.json';
         try {
             if (! Storage::disk('local')->put($path, json_encode($report, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR))) {
                 throw new \RuntimeException;
