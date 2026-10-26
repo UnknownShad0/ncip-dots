@@ -12,7 +12,6 @@ use App\Services\QrDocumentAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -170,27 +169,14 @@ class QrDocumentWorkflowController extends Controller
     public function decide(Request $request, string $trackingNumber)
     {
         $document = $this->scopedDocument($request, $trackingNumber);
-        if ($request->input('decision') === 'approved' && $document->signature_status === 'needs_signature') {
-            throw ValidationException::withMessages([
-                'decision' => 'Upload the wet-signed PDF before approving, or complete the future iPluma signing flow.',
-            ]);
-        }
-
-        $step = $request->attributes->get('qr_route_step');
-        $response = app(DocumentController::class)->decideApproval($request, $document->id);
-
-        if ($request->input('decision') === 'approved') {
-            $sourceFile = $document->files()->whereIn('type', ['original', 'version'])->latest('id')->first();
-            $step?->update(['approved_document_file_id' => $sourceFile?->id]);
-        }
-
-        return $response;
+        return app(DocumentController::class)->decideApproval($request, $document->id);
     }
 
     public function uploadWetSignedAndApprove(Request $request, string $trackingNumber)
     {
         $validated = $request->validate([
             'signed_file' => ['required', 'file', 'mimes:pdf', 'max:102400'],
+            'source_document_file_id' => ['required', 'integer'],
             'remarks' => ['nullable', 'string', 'max:4000'],
         ]);
         $document = $this->scopedDocument($request, $trackingNumber);
@@ -198,53 +184,15 @@ class QrDocumentWorkflowController extends Controller
         $step = $request->attributes->get('qr_route_step');
 
         abort_unless(app(QrDocumentAccess::class)->canApprove($document, $user, $step), 403);
-        abort_unless($document->signature_status === 'needs_signature', 422, 'This document does not require a signed PDF.');
+        abort_unless($step?->signature_required, 422, 'This office step does not require a signed PDF.');
 
-        $upload = $validated['signed_file'];
-        $path = $upload->storeAs(
-            'documents/'.$document->id.'/signed',
-            Str::uuid().'.pdf',
-            'document_private',
-        );
-        $sourceFile = $document->files()->whereIn('type', ['original', 'version'])->latest('id')->first();
-        $signedFile = null;
+        $request->merge([
+            'decision' => 'approved',
+            'remarks' => $validated['remarks'] ?? null,
+            'source_document_file_id' => $validated['source_document_file_id'],
+        ]);
 
-        try {
-            $signedFile = $document->files()->create([
-                'source_document_file_id' => $sourceFile?->id,
-                'route_step_id' => $step->id,
-                'type' => 'signed',
-                'signature_method' => 'wet_ink',
-                'file_name' => basename($path),
-                'original_name' => $upload->getClientOriginalName(),
-                'file_path' => $path,
-                'mime_type' => 'application/pdf',
-                'size_bytes' => $upload->getSize(),
-                'sha256' => hash_file('sha256', Storage::disk('document_private')->path($path)),
-                'uploaded_by' => $user->id,
-            ]);
-
-            $request->merge(['decision' => 'approved', 'remarks' => $validated['remarks'] ?? null]);
-            $response = app(DocumentController::class)->decideApproval($request, $document->id);
-            $step->update([
-                'approved_document_file_id' => $signedFile->id,
-                'signed_document_file_id' => $signedFile->id,
-            ]);
-            $document->update(['signature_status' => 'signed']);
-            app(AuditTrailWriter::class)->record('document.wet_signed_pdf_uploaded', $document, [
-                'tracking_number' => $document->tracking_number,
-                'route_step_id' => $step->id,
-                'source_document_file_id' => $sourceFile?->id,
-                'signed_document_file_id' => $signedFile->id,
-                'sha256' => $signedFile->sha256,
-            ], actor: $user);
-
-            return $response;
-        } catch (\Throwable $exception) {
-            $signedFile?->delete();
-            Storage::disk('document_private')->delete($path);
-            throw $exception;
-        }
+        return app(DocumentController::class)->decideApproval($request, $document->id);
     }
 
     public function forward(Request $request, string $trackingNumber)

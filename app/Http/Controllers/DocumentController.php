@@ -60,7 +60,7 @@ class DocumentController extends Controller
                 'latestTrail.creator', 'latestTrail.fromOffice', 'latestTrail.toOffice',
                 'trails.creator', 'trails.fromOffice', 'trails.toOffice', 'trails.holderOffice', 'trails.legacyReceivingOffice',
                 'latestRoute.fromOffice', 'latestRoute.steps.office', 'latestRoute.steps.receiver', 'latestRoute.steps.decider',
-                'routes.fromOffice', 'routes.steps.office', 'routes.steps.receiver', 'routes.steps.decider',
+                'routes.fromOffice', 'routes.steps.office', 'routes.steps.receiver', 'routes.steps.decider', 'routes.steps.signedFile.uploader', 'routes.steps.signer',
             ])
             ->findOrFail($id);
         $latestFile = $document->files->sortByDesc('id')->first();
@@ -78,6 +78,8 @@ class DocumentController extends Controller
             'origin_type' => $document->origin_type ?? '',
             'approval_status' => $document->approval_status ?? 'not_required',
             'signature_status' => $document->signature_status ?? 'not_required',
+            'active_step_signature_required' => (bool) ($activeRouteStep[1]->signature_required ?? false),
+            'active_source_document_file_id' => $document->files()->whereIn('type', ['original', 'version', 'signed'])->latest('id')->value('id'),
             'can_approve' => $this->canApproveDocument($document, $user),
             'can_receive' => $document->routes->isNotEmpty()
                 ? $this->canReceiveRouteStep($document, $user)
@@ -100,6 +102,11 @@ class DocumentController extends Controller
                     'received_at' => DateTimePresenter::format($step->received_at, 'F j Y h:i:s A'),
                     'decided_by' => $step->decider?->name,
                     'decided_at' => DateTimePresenter::format($step->decided_at, 'F j Y h:i:s A'),
+                    'signature_required' => (bool) $step->signature_required,
+                    'signature_status' => $step->signature_status,
+                    'signed_by' => $step->signer?->name,
+                    'signed_at' => DateTimePresenter::format($step->signed_at, 'F j Y h:i:s A'),
+                    'signature_method' => $step->signedFile?->signature_method,
                 ])->values(),
             ] : null,
             'route_mode' => $rootRoute?->mode,
@@ -767,7 +774,6 @@ class DocumentController extends Controller
             'origin_type' => ['nullable', 'string', 'max:100'],
             'urgent' => ['boolean'],
             'notify_by_email' => ['boolean'],
-            'signature_required' => ['sometimes', 'boolean'],
             'is_finalized' => ['required', 'accepted'],
             'file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:'.self::MAX_DOCUMENT_UPLOAD_KB],
             'supporting_files' => ['sometimes', 'array', 'max:'.self::MAX_SUPPORTING_FILES],
@@ -793,10 +799,6 @@ class DocumentController extends Controller
         }
         if ($validated['is_finalized'] && ! $approvedDraft && ! $request->hasFile('file')) {
             throw ValidationException::withMessages(['file' => 'Attach a source file before creating the routing record.']);
-        }
-        if (($validated['signature_required'] ?? false) && ! $approvedDraft
-            && (! $request->hasFile('file') || strtolower($request->file('file')->getClientOriginalExtension()) !== 'pdf')) {
-            throw ValidationException::withMessages(['signature_required' => 'Only an attached PDF can be marked as needing a signature.']);
         }
         $validated = $this->normalizeActionTypeDetails($validated);
         $validated = $this->normalizeDocumentTypeAndPurpose($validated);
@@ -825,7 +827,7 @@ class DocumentController extends Controller
                     // Approval starts only after the sender selects receiving offices
                     // in the Forward dialog. A new routing record has no approver yet.
                     'approval_status' => 'not_required',
-                    'signature_status' => $validated['is_finalized'] && ($validated['signature_required'] ?? false) ? 'needs_signature' : 'not_required',
+                    'signature_status' => 'not_required',
                     'remarks' => $validated['remarks'] ?? null,
                     'document_type_id' => $validated['document_type_id'] ?? null,
                     'action_type_id' => $validated['action_type_id'] ?? null,
@@ -933,11 +935,15 @@ class DocumentController extends Controller
         $validated = $request->validate([
             'decision' => ['required', 'in:approved,changes_requested,rejected'],
             'remarks' => ['nullable', 'string', 'max:4000'],
+            'signed_file' => ['nullable', 'file', 'mimes:pdf', 'max:'.self::MAX_DOCUMENT_UPLOAD_KB],
+            'source_document_file_id' => ['nullable', 'integer'],
         ]);
         $access = app(DocumentAccess::class);
         $document = $access->scope(Document::query(), $user)->findOrFail($id);
 
-        DB::transaction(function () use ($document, $user, $validated, $access) {
+        $storedSignedPath = null;
+        try {
+        DB::transaction(function () use ($document, $user, $validated, $access, $request, &$storedSignedPath) {
             $document = Document::query()->with(['latestTrail', 'latestRoute'])->lockForUpdate()->findOrFail($document->id);
             $routes = $document->routes()
                 ->with(['steps.office', 'steps.receiver', 'steps.decider', 'parentStep.office'])
@@ -954,6 +960,63 @@ class DocumentController extends Controller
                 [$route, $step] = $activeRouteStep;
 
                 $decision = $validated['decision'];
+                $signedUpload = $request->file('signed_file');
+                if ($step->signature_required && $decision === 'approved') {
+                    if ($route->mode !== 'sequential') {
+                        throw ValidationException::withMessages(['decision' => 'Signature-required routes must use sequential approval.']);
+                    }
+                    if (! $signedUpload) {
+                        throw ValidationException::withMessages(['signed_file' => 'Upload this office’s signed PDF to approve the step.']);
+                    }
+                    $sourceFile = $document->files()->whereIn('type', ['original', 'version', 'signed'])->latest('id')->first();
+                    if (! $sourceFile || ! $sourceFile->isPdf() || (int) ($validated['source_document_file_id'] ?? 0) !== (int) $sourceFile->id) {
+                        throw ValidationException::withMessages(['source_document_file_id' => 'The document version changed. Reload the document and sign the latest PDF.']);
+                    }
+                    $storedPathForSignature = $signedUpload->storeAs('documents/'.$document->id.'/signed', Str::uuid().'.pdf', 'document_private');
+                    if (! $storedPathForSignature) {
+                        throw ValidationException::withMessages(['signed_file' => 'The signed PDF could not be stored. Try uploading it again.']);
+                    }
+                    $storedSignedPath = $storedPathForSignature;
+                    $sha256 = hash_file('sha256', Storage::disk('document_private')->path($storedSignedPath));
+                    if (! is_string($sha256)) {
+                        throw ValidationException::withMessages(['signed_file' => 'The signed PDF could not be verified. Try uploading it again.']);
+                    }
+                    $signedFile = $document->files()->create([
+                        'source_document_file_id' => $sourceFile->id,
+                        'route_step_id' => $step->id,
+                        'type' => 'signed',
+                        'signature_method' => 'wet_ink',
+                        'file_name' => basename($storedSignedPath),
+                        'original_name' => $signedUpload->getClientOriginalName(),
+                        'file_path' => $storedSignedPath,
+                        'mime_type' => 'application/pdf',
+                        'size_bytes' => $signedUpload->getSize(),
+                        'sha256' => $sha256,
+                        'uploaded_by' => $user->id,
+                    ]);
+                    $step->update([
+                        'signature_status' => 'signed',
+                        'signed_at' => now(),
+                        'signed_by' => $user->id,
+                        'signed_document_file_id' => $signedFile->id,
+                        'approved_document_file_id' => $signedFile->id,
+                    ]);
+                    app(AuditTrailWriter::class)->record('document.wet_signed_pdf_uploaded', $document, [
+                        'tracking_number' => $document->tracking_number,
+                        'document_route_id' => $route->id,
+                        'route_step_id' => $step->id,
+                        'office_id' => $step->office_id,
+                        'signed_by' => $user->id,
+                        'method' => 'wet_ink',
+                        'source_document_file_id' => $sourceFile->id,
+                        'signed_document_file_id' => $signedFile->id,
+                        'sha256' => $signedFile->sha256,
+                    ], actor: $user);
+                } elseif ($step->signature_required && $decision !== 'approved' && $signedUpload) {
+                    throw ValidationException::withMessages(['signed_file' => 'A signed PDF is only accepted with an approval decision.']);
+                } elseif (! $step->signature_required && $signedUpload) {
+                    throw ValidationException::withMessages(['signed_file' => 'This office step does not require a signature.']);
+                }
                 $action = match ($decision) {
                     'approved' => 'Approved',
                     'changes_requested' => 'Changes requested',
@@ -974,6 +1037,9 @@ class DocumentController extends Controller
                     'decision_trail_id' => $trail->id,
                     'decided_by' => $user->id,
                     'decided_at' => now(),
+                    'approved_document_file_id' => $step->signature_required
+                        ? $step->signed_document_file_id
+                        : $document->files()->whereIn('type', ['original', 'version', 'signed'])->latest('id')->value('id'),
                 ]);
 
                 if ($decision !== 'approved') {
@@ -1007,6 +1073,9 @@ class DocumentController extends Controller
                         }
                     }
                 } else {
+                    if ($step->signature_required && $step->signature_status !== 'signed') {
+                        throw ValidationException::withMessages(['signed_file' => 'A signed PDF is required before this office can approve.']);
+                    }
                     $route->load('steps');
                     $nextStep = $route->mode === 'sequential'
                         ? $route->steps
@@ -1067,6 +1136,8 @@ class DocumentController extends Controller
                     }
                 }
 
+                $this->refreshDocumentSignatureStatus($document);
+
                 $step->loadMissing('office');
                 if ($step->office) {
                     $this->notifyRouteCreator($document, $route, $step->office, $decision, $validated['remarks'] ?? null);
@@ -1105,6 +1176,9 @@ class DocumentController extends Controller
                 return;
             }
 
+            if (($document->signature_status ?? 'not_required') !== 'not_required' && $validated['decision'] === 'approved') {
+                throw ValidationException::withMessages(['decision' => 'This document requires an active office signature step before it can be approved.']);
+            }
             abort_unless($this->canApproveDocument($document, $user), 403, 'Only an authorized approver at the current office can decide this submission.');
             $officeId = $access->currentOfficeId($user);
             $decision = $validated['decision'];
@@ -1151,6 +1225,12 @@ class DocumentController extends Controller
                 'remarks' => $validated['remarks'] ?? null,
             ], actor: $user);
         });
+        } catch (\Throwable $exception) {
+            if ($storedSignedPath !== null) {
+                Storage::disk('document_private')->delete($storedSignedPath);
+            }
+            throw $exception;
+        }
 
         return back()->with('success', 'Approval decision recorded in the routing history.');
     }
@@ -1232,6 +1312,8 @@ class DocumentController extends Controller
             'routing_mode' => ['nullable', 'in:sequential,parallel'],
             'to_office_ids' => ['required_without:to_office_id', 'array', 'min:1', 'max:30'],
             'to_office_ids.*' => ['required', 'integer', 'distinct', 'exists:offices,id'],
+            'signature_required_office_ids' => ['sometimes', 'array', 'max:30'],
+            'signature_required_office_ids.*' => ['required', 'integer', 'distinct', 'exists:offices,id'],
             'to_office_id' => ['nullable', 'integer', 'exists:offices,id'],
             'remarks' => ['nullable', 'string', 'max:250'],
             'document_source' => ['nullable', 'in:current,upload'],
@@ -1242,12 +1324,28 @@ class DocumentController extends Controller
         $validated['routing_mode'] = $validated['routing_mode'] ?? 'sequential';
         $officeIds = array_values(array_unique(array_map('intval', $validated['to_office_ids'] ?? [$validated['to_office_id'] ?? 0])));
         $officeIds = array_values(array_filter($officeIds, fn (int $officeId) => $officeId > 0));
+        $signatureOfficeIds = array_values(array_unique(array_map('intval', $validated['signature_required_office_ids'] ?? [])));
         if ($officeIds === []) {
             throw ValidationException::withMessages(['to_office_ids' => 'Choose at least one receiving office.']);
+        }
+        if (array_diff($signatureOfficeIds, $officeIds) !== []) {
+            throw ValidationException::withMessages(['signature_required_office_ids' => 'Only selected receiving offices can require a signature.']);
         }
         $document = app(DocumentAccess::class)->scope(Document::query(), $request->user())
             ->with(['latestTrail', 'latestRoute'])
             ->findOrFail($id);
+        if ($signatureOfficeIds !== [] && $validated['routing_mode'] !== 'sequential') {
+            throw ValidationException::withMessages(['routing_mode' => 'Routes with signature-required offices must be sequential so each office signs the latest PDF.']);
+        }
+        if ($signatureOfficeIds !== [] && $request->hasFile('file') && ! preg_match('/\.pdf$/i', $request->file('file')->getClientOriginalName())) {
+            throw ValidationException::withMessages(['file' => 'A route with signature-required offices can only be forwarded with a PDF version.']);
+        }
+        if ($signatureOfficeIds !== [] && ! $request->hasFile('file')) {
+            $latestPdfSource = $document->files()->whereIn('type', ['original', 'version', 'signed'])->latest('id')->first();
+            if (! $latestPdfSource?->isPdf()) {
+                throw ValidationException::withMessages(['signature_required_office_ids' => 'Signature-required offices need a current PDF document version. Upload a PDF version or leave signatures unchecked.']);
+            }
+        }
         abort_unless($this->canForwardDocument($document, $request->user()), 403, 'This document is not available for forwarding.');
         $parentStep = $this->authorizeCurrentHolder($document, allowBranch: true);
         $officeId = app(DocumentAccess::class)->currentOfficeId($request->user());
@@ -1275,11 +1373,16 @@ class DocumentController extends Controller
         }
         $sourceOfficeName = Office::query()->whereKey($officeId)->value('name');
 
-        $hasReplacementFile = $request->hasFile('file');
         $storedPath = null;
         try {
-            $trail = DB::transaction(function () use ($request, $document, $validated, $officeIds, $targetOffices, $officeId, $sourceOfficeName, $hasReplacementFile, &$storedPath) {
+            $trail = DB::transaction(function () use ($request, $document, $validated, $officeIds, $signatureOfficeIds, $targetOffices, $officeId, $sourceOfficeName, &$storedPath) {
                 $lockedDocument = Document::query()->with(['latestTrail', 'latestRoute'])->lockForUpdate()->findOrFail($document->id);
+                if ($signatureOfficeIds !== [] && $validated['routing_mode'] !== 'sequential') {
+                    throw ValidationException::withMessages(['routing_mode' => 'Routes with signature-required offices must be sequential so each office signs the latest PDF.']);
+                }
+                if ($signatureOfficeIds !== [] && $request->hasFile('file') && ! preg_match('/\.pdf$/i', $request->file('file')->getClientOriginalName())) {
+                    throw ValidationException::withMessages(['file' => 'A route with signature-required offices can only be forwarded with a PDF version.']);
+                }
                 abort_unless($this->canForwardDocument($lockedDocument, $request->user()), 403, 'This document is not available for forwarding.');
                 $parentStep = $this->authorizeCurrentHolder($lockedDocument, allowBranch: true);
                 if ($parentStep && array_intersect($officeIds, $this->branchAncestorOfficeIds($parentStep)) !== []) {
@@ -1307,6 +1410,8 @@ class DocumentController extends Controller
                         'office_id' => $targetOfficeId,
                         'position' => $position + 1,
                         'status' => $isImmediatelyActive ? 'available' : 'waiting',
+                        'signature_required' => in_array($targetOfficeId, $signatureOfficeIds, true),
+                        'signature_status' => in_array($targetOfficeId, $signatureOfficeIds, true) ? 'needs_signature' : 'not_required',
                     ]);
                     if (! $isImmediatelyActive) {
                         continue;
@@ -1332,10 +1437,8 @@ class DocumentController extends Controller
                 $lockedDocument->update([
                     'status' => 'pending',
                     'approval_status' => 'awaiting_approval',
-                    ...($hasReplacementFile ? [
-                        'signature_status' => ($lockedDocument->signature_status ?? 'not_required') === 'not_required' ? 'not_required' : 'needs_signature',
-                    ] : []),
                 ]);
+                $this->refreshDocumentSignatureStatus($lockedDocument);
                 if ($file = $request->file('file')) {
                     $storedPath = $this->storeRoutedDocumentFile($lockedDocument, $file, 'version', $firstDispatchTrail);
                 }
@@ -1349,6 +1452,7 @@ class DocumentController extends Controller
                     'to_offices' => collect($officeIds)->map(fn ($targetId) => [
                         'id' => $targetId,
                         'name' => $targetOffices->get($targetId)?->name,
+                        'signature_required' => in_array($targetId, $signatureOfficeIds, true),
                     ])->all(),
                     'action_type' => $validated['action_type_name'],
                 ]);
@@ -1370,14 +1474,26 @@ class DocumentController extends Controller
         $validated = $request->validate([
             'office_ids' => ['present', 'array', 'max:30'],
             'office_ids.*' => ['required', 'integer', 'distinct', 'exists:offices,id'],
+            'signature_required_office_ids' => ['sometimes', 'array', 'max:30'],
+            'signature_required_office_ids.*' => ['required', 'integer', 'distinct', 'exists:offices,id'],
             'reason' => ['required', 'string', 'max:1000'],
             'revision' => ['required', 'string', 'size:64'],
         ]);
         $user = $request->user();
         $accessibleDocument = app(DocumentAccess::class)->scope(Document::query(), $user)->findOrFail($document);
         $officeIds = array_values(array_map('intval', $validated['office_ids']));
+        $signatureOfficeIds = array_values(array_unique(array_map('intval', $validated['signature_required_office_ids'] ?? [])));
+        if (array_diff($signatureOfficeIds, $officeIds) !== []) {
+            throw ValidationException::withMessages(['signature_required_office_ids' => 'Only selected remaining offices can require a signature.']);
+        }
+        if ($signatureOfficeIds !== []) {
+            $latestPdfSource = $accessibleDocument->files()->whereIn('type', ['original', 'version', 'signed'])->latest('id')->first();
+            if (! $latestPdfSource?->isPdf()) {
+                throw ValidationException::withMessages(['signature_required_office_ids' => 'Signature-required offices need a current PDF document version.']);
+            }
+        }
 
-        DB::transaction(function () use ($accessibleDocument, $route, $user, $officeIds, $validated) {
+        DB::transaction(function () use ($accessibleDocument, $route, $user, $officeIds, $signatureOfficeIds, $validated) {
             $document = Document::query()->lockForUpdate()->findOrFail($accessibleDocument->id);
             $documentRoute = DocumentRoute::query()
                 ->where('document_id', $document->id)
@@ -1388,6 +1504,9 @@ class DocumentController extends Controller
             $documentRoute->load(['steps.office', 'steps.receiver', 'steps.decider']);
 
             abort_unless($this->canEditApprovalRoute($document, $documentRoute, $user), 403, 'You cannot edit this approval route.');
+            if (($signatureOfficeIds !== [] || $documentRoute->steps()->where('signature_required', true)->exists()) && $documentRoute->mode !== 'sequential') {
+                throw ValidationException::withMessages(['route' => 'Signature-required routes must remain sequential.']);
+            }
             if (! hash_equals($this->routeRevisionToken($documentRoute), $validated['revision'])) {
                 throw ValidationException::withMessages([
                     'route' => 'The approval route changed while you were editing it. Reload the document and try again.',
@@ -1401,6 +1520,9 @@ class DocumentController extends Controller
             $lockedOfficeIds = $lockedSteps->pluck('office_id')->map(fn ($id) => (int) $id)->all();
             $currentEditableOfficeIds = $editableSteps->pluck('office_id')->map(fn ($id) => (int) $id)->all();
             $isParallel = $documentRoute->mode === 'parallel';
+            if ($isParallel && $signatureOfficeIds !== []) {
+                throw ValidationException::withMessages(['signature_required_office_ids' => 'Signature-required offices need sequential routing.']);
+            }
             $submittedComparison = $officeIds;
             $currentComparison = $currentEditableOfficeIds;
             if ($isParallel) {
@@ -1408,7 +1530,11 @@ class DocumentController extends Controller
                 sort($currentComparison);
             }
 
-            if ($submittedComparison === $currentComparison) {
+            $submittedSignatureComparison = $signatureOfficeIds;
+            $currentSignatureComparison = $editableSteps->filter(fn (DocumentRouteStep $step) => $step->signature_required)
+                ->pluck('office_id')->map(fn ($id) => (int) $id)->sort()->values()->all();
+            sort($submittedSignatureComparison);
+            if ($submittedComparison === $currentComparison && $submittedSignatureComparison === $currentSignatureComparison) {
                 throw ValidationException::withMessages([
                     'office_ids' => $isParallel
                         ? 'Add or remove at least one unreceived office before saving.'
@@ -1459,6 +1585,7 @@ class DocumentController extends Controller
                 'office' => $step->office?->name,
                 'position' => $step->position,
                 'status' => $step->status,
+                'signature_required' => (bool) $step->signature_required,
             ])->all();
             $newlyAvailableSteps = collect();
 
@@ -1541,12 +1668,21 @@ class DocumentController extends Controller
                     $status = ! $hasActiveLockedStep && $index === 0 ? 'available' : 'waiting';
                     if ($preserveAvailable && $index === 0) {
                         $step = $currentAvailable;
-                        $step->update(['position' => $position, 'status' => $status]);
+                        $signatureRequired = in_array($targetOfficeId, $signatureOfficeIds, true);
+                        $step->update([
+                            'position' => $position,
+                            'status' => $status,
+                            'signature_required' => $signatureRequired,
+                            'signature_status' => $signatureRequired ? 'needs_signature' : 'not_required',
+                        ]);
                     } else {
+                        $signatureRequired = in_array($targetOfficeId, $signatureOfficeIds, true);
                         $step = $documentRoute->steps()->create([
                             'office_id' => $targetOfficeId,
                             'position' => $position,
                             'status' => $status,
+                            'signature_required' => $signatureRequired,
+                            'signature_status' => $signatureRequired ? 'needs_signature' : 'not_required',
                         ]);
                     }
 
@@ -1597,6 +1733,8 @@ class DocumentController extends Controller
                 $document->update(['approval_status' => 'awaiting_approval', 'status' => 'pending']);
             }
 
+            $this->refreshDocumentSignatureStatus($document);
+
             $documentRoute->load('steps.office');
             $after = $documentRoute->steps->sortBy('position')->map(fn (DocumentRouteStep $step) => [
                 'step_id' => $step->id,
@@ -1604,6 +1742,7 @@ class DocumentController extends Controller
                 'office' => $step->office?->name,
                 'position' => $step->position,
                 'status' => $step->status,
+                'signature_required' => (bool) $step->signature_required,
             ])->values()->all();
             app(AuditTrailWriter::class)->record('document.route_updated', $document, [
                 'tracking_number' => $document->tracking_number,
@@ -2194,12 +2333,31 @@ class DocumentController extends Controller
             $step->office_id,
             $step->position,
             $step->status,
+            (int) $step->signature_required,
+            $step->signature_status,
+            $step->signed_at?->format('Y-m-d H:i:s.u') ?? '',
             $step->received_at?->format('Y-m-d H:i:s.u') ?? '',
             $step->decided_at?->format('Y-m-d H:i:s.u') ?? '',
             $step->updated_at?->format('Y-m-d H:i:s.u') ?? '',
         ]))->implode('|');
 
         return hash('sha256', implode('|', [$route->id, $route->mode, $route->status, $stepState]));
+    }
+
+    private function refreshDocumentSignatureStatus(Document $document): void
+    {
+        $requiredSteps = DocumentRouteStep::query()
+            ->whereHas('route', fn ($query) => $query->where('document_id', $document->id)->whereIn('status', ['pending', 'approved']))
+            ->where('signature_required', true)
+            ->get(['signature_status', 'signed_document_file_id']);
+
+        if ($requiredSteps->isEmpty()) {
+            $document->update(['signature_status' => 'not_required']);
+            return;
+        }
+
+        $allSigned = $requiredSteps->every(fn (DocumentRouteStep $step) => $step->signature_status === 'signed' && $step->signed_document_file_id !== null);
+        $document->update(['signature_status' => $allSigned ? 'signed' : 'needs_signature']);
     }
 
     private function serializeRouteTree(Document $document, bool $public = false): array
@@ -2222,6 +2380,11 @@ class DocumentController extends Controller
                         'office' => $step->office?->name,
                         'position' => $step->position,
                         'status' => $step->status,
+                        'signature_required' => (bool) $step->signature_required,
+                        'signature_status' => $step->signature_status,
+                        'signed_at' => DateTimePresenter::format($step->signed_at, 'F j Y h:i:s A'),
+                        'signed_by' => $public ? null : $step->signer?->name,
+                        'signature_method' => $public ? null : $step->signedFile?->signature_method,
                         'child_routes' => $routes->where('parent_step_id', $step->id)->sortBy('id')
                             ->map(fn (DocumentRoute $childRoute) => $serializeRoute($childRoute))->values()->all(),
                     ];

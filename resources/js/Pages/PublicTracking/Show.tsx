@@ -18,6 +18,9 @@ type PublicRouteStep = {
     office?: string | null;
     position: number;
     status: string;
+    signature_required?: boolean;
+    signature_status?: string | null;
+    signed_at?: string | null;
     child_routes?: PublicRoute[];
 };
 
@@ -67,6 +70,8 @@ type QrWorkflow = {
     wet_signed_url?: string | null;
     forward_url?: string | null;
     signature_status?: string | null;
+    step_signature_required?: boolean;
+    source_document_file_id?: number | null;
     ipluma_available: boolean;
     files: WorkflowFile[];
     action_types: WorkflowOption[];
@@ -202,6 +207,7 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
     const [actionTypeId, setActionTypeId] = useState('');
     const [otherAction, setOtherAction] = useState('');
     const [officeIds, setOfficeIds] = useState<string[]>([]);
+    const [signatureOfficeIds, setSignatureOfficeIds] = useState<string[]>([]);
     const [routingMode, setRoutingMode] = useState<'sequential' | 'parallel'>('sequential');
     const [reviewOpen, setReviewOpen] = useState(false);
     const [forwardOpen, setForwardOpen] = useState(false);
@@ -244,9 +250,20 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
 
     const toggleOffice = (officeId: string) => {
         setForwardError('');
+        const removing = officeIds.includes(officeId);
         setOfficeIds((current) => current.includes(officeId)
             ? current.filter((id) => id !== officeId)
             : current.length < 30 ? [...current, officeId] : current);
+        if (removing) setSignatureOfficeIds((current) => current.filter((id) => id !== officeId));
+    };
+
+    const toggleSignatureOffice = (officeId: string) => {
+        const next = signatureOfficeIds.includes(officeId)
+            ? signatureOfficeIds.filter((id) => id !== officeId)
+            : [...signatureOfficeIds, officeId];
+        setSignatureOfficeIds(next);
+        if (next.length > 0) setRoutingMode('sequential');
+        setForwardError('');
     };
 
     const moveOffice = (officeId: string, direction: -1 | 1) => {
@@ -280,12 +297,17 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
             setForwardError('Choose a PDF, JPG, PNG, DOC, or DOCX file.');
             return;
         }
+        if (signatureOfficeIds.length > 0 && forwardFile && !/\.pdf$/i.test(forwardFile.name)) {
+            setForwardError('Signature-required offices can only be forwarded with a PDF version.');
+            return;
+        }
 
         setForwardError('');
         post(workflow.forward_url, {
             action_type_id: actionTypeId,
             other_action: needsOtherAction ? otherAction.trim() : '',
             to_office_ids: officeIds,
+            signature_required_office_ids: signatureOfficeIds,
             routing_mode: routingMode,
             remarks,
             document_source: documentSource,
@@ -381,8 +403,7 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
                             <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:shrink-0 sm:flex-wrap">
                                 {file.view_url && <a href={file.view_url} target="_blank" rel="noreferrer" className="dots-button-secondary w-full px-3 py-2 sm:w-auto"><Eye size={15} /> View</a>}
                                 <a href={file.download_url} className="dots-button-secondary w-full px-3 py-2 sm:w-auto"><Download size={15} /> Download</a>
-                                {file.type === 'original' && file.is_pdf && workflow.signature_status === 'needs_signature' && <button type="button" disabled title="Available after approval." className="dots-button-secondary col-span-2 w-full cursor-not-allowed px-3 py-2 opacity-50 sm:w-auto"><FileSignature size={15} aria-hidden="true" /> Sign with iPluma</button>}
-                                {file.type === 'original' && file.is_pdf && workflow.signature_status === 'sent_to_ipluma' && <span className="col-span-2 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg bg-warning-soft px-3 py-2 text-xs font-medium text-warning sm:w-auto"><FileSignature size={15} aria-hidden="true" /> Sent to iPluma</span>}
+                                {file.type === 'original' && file.is_pdf && workflow.signature_status === 'needs_signature' && <button type="button" disabled title="iPluma signing is not connected yet." className="dots-button-secondary col-span-2 w-full cursor-not-allowed px-3 py-2 opacity-50 sm:w-auto"><FileSignature size={15} aria-hidden="true" /> Sign with iPluma</button>}
                                 {file.type === 'signed' && <span className="col-span-2 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg bg-success-soft px-3 py-2 text-xs font-medium text-success sm:w-auto"><FileSignature size={15} aria-hidden="true" /> Signed</span>}
                             </div>
                         </li>)}
@@ -396,10 +417,11 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
                         <textarea id="qr-approval-remarks" maxLength={4000} rows={3} value={remarks} onChange={(event) => setRemarks(event.target.value)} className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm" placeholder="Add a note for this decision" />
                         {qrErrors.length > 0 && <div role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{qrErrors.map((error, index) => <p key={index}>{error}</p>)}</div>}
 
-                        {workflow.signature_status === 'needs_signature' && <div className="rounded-xl border border-warning/30 bg-warning-soft p-4">
+                        {workflow.step_signature_required && <div className="rounded-xl border border-warning/30 bg-warning-soft p-4">
                             <p className="text-sm font-semibold text-foreground">A signed copy is required</p>
-                            <p className="mt-1 text-xs text-muted">Scan the wet-signed paper as a clear PDF. The upload becomes a new immutable version and approves this step.</p>
-                            <input type="file" accept="application/pdf,.pdf" onChange={(event) => setSignedFile(event.target.files?.[0] ?? null)} className="mt-3 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
+                            <p className="mt-1 text-xs text-muted">Scan the wet-signed paper as a clear PDF. The upload is attached to this office’s step and approves it.</p>
+                            <input type="file" accept="application/pdf,.pdf" onChange={(event) => { const input = event.currentTarget; setSignedFile(input.files?.[0] ?? null); input.value = ''; }} className="mt-3 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
+                            {signedFile && <SelectedWorkflowFile file={signedFile} onRemove={() => setSignedFile(null)} />}
                         </div>}
 
                         <div className="space-y-2">
@@ -407,8 +429,8 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
                                 <button type="button" disabled={busy} onClick={() => post(workflow.decision_url, { decision: 'rejected', remarks }, false, () => setReviewOpen(false))} className="dots-button-secondary w-full text-danger disabled:opacity-50">Reject</button>
                                 <button type="button" disabled={busy} onClick={() => post(workflow.decision_url, { decision: 'changes_requested', remarks }, false, () => setReviewOpen(false))} className="dots-button-secondary w-full px-2 disabled:opacity-50">Request changes</button>
                             </div>
-                            {workflow.signature_status === 'needs_signature'
-                                ? <button type="button" disabled={busy || !signedFile} onClick={() => post(workflow.wet_signed_url, { signed_file: signedFile, remarks }, true, () => setReviewOpen(false))} className="dots-button-primary w-full disabled:opacity-50">Upload signed PDF and approve</button>
+                            {workflow.step_signature_required
+                                ? <button type="button" disabled={busy || !signedFile || !workflow.source_document_file_id} onClick={() => post(workflow.wet_signed_url, { signed_file: signedFile, source_document_file_id: workflow.source_document_file_id, remarks }, true, () => { setReviewOpen(false); setSignedFile(null); })} className="dots-button-primary w-full disabled:opacity-50">Upload signed PDF and approve</button>
                                 : <button type="button" disabled={busy} onClick={() => post(workflow.decision_url, { decision: 'approved', remarks }, false, () => setReviewOpen(false))} className="dots-button-primary w-full disabled:opacity-50">Approve</button>}
                         </div>
                     </div>
@@ -442,8 +464,9 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
                         <div className="sm:col-span-2">
                             <p className="mb-2 text-sm font-medium text-foreground">Approval flow</p>
                             <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Approval flow">
-                                {([['sequential', 'Sequential approval', 'Offices review in order.'], ['parallel', 'Parallel approval', 'All selected offices can review independently.']] as const).map(([mode, label, description]) => <button key={mode} type="button" aria-pressed={routingMode === mode} onClick={() => setRoutingMode(mode)} className={`rounded-xl border p-3 text-left ${routingMode === mode ? 'border-primary bg-secondary' : 'border-border bg-surface'}`}><span className="block text-sm font-semibold text-foreground">{label}</span><span className="mt-1 block text-xs text-muted">{description}</span></button>)}
+                                {([['sequential', 'Sequential approval', 'Offices review in order. Signers receive the latest PDF.'], ['parallel', 'Parallel approval', 'All selected offices can review independently.']] as const).map(([mode, label, description]) => <button key={mode} type="button" disabled={mode === 'parallel' && signatureOfficeIds.length > 0} aria-pressed={routingMode === mode} onClick={() => setRoutingMode(mode)} className={`rounded-xl border p-3 text-left disabled:cursor-not-allowed disabled:opacity-50 ${routingMode === mode ? 'border-primary bg-secondary' : 'border-border bg-surface'}`}><span className="block text-sm font-semibold text-foreground">{label}</span><span className="mt-1 block text-xs text-muted">{description}</span></button>)}
                             </div>
+                            <p className="mt-2 text-xs text-muted">Mark signature requirements on individual offices in the route order. Any required signatures use sequential routing.</p>
                         </div>
 
                         <div className="sm:col-span-2">
@@ -456,10 +479,14 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
                             <div className="grid max-h-52 gap-2 overflow-y-auto rounded-xl border border-border bg-background p-2 sm:grid-cols-2">
                                 {filteredOffices.map((office) => {
                                     const selected = officeIds.includes(String(office.id));
-                                    return <label key={office.id} className={`flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2 text-sm ${officeIds.length >= 30 && !selected ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${selected ? 'border-primary bg-secondary' : 'border-border bg-surface'}`}>
-                                        <input type="checkbox" checked={selected} disabled={officeIds.length >= 30 && !selected} onChange={() => toggleOffice(String(office.id))} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
-                                        <span className="text-foreground">{office.name}</span>
-                                    </label>;
+                                    const officeId = String(office.id);
+                                    return <div key={office.id} className={`flex min-h-11 flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border px-3 py-2 text-sm ${officeIds.length >= 30 && !selected ? 'opacity-50' : ''} ${selected ? 'border-primary bg-secondary' : 'border-border bg-surface'}`}>
+                                        <label className={`flex min-w-0 flex-1 items-center gap-3 ${officeIds.length >= 30 && !selected ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                                            <input type="checkbox" checked={selected} disabled={officeIds.length >= 30 && !selected} onChange={() => toggleOffice(officeId)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
+                                            <span className="text-foreground">{office.name}</span>
+                                        </label>
+                                        {selected && <label className="flex items-center gap-2 text-xs font-medium text-foreground"><input type="checkbox" checked={signatureOfficeIds.includes(officeId)} onChange={() => toggleSignatureOffice(officeId)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />Requires signature</label>}
+                                    </div>;
                                 })}
                                 {filteredOffices.length === 0 && <p className="p-2 text-sm text-muted sm:col-span-2">No offices match your search.</p>}
                             </div>
@@ -468,7 +495,7 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
 
                         {routingMode === 'sequential' && officeIds.length > 0 && <div className="sm:col-span-2">
                             <p className="mb-2 text-sm font-medium text-foreground">Route order</p>
-                            <ol className="space-y-2">{officeIds.map((officeId, index) => <li key={officeId} className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3">
+                            <ol className="space-y-2">{officeIds.map((officeId, index) => <li key={officeId} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface p-3">
                                 <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-white">{index + 1}</span>
                                 <span className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">{workflow.offices.find((office) => String(office.id) === officeId)?.name}</span>
                                 <button type="button" disabled={index === 0} onClick={() => moveOffice(officeId, -1)} aria-label="Move office up" className="rounded-md p-2 text-muted hover:bg-secondary disabled:opacity-30"><ArrowUp size={15} /></button>
@@ -485,7 +512,7 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
                                 <button type="button" aria-pressed={documentSource === 'current'} onClick={() => { setDocumentSource('current'); setForwardFile(null); setForwardError(''); }} className={`rounded-lg border px-3 py-2 text-sm font-medium ${documentSource === 'current' ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>Keep current document</button>
                                 <button type="button" aria-pressed={documentSource === 'upload'} onClick={() => { setDocumentSource('upload'); setForwardError(''); }} className={`rounded-lg border px-3 py-2 text-sm font-medium ${documentSource === 'upload' ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>Upload new version</button>
                             </div>
-                            {documentSource === 'current' ? <p className="text-xs text-muted">Forward with the current document version.</p> : <><label htmlFor="qr-forward-file" className="mb-1 block text-sm font-medium text-foreground">New version</label><input id="qr-forward-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => { setForwardFile(event.target.files?.[0] ?? null); setForwardError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" /><p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Maximum 100 MB.</p></>}
+                            {documentSource === 'current' ? <p className="text-xs text-muted">Forward with the current document version.</p> : <><label htmlFor="qr-forward-file" className="mb-1 block text-sm font-medium text-foreground">New version</label><input id="qr-forward-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => { const input = event.currentTarget; setForwardFile(input.files?.[0] ?? null); input.value = ''; setForwardError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />{forwardFile && <SelectedWorkflowFile file={forwardFile} onRemove={() => { setForwardFile(null); setForwardError(''); }} />}<p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Maximum 100 MB.</p></>}
                         </div>
                     </section>
                     {(forwardError || qrErrors.length > 0) && <div role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{forwardError && <p>{forwardError}</p>}{qrErrors.map((error, index) => <p key={index}>{error}</p>)}</div>}
@@ -495,6 +522,13 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
             </fieldset>
         </form>
     </WorkspaceDialog></>;
+}
+
+function SelectedWorkflowFile({ file, onRemove }: { file: File; onRemove: () => void }) {
+    return <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm">
+        <span className="min-w-0 break-all text-foreground">{file.name}<span className="ml-2 text-xs text-muted">{(file.size / 1024 / 1024).toFixed(1)} MB</span></span>
+        <button type="button" onClick={onRemove} className="shrink-0 rounded-md p-1 text-muted hover:bg-secondary hover:text-foreground" aria-label={`Remove ${file.name}`} title="Remove file"><X size={16} aria-hidden="true" /></button>
+    </div>;
 }
 
 function RouteBranchMap({ document }: { document: TrackedDocument }) {
@@ -515,6 +549,15 @@ function RouteBranchMap({ document }: { document: TrackedDocument }) {
         ...(step.child_routes ?? []).flatMap((child) => collectPublicRouteSteps(child)),
     ]));
     const approvedCount = allSteps.filter((step) => step.status === 'approved').length;
+    const collectRequiredSignatureSteps = (items: PublicRoute[]): PublicRouteStep[] => items.flatMap((route) => {
+        if (!['pending', 'approved'].includes(route.status)) return [];
+        return route.steps.flatMap((step) => [
+            ...(step.signature_required ? [step] : []),
+            ...collectRequiredSignatureSteps(step.child_routes ?? []),
+        ]);
+    });
+    const requiredSignatureSteps = collectRequiredSignatureSteps(routes);
+    const signedStepCount = requiredSignatureSteps.filter((step) => step.signature_status === 'signed').length;
     const routeStatus = routes.some((route) => route.status === 'pending') ? 'pending' : (document.status || document.route_status || 'pending');
     // The earliest route is where the document started.
     const originOffice = document.route_from_office || routes[0]?.from_office || document.office_name || 'Originating office';
@@ -529,7 +572,7 @@ function RouteBranchMap({ document }: { document: TrackedDocument }) {
                 <div>
                     <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-blue-700">Route map</p>
                     <h2 id="office-route-title" className="mt-1 text-lg font-semibold text-slate-900">Office approval route</h2>
-                    <p className="mt-1 text-sm text-slate-600">Every listed office must approve. Forwarded offices branch off to the side, and the parent office still makes its own decision.</p>
+                    <p className="mt-1 text-sm text-slate-600">{requiredSignatureSteps.length > 0 ? 'All listed offices must approve. Offices marked as requiring a signature must sign in order. Forwarded offices branch off to the side, and the parent office still makes its own decision.' : 'Every listed office must approve. Forwarded offices branch off to the side, and the parent office still makes its own decision.'}</p>
                 </div>
                 <span className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${publicStatusClass(routeStatus)}`}>{routeStatus.replaceAll('_', ' ')}</span>
             </div>
@@ -537,6 +580,7 @@ function RouteBranchMap({ document }: { document: TrackedDocument }) {
                 <span><strong className="text-slate-900">{allSteps.length}</strong> {allSteps.length === 1 ? 'office' : 'offices'}</span>
                 <span><strong className="text-emerald-700">{approvedCount}</strong> approved</span>
                 <span><strong className="text-slate-900">{allSteps.length - approvedCount}</strong> remaining</span>
+                {requiredSignatureSteps.length > 0 && <span><strong className="text-blue-700">{signedStepCount} of {requiredSignatureSteps.length}</strong> signatures complete</span>}
             </div>
             {/* Small legend so the lines are easy to read */}
             <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-slate-600" aria-label="Legend">
@@ -647,6 +691,7 @@ function PublicRouteGroup({ route, depth, round, continues = false }: { route: P
                         </div>
                         {step.status === 'waiting_on_branch' && <p className="mt-3 text-xs text-slate-600">This office is waiting for its forwarded offices to finish.</p>}
                         {branchComplete && step.status === 'in_progress' && <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">Forwarded branch complete. This office still needs to approve.</p>}
+                        {step.signature_required && <p className={`mt-3 inline-block max-w-full rounded-lg border px-3 py-2 text-xs font-medium ${step.signature_status === 'signed' ? 'border-emerald-100 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>{step.signature_status === 'signed' ? `Signature recorded${step.signed_at ? ` · ${step.signed_at}` : ''}` : 'Signature required for this office'}</p>}
                     </article>
 
                     {/* Forwarded routes: nested under the parent card so they visibly branch from it */}

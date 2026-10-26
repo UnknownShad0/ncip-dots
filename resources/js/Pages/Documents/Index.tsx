@@ -21,6 +21,11 @@ export type RouteTreeStep = {
     received_at?: string | null;
     decided_by?: string | null;
     decided_at?: string | null;
+    signature_required?: boolean;
+    signature_status?: string | null;
+    signed_by?: string | null;
+    signed_at?: string | null;
+    signature_method?: string | null;
     child_routes?: RouteTree[];
 };
 
@@ -52,6 +57,7 @@ export type DocumentRouteProgressData = {
     tracking_number?: string;
     title?: string;
     status?: string;
+    signature_status?: string | null;
     transactions?: Array<{
         action?: string | null;
         status?: string | null;
@@ -141,6 +147,8 @@ type DocumentItem = {
     can_delete?: boolean;
     approval_status?: string;
     signature_status?: string;
+    active_step_signature_required?: boolean;
+    active_source_document_file_id?: number | null;
     can_approve?: boolean;
     revision_draft_id?: number | null;
     route_mode?: 'sequential' | 'parallel' | null;
@@ -181,7 +189,6 @@ type RoutingForm = {
     other_purpose: string;
     urgent: boolean;
     notify_by_email: boolean;
-    signature_required: boolean;
     file: File | null;
     supporting_files: File[];
 };
@@ -303,15 +310,17 @@ export default function DocumentsIndex({
     const [viewingRow, setViewingRow] = useState<DocumentItem | null>(null);
     const [approvalRemarks, setApprovalRemarks] = useState('');
     const [approvalError, setApprovalError] = useState('');
+    const [approvalSignedFile, setApprovalSignedFile] = useState<File | null>(null);
     const [printDocument, setPrintDocument] = useState<DocumentItem | null>(null);
     const [releasingRow, setReleasingRow] = useState<DocumentItem | null>(null);
-    const [releaseForm, setReleaseForm] = useState({ actionTypeId: '', otherAction: '', routingMode: 'sequential' as 'sequential' | 'parallel', officeIds: [] as string[], remarks: '', source: 'current', approvedDraftId: '', file: null as File | null });
+    const [releaseForm, setReleaseForm] = useState({ actionTypeId: '', otherAction: '', routingMode: 'sequential' as 'sequential' | 'parallel', officeIds: [] as string[], signatureOfficeIds: [] as string[], remarks: '', source: 'current', approvedDraftId: '', file: null as File | null });
     const [releaseError, setReleaseError] = useState('');
     const [releaseOfficeSearch, setReleaseOfficeSearch] = useState('');
     const [draggedOfficeId, setDraggedOfficeId] = useState<string | null>(null);
     const [routeEditingDocument, setRouteEditingDocument] = useState<DocumentItem | null>(null);
-    const [routeEditForm, setRouteEditForm] = useState({ officeIds: [] as string[], reason: '' });
+    const [routeEditForm, setRouteEditForm] = useState({ officeIds: [] as string[], signatureOfficeIds: [] as string[], reason: '' });
     const [routeEditOriginalOfficeIds, setRouteEditOriginalOfficeIds] = useState<string[]>([]);
+    const [routeEditOriginalSignatureOfficeIds, setRouteEditOriginalSignatureOfficeIds] = useState<string[]>([]);
     const [routeEditSearch, setRouteEditSearch] = useState('');
     const [routeEditError, setRouteEditError] = useState('');
     const [draggedRouteEditOfficeId, setDraggedRouteEditOfficeId] = useState<string | null>(null);
@@ -341,7 +350,6 @@ export default function DocumentsIndex({
         other_purpose: '',
         urgent: false,
         notify_by_email: false,
-        signature_required: false,
         file: null as File | null,
         supporting_files: [],
     });
@@ -388,7 +396,6 @@ export default function DocumentsIndex({
             other_purpose: '',
             urgent: false,
             notify_by_email: false,
-            signature_required: false,
             file: null,
             supporting_files: [],
         });
@@ -417,7 +424,6 @@ export default function DocumentsIndex({
             other_purpose: row.other_purpose ?? '',
             urgent: Boolean(row.urgent),
             notify_by_email: Boolean(row.notify_by_email),
-            signature_required: false,
             file: null,
             supporting_files: [],
         });
@@ -453,7 +459,6 @@ export default function DocumentsIndex({
             other_purpose: '',
             urgent: false,
             notify_by_email: false,
-            signature_required: false,
             file: null,
             supporting_files: [],
         });
@@ -483,8 +488,6 @@ export default function DocumentsIndex({
         const supportingFilesError = validateSupportingFiles(form.supporting_files, uploadLimitKb, maxSupportingFiles);
         if (supportingFilesError) { setUploadError(supportingFilesError); return; }
         if (finalize && form.document_source === 'upload' && !form.file) { setUploadError('Attach the source file before creating the routing record.'); return; }
-        if (finalize && form.signature_required && !form.file && form.document_source !== 'approved') { setUploadError('Choose a PDF file before marking it as needing a signature.'); return; }
-        if (form.signature_required && form.file && !/\.pdf$/i.test(form.file.name)) { setUploadError('Only PDF attachments can be marked as needing a signature.'); return; }
 
         const data = new FormData();
         const { file, supporting_files, ...fields } = form;
@@ -523,6 +526,10 @@ export default function DocumentsIndex({
             setReleaseError('Choose a PDF, JPG, PNG, DOC, or DOCX file.');
             return;
         }
+        if (releaseForm.signatureOfficeIds.length > 0 && releaseForm.file && !/\.pdf$/i.test(releaseForm.file.name)) {
+            setReleaseError('Signature-required documents can only be forwarded with a PDF version.');
+            return;
+        }
 
         if (releaseForm.source === 'upload' && !releaseForm.file) {
             setReleaseError('Choose a file to upload.');
@@ -534,6 +541,7 @@ export default function DocumentsIndex({
         data.append('other_action', needsOtherAction ? releaseForm.otherAction.trim() : '');
         data.append('routing_mode', releaseForm.routingMode);
         releaseForm.officeIds.forEach((officeId) => data.append('to_office_ids[]', officeId));
+        releaseForm.signatureOfficeIds.forEach((officeId) => data.append('signature_required_office_ids[]', officeId));
         data.append('remarks', releaseForm.remarks);
         data.append('document_source', releaseForm.source);
         if (releaseForm.source === 'upload' && releaseForm.file) data.append('file', releaseForm.file);
@@ -549,12 +557,12 @@ export default function DocumentsIndex({
             onFinish: () => setProcessing(false),
             onSuccess: () => {
                 setReleasingRow(null);
-                setReleaseForm({ actionTypeId: '', otherAction: '', routingMode: 'sequential', officeIds: [], remarks: '', source: 'current', approvedDraftId: '', file: null });
+                setReleaseForm({ actionTypeId: '', otherAction: '', routingMode: 'sequential', officeIds: [], signatureOfficeIds: [], remarks: '', source: 'current', approvedDraftId: '', file: null });
                 setReleaseError('');
                 setReleaseOfficeSearch('');
                 setCrudAlert({
                     title: 'Document routed',
-                    message: `${documentReference} was sent for ${releaseForm.routingMode} approval to ${selectedOffices.join(', ')}. Every listed office must approve.`,
+                    message: `${documentReference} was sent for ${releaseForm.routingMode} approval to ${selectedOffices.join(', ')}. ${releaseForm.signatureOfficeIds.length > 0 ? `${releaseForm.signatureOfficeIds.length} office${releaseForm.signatureOfficeIds.length === 1 ? '' : 's'} require signing.` : 'No office signature is required.'}`,
                 });
             },
             onError: (errors) => setReleaseError(Object.values(errors).join(' ') || 'Could not route this document.'),
@@ -571,7 +579,24 @@ export default function DocumentsIndex({
             officeIds: current.officeIds.includes(officeId)
                 ? current.officeIds.filter((selected) => selected !== officeId)
                 : [...current.officeIds, officeId],
+            signatureOfficeIds: current.officeIds.includes(officeId)
+                ? current.signatureOfficeIds.filter((selected) => selected !== officeId)
+                : current.signatureOfficeIds,
         }));
+        setReleaseError('');
+    };
+
+    const toggleReleaseSignature = (officeId: string) => {
+        setReleaseForm((current) => {
+            const signatureOfficeIds = current.signatureOfficeIds.includes(officeId)
+                ? current.signatureOfficeIds.filter((selected) => selected !== officeId)
+                : [...current.signatureOfficeIds, officeId];
+            return {
+                ...current,
+                signatureOfficeIds,
+                routingMode: signatureOfficeIds.length ? 'sequential' : current.routingMode,
+            };
+        });
         setReleaseError('');
     };
 
@@ -609,6 +634,7 @@ export default function DocumentsIndex({
     const openDocumentDetails = async (document: DocumentItem) => {
         setApprovalRemarks('');
         setApprovalError('');
+        setApprovalSignedFile(null);
         setViewingRow({ ...document, details_loading: true, details_error: undefined });
         try {
             const details = await fetchDocumentDetails(document);
@@ -622,6 +648,7 @@ export default function DocumentsIndex({
 
     const closeDocumentDetails = () => {
         setViewingRow(null);
+        setApprovalSignedFile(null);
         const url = new URL(window.location.href);
         if (url.searchParams.has('open_document_id')) {
             url.searchParams.delete('open_document_id');
@@ -631,8 +658,9 @@ export default function DocumentsIndex({
 
     const dismissRouteEditor = () => {
         setRouteEditingDocument(null);
-        setRouteEditForm({ officeIds: [], reason: '' });
+        setRouteEditForm({ officeIds: [], signatureOfficeIds: [], reason: '' });
         setRouteEditOriginalOfficeIds([]);
+        setRouteEditOriginalSignatureOfficeIds([]);
         setRouteEditSearch('');
         setRouteEditError('');
         setDraggedRouteEditOfficeId(null);
@@ -645,9 +673,13 @@ export default function DocumentsIndex({
             .filter((step) => ['available', 'waiting'].includes(step.status))
             .sort((left, right) => left.position - right.position)
             .map((step) => String(step.office_id));
+        const signatureOfficeIds = editableRoute.steps
+            .filter((step) => ['available', 'waiting'].includes(step.status) && step.signature_required)
+            .map((step) => String(step.office_id));
         setRouteEditingDocument(document);
-        setRouteEditForm({ officeIds, reason: '' });
+        setRouteEditForm({ officeIds, signatureOfficeIds, reason: '' });
         setRouteEditOriginalOfficeIds(officeIds);
+        setRouteEditOriginalSignatureOfficeIds(signatureOfficeIds);
         setRouteEditSearch('');
         setRouteEditError('');
         closeDocumentDetails();
@@ -656,7 +688,8 @@ export default function DocumentsIndex({
     const closeRouteEditor = () => {
         if (processing) return;
         const dirty = routeEditForm.reason.trim() !== ''
-            || JSON.stringify(routeEditForm.officeIds) !== JSON.stringify(routeEditOriginalOfficeIds);
+            || JSON.stringify(routeEditForm.officeIds) !== JSON.stringify(routeEditOriginalOfficeIds)
+            || JSON.stringify([...routeEditForm.signatureOfficeIds].sort()) !== JSON.stringify([...routeEditOriginalSignatureOfficeIds].sort());
         if (!dirty) {
             dismissRouteEditor();
             return;
@@ -681,6 +714,20 @@ export default function DocumentsIndex({
             officeIds: current.officeIds.includes(officeId)
                 ? current.officeIds.filter((selected) => selected !== officeId)
                 : [...current.officeIds, officeId],
+            signatureOfficeIds: current.officeIds.includes(officeId)
+                ? current.signatureOfficeIds.filter((selected) => selected !== officeId)
+                : current.signatureOfficeIds,
+        }));
+        setRouteEditError('');
+    };
+
+    const toggleRouteEditSignature = (officeId: string) => {
+        if (routeEditingDocument?.editable_route?.mode === 'parallel') return;
+        setRouteEditForm((current) => ({
+            ...current,
+            signatureOfficeIds: current.signatureOfficeIds.includes(officeId)
+                ? current.signatureOfficeIds.filter((selected) => selected !== officeId)
+                : [...current.signatureOfficeIds, officeId],
         }));
         setRouteEditError('');
     };
@@ -721,6 +768,7 @@ export default function DocumentsIndex({
         setRouteEditError('');
         router.put(`/documents/${routeEditingDocument.id}/routes/${editableRoute.id}/remaining-steps`, {
             office_ids: routeEditForm.officeIds.map(Number),
+            signature_required_office_ids: routeEditForm.signatureOfficeIds.map(Number),
             reason: routeEditForm.reason.trim(),
             revision: editableRoute.revision,
         }, {
@@ -744,7 +792,10 @@ export default function DocumentsIndex({
         const isParallel = editableRoute?.mode === 'parallel';
         const currentComparison = isParallel ? [...routeEditForm.officeIds].sort() : routeEditForm.officeIds;
         const originalComparison = isParallel ? [...routeEditOriginalOfficeIds].sort() : routeEditOriginalOfficeIds;
-        if (JSON.stringify(currentComparison) === JSON.stringify(originalComparison)) {
+        const currentSignatureComparison = [...routeEditForm.signatureOfficeIds].sort();
+        const originalSignatureComparison = [...routeEditOriginalSignatureOfficeIds].sort();
+        if (JSON.stringify(currentComparison) === JSON.stringify(originalComparison)
+            && JSON.stringify(currentSignatureComparison) === JSON.stringify(originalSignatureComparison)) {
             setRouteEditError(isParallel ? 'Add or remove at least one unreceived office before saving.' : 'Change at least one remaining office or its position before saving.');
             return;
         }
@@ -780,13 +831,27 @@ export default function DocumentsIndex({
         if (!viewingRow?.id || processing) return;
         setProcessing(true);
         setApprovalError('');
-        router.post(`/documents/${viewingRow.id}/approval`, { decision, remarks: approvalRemarks }, {
+        const data = new FormData();
+        data.append('decision', decision);
+        data.append('remarks', approvalRemarks);
+        if (decision === 'approved' && viewingRow.active_step_signature_required) {
+            if (!approvalSignedFile || !viewingRow.active_source_document_file_id) {
+                setApprovalError('Upload a signed PDF for the latest document version before approving.');
+                setProcessing(false);
+                return;
+            }
+            data.append('signed_file', approvalSignedFile);
+            data.append('source_document_file_id', String(viewingRow.active_source_document_file_id));
+        }
+        router.post(`/documents/${viewingRow.id}/approval`, data, {
+            forceFormData: true,
             preserveScroll: true,
             onFinish: () => setProcessing(false),
             onError: (errors) => setApprovalError(Object.values(errors).join(' ')),
             onSuccess: () => {
                 closeDocumentDetails();
                 setApprovalRemarks('');
+                setApprovalSignedFile(null);
                 router.visit(route('documents.index'), { replace: true });
             },
         });
@@ -802,7 +867,7 @@ export default function DocumentsIndex({
 
     const openRelease = async (document: DocumentItem) => {
         setReleasingRow({ ...document, details_loading: true });
-        setReleaseForm({ actionTypeId: '', otherAction: '', routingMode: 'sequential', officeIds: [], remarks: '', source: 'current', approvedDraftId: '', file: null });
+        setReleaseForm({ actionTypeId: '', otherAction: '', routingMode: 'sequential', officeIds: [], signatureOfficeIds: [], remarks: '', source: 'current', approvedDraftId: '', file: null });
         setReleaseError('');
         setReleaseOfficeSearch('');
         try {
@@ -1200,22 +1265,27 @@ export default function DocumentsIndex({
                             <DocumentReferenceDetails document={viewingRow} loading={viewingRow.details_loading} />
                             {viewingRow.approval_status && viewingRow.approval_status !== 'not_required' && <section className="rounded-xl border border-border bg-background p-4" aria-label="Approval and signing status">
                                 <div className="flex flex-wrap items-start justify-between gap-3">
-                                    <div><h3 className="font-semibold text-foreground">Approval and signing</h3><p className="mt-1 text-sm text-muted">Approval follows the routing record. Signing applies only to the primary PDF; iPluma submission is not connected yet.</p></div>
+                                    <div><h3 className="font-semibold text-foreground">Approval and signing</h3><p className="mt-1 text-sm text-muted">For signing-enabled documents, each office signs and approves its own route step.</p></div>
                                     <div className="flex flex-wrap gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${getStatusClasses(viewingRow.approval_status)}`}>{viewingRow.approval_status.replaceAll('_', ' ')}</span><span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold capitalize text-foreground">{(viewingRow.signature_status || 'not_required').replaceAll('_', ' ')}</span></div>
                                 </div>
                                 {viewingRow.can_approve && <form className="mt-4 space-y-3" onSubmit={(event) => event.preventDefault()}>
                                     <label htmlFor="approval-remarks" className="block text-sm font-medium text-foreground">Remarks</label>
                                     <textarea id="approval-remarks" maxLength={4000} rows={3} value={approvalRemarks} onChange={(event) => setApprovalRemarks(event.target.value)} className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm" placeholder="Add a note for this decision" />
+                                    {viewingRow.active_step_signature_required && <div className="rounded-xl border border-warning/30 bg-warning-soft p-4">
+                                        <p className="text-sm font-semibold text-foreground">This office must sign before approving</p>
+                                        <p className="mt-1 text-xs text-muted">Upload the wet-signed PDF for the latest document version. The upload and approval are recorded together.</p>
+                                        <input type="file" accept="application/pdf,.pdf" onChange={(event) => { const input = event.currentTarget; setApprovalSignedFile(input.files?.[0] ?? null); input.value = ''; }} className="mt-3 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
+                                        {approvalSignedFile && <SelectedFile file={approvalSignedFile} onRemove={() => setApprovalSignedFile(null)} />}
+                                    </div>}
                                     {approvalError && <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{approvalError}</p>}
                                     <div className="space-y-2">
                                         <div className="grid grid-cols-2 items-stretch gap-2">
                                             <button type="button" disabled={processing} onClick={() => decideDocument('rejected')} className="dots-button-secondary w-full text-danger disabled:opacity-50">Reject</button>
                                             <button type="button" disabled={processing} onClick={() => decideDocument('changes_requested')} className="dots-button-secondary w-full px-2 disabled:opacity-50">Request changes</button>
                                         </div>
-                                        <button type="button" disabled={processing} onClick={() => decideDocument('approved')} className="dots-button-primary w-full disabled:opacity-50">Approve</button>
+                                        <button type="button" disabled={processing || (viewingRow.active_step_signature_required === true && (!approvalSignedFile || !viewingRow.active_source_document_file_id))} onClick={() => decideDocument('approved')} className="dots-button-primary w-full disabled:opacity-50">{viewingRow.active_step_signature_required ? 'Upload signed PDF and approve' : 'Approve'}</button>
                                     </div>
                                 </form>}
-                                {viewingRow.signature_status === 'needs_signature' && viewingRow.approval_status !== 'approved' && <p className="mt-3 text-xs text-muted">Only the primary PDF is eligible; iPluma submission is not connected yet.</p>}
                             </section>}
                             <DocumentRouteProgress document={viewingRow} />
                         </div>
@@ -1309,6 +1379,7 @@ export default function DocumentsIndex({
                                                     {isPreservedAvailable && <p className="mt-0.5 text-[11px] font-medium text-primary">Waiting to be received</p>}
                                                     {routeEditIsParallel && !isPreservedAvailable && <p className="mt-0.5 text-[11px] font-medium text-primary">Will be available immediately</p>}
                                                 </div>
+                                                <label className={`flex items-center gap-2 text-xs font-medium ${routeEditIsParallel ? 'cursor-not-allowed text-muted' : 'text-foreground'}`} title={routeEditIsParallel ? 'Signature-required offices need sequential routing.' : undefined}><input type="checkbox" disabled={routeEditIsParallel} checked={routeEditForm.signatureOfficeIds.includes(officeId)} onChange={() => toggleRouteEditSignature(officeId)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />Requires signature</label>
                                                 <div className="flex shrink-0 gap-1">
                                                     {!routeEditIsParallel && <button type="button" disabled={index === 0} onClick={() => moveRouteEditOffice(officeId, -1)} aria-label={`Move ${office?.name} up`} className="rounded-md p-2 text-muted hover:bg-secondary disabled:opacity-30"><ArrowUp size={15} /></button>}
                                                     {!routeEditIsParallel && <button type="button" disabled={index === routeEditForm.officeIds.length - 1} onClick={() => moveRouteEditOffice(officeId, 1)} aria-label={`Move ${office?.name} down`} className="rounded-md p-2 text-muted hover:bg-secondary disabled:opacity-30"><ArrowDown size={15} /></button>}
@@ -1392,13 +1463,13 @@ export default function DocumentsIndex({
                                             ['sequential', 'Sequential approval', 'Offices review in order. The next office receives the document after the current office approves.'],
                                             ['parallel', 'Parallel approval', 'All selected offices receive the document immediately and can review independently.'],
                                         ] as const).map(([mode, label, description]) => (
-                                            <button key={mode} type="button" aria-pressed={releaseForm.routingMode === mode} onClick={() => setReleaseForm({ ...releaseForm, routingMode: mode })} className={`rounded-xl border p-3 text-left ${releaseForm.routingMode === mode ? 'border-primary bg-secondary' : 'border-border bg-surface'}`}>
+                                            <button key={mode} type="button" disabled={mode === 'parallel' && releaseForm.signatureOfficeIds.length > 0} aria-pressed={releaseForm.routingMode === mode} onClick={() => setReleaseForm({ ...releaseForm, routingMode: mode })} className={`rounded-xl border p-3 text-left disabled:cursor-not-allowed disabled:opacity-50 ${releaseForm.routingMode === mode ? 'border-primary bg-secondary' : 'border-border bg-surface'}`}>
                                                 <span className="block text-sm font-semibold text-foreground">{label}</span>
                                                 <span className="mt-1 block text-xs text-muted">{description}</span>
                                             </button>
                                         ))}
                                     </div>
-                                    <p className="mt-2 text-xs text-muted">Every selected office must approve.</p>
+                                    <p className="mt-2 text-xs text-muted">Mark signatures on individual route steps below. If any office requires a signature, routing switches to sequential so each signer receives the latest PDF.</p>
                                 </div>
                                 <div className="sm:col-span-2">
                                     <p className="mb-2 text-sm font-medium text-foreground">Required offices <span className="text-danger">*</span><span className="ml-2 text-xs font-normal text-muted">Choose up to 30; every selected office must approve.</span></p>
@@ -1430,10 +1501,11 @@ export default function DocumentsIndex({
                                             <ol className="space-y-2" aria-label="Sequential office order">
                                                 {releaseForm.officeIds.map((officeId, index) => {
                                                     const office = offices.find((option) => String(option.id) === officeId);
-                                                    return <li key={officeId} draggable onDragStart={() => setDraggedOfficeId(officeId)} onDragOver={(event) => event.preventDefault()} onDrop={() => reorderReleaseOffice(officeId)} onDragEnd={() => setDraggedOfficeId(null)} className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3">
+                                                    return <li key={officeId} draggable onDragStart={() => setDraggedOfficeId(officeId)} onDragOver={(event) => event.preventDefault()} onDrop={() => reorderReleaseOffice(officeId)} onDragEnd={() => setDraggedOfficeId(null)} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface p-3">
                                                         <GripVertical size={17} className="shrink-0 cursor-grab text-muted" aria-label="Drag to reorder" />
                                                         <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-white">{index + 1}</span>
                                                         <span className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">{office?.name}</span>
+                                                        <label className="flex items-center gap-2 text-xs font-medium text-foreground"><input type="checkbox" checked={releaseForm.signatureOfficeIds.includes(officeId)} onChange={() => toggleReleaseSignature(officeId)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />Requires signature</label>
                                                         <div className="flex shrink-0 gap-1">
                                                             <button type="button" disabled={index === 0} onClick={() => moveReleaseOffice(officeId, -1)} aria-label={`Move ${office?.name} up`} className="rounded-md p-2 text-muted hover:bg-secondary disabled:opacity-30"><ArrowUp size={15} /></button>
                                                             <button type="button" disabled={index === releaseForm.officeIds.length - 1} onClick={() => moveReleaseOffice(officeId, 1)} aria-label={`Move ${office?.name} down`} className="rounded-md p-2 text-muted hover:bg-secondary disabled:opacity-30"><ArrowDown size={15} /></button>
@@ -1454,6 +1526,7 @@ export default function DocumentsIndex({
                                                             <span className="mx-auto mb-2 block h-2.5 w-2.5 rounded-full bg-primary" aria-hidden="true" />
                                                             <p className="break-words text-sm font-semibold text-foreground">{office?.name}</p>
                                                             <p className="mt-1 text-xs text-muted">Required approval</p>
+                                                            <label className="mt-2 inline-flex items-center gap-2 text-xs font-medium text-foreground"><input type="checkbox" checked={releaseForm.signatureOfficeIds.includes(officeId)} onChange={() => toggleReleaseSignature(officeId)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />Requires signature</label>
                                                             <button type="button" onClick={() => toggleReleaseOffice(officeId)} className="mt-2 text-xs font-medium text-danger hover:underline">Remove</button>
                                                         </div>;
                                                     })}
@@ -1477,7 +1550,8 @@ export default function DocumentsIndex({
                                     {releaseForm.source === 'current' && <p className="text-xs text-muted">Forward with the current document version.</p>}
                                     {releaseForm.source === 'upload' && <>
                                         <label htmlFor="release-file" className="mb-1 block text-sm font-medium text-foreground">New version</label>
-                                        <input id="release-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => { setReleaseForm({ ...releaseForm, file: event.target.files?.[0] ?? null }); setReleaseError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
+                                        <input id="release-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => { const input = event.currentTarget; setReleaseForm({ ...releaseForm, file: input.files?.[0] ?? null }); input.value = ''; setReleaseError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
+                                        {releaseForm.file && <SelectedFile file={releaseForm.file} onRemove={() => { setReleaseForm((current) => ({ ...current, file: null })); setReleaseError(''); }} />}
                                         <p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Maximum file size: {uploadLimitKb / 1024} MB.</p>
                                     </>}
                                 </div>
@@ -1527,8 +1601,8 @@ export default function DocumentsIndex({
                                 {!editingRow && <div className="mb-4">
                                     <label htmlFor="document-source-select" className="mb-1 block text-sm font-medium text-foreground">Document source</label>
                                     <div className="flex flex-wrap gap-2" role="group" aria-label="Document source">
-                                        <button type="button" onClick={() => setForm({ ...form, document_source: 'upload', approved_draft_id: '', file: null, signature_required: false })} className={`rounded-lg border px-3 py-2 text-sm font-medium ${form.document_source === 'upload' ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>Upload a document</button>
-                                        <button type="button" onClick={() => setForm({ ...form, document_source: 'approved', approved_draft_id: '', file: null, signature_required: false })} className={`rounded-lg border px-3 py-2 text-sm font-medium ${form.document_source === 'approved' ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>Use generated document</button>
+                                        <button type="button" onClick={() => setForm({ ...form, document_source: 'upload', approved_draft_id: '', file: null })} className={`rounded-lg border px-3 py-2 text-sm font-medium ${form.document_source === 'upload' ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>Upload a document</button>
+                                        <button type="button" onClick={() => setForm({ ...form, document_source: 'approved', approved_draft_id: '', file: null })} className={`rounded-lg border px-3 py-2 text-sm font-medium ${form.document_source === 'approved' ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>Use generated document</button>
                                     </div>
                                 </div>}
                                 {!editingRow && form.document_source === 'approved' && <div className="mb-4">
@@ -1613,7 +1687,8 @@ export default function DocumentsIndex({
 
                             {form.document_source === 'upload' && <div>
                                 <label className="mb-1 block text-sm font-medium text-foreground">Source file</label>
-                                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => { const file = e.target.files?.[0] ?? null; setForm({ ...form, file, signature_required: file && !/\.pdf$/i.test(file.name) ? false : form.signature_required }); setUploadError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
+                                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => { const input = event.currentTarget; const file = input.files?.[0] ?? null; setForm({ ...form, file }); input.value = ''; setUploadError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
+                                {form.file && <SelectedFile file={form.file} onRemove={() => setForm((current) => ({ ...current, file: null }))} />}
                                 <p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Uploaded PDFs receive a QR code and DOTS No. when attached to the routing record; other file types remain unchanged. A source file is required to create a routing record. Maximum file size: {uploadLimitKb / 1024} MB.</p>
                             </div>}
                             {!editingRow && <div>
@@ -1636,7 +1711,7 @@ export default function DocumentsIndex({
                                     }}
                                     className="w-full rounded-lg border border-border px-3 py-2 text-sm"
                                 />
-                                <p className="mt-1 text-xs text-muted">Add up to {maxSupportingFiles} PDF, JPG, PNG, DOC, or DOCX files. Each can be up to {uploadLimitKb / 1024} MB. Supporting PDFs receive the same QR code and DOTS No.; other file types remain unchanged. They are stored separately and are not sent through iPluma signing.</p>
+                                <p className="mt-1 text-xs text-muted">Add up to {maxSupportingFiles} PDF, JPG, PNG, DOC, or DOCX files. Each can be up to {uploadLimitKb / 1024} MB. Supporting PDFs receive the same QR code and DOTS No.; other file types remain unchanged. They are stored separately and are not part of the approval signature sequence.</p>
                                 {form.supporting_files.length > 0 && <ul className="mt-3 space-y-2" aria-label="Selected supporting files">
                                     {form.supporting_files.map((file, index) => <li key={`${file.name}-${file.lastModified}-${index}`} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm">
                                         <span className="min-w-0 break-all text-foreground">{file.name}<span className="ml-2 text-xs text-muted">{(file.size / 1024 / 1024).toFixed(1)} MB</span></span>
@@ -1645,12 +1720,6 @@ export default function DocumentsIndex({
                                 </ul>}
                             </div>}
                             {uploadError && <p role="alert" className="text-sm text-danger">{uploadError}</p>}
-                            {!editingRow && <div className="rounded-lg border border-border bg-background p-3">
-                                <label className={`flex items-start gap-3 text-sm ${form.document_source === 'approved' || form.file?.name.toLowerCase().endsWith('.pdf') ? 'text-foreground' : 'text-muted'}`}>
-                                    <input type="checkbox" checked={form.signature_required} disabled={form.document_source !== 'approved' && !form.file?.name.toLowerCase().endsWith('.pdf')} onChange={(event) => setForm({ ...form, signature_required: event.target.checked })} className="mt-0.5 rounded border-border" />
-                                    <span><span className="font-medium">Needs iPluma signing after approval</span><span className="mt-0.5 block text-xs text-muted">Applies to the primary PDF only. iPluma submission is not connected yet.</span></span>
-                                </label>
-                            </div>}
                             <div className="flex flex-wrap gap-5">
                                 <label className="inline-flex items-center gap-2 text-sm text-foreground"><input type="checkbox" checked={form.urgent} onChange={(e) => setForm({ ...form, urgent: e.target.checked })} /> Mark as urgent</label>
                                 <label className="inline-flex items-center gap-2 text-sm text-foreground"><input type="checkbox" checked={form.notify_by_email} onChange={(e) => setForm({ ...form, notify_by_email: e.target.checked })} /> Email me</label>
@@ -1729,6 +1798,15 @@ export function DocumentRouteProgress({ document }: { document: DocumentRoutePro
     const collectSteps = (items: RouteTree[]): RouteTreeStep[] => items.flatMap((route) => route.steps.flatMap((step) => [step, ...collectSteps(step.child_routes ?? [])]));
     const allSteps = collectSteps(routes);
     const approvedCount = allSteps.filter((step) => step.status === 'approved').length;
+    const collectRequiredSignatureSteps = (items: RouteTree[]): RouteTreeStep[] => items.flatMap((route) => {
+        if (!['pending', 'approved'].includes(route.status)) return [];
+        return route.steps.flatMap((step) => [
+            ...(step.signature_required ? [step] : []),
+            ...collectRequiredSignatureSteps(step.child_routes ?? []),
+        ]);
+    });
+    const requiredSignatureSteps = collectRequiredSignatureSteps(routes);
+    const signedStepCount = requiredSignatureSteps.filter((step) => step.signature_status === 'signed').length;
     const rootRoute = routes[routes.length - 1];
     const originOffice = document.route_from_office || rootRoute?.from_office || document.office_short_name || document.office_name || 'Originating office';
     const terminalStep: RouteTreeStep | null = terminalTransaction ? {
@@ -1753,7 +1831,7 @@ export function DocumentRouteProgress({ document }: { document: DocumentRoutePro
                     <div>
                         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">Route map</p>
                         <h3 className="mt-1 text-base font-semibold text-foreground">Office approval route</h3>
-                        <p className="mt-1 text-sm text-muted">Every listed office must approve. Forwarded offices branch off to the side, and the parent office still makes its own decision.</p>
+                        <p className="mt-1 text-sm text-muted">{requiredSignatureSteps.length > 0 ? 'All listed offices must approve. Offices marked as requiring a signature must sign in order. Forwarded offices branch off to the side, and the parent office still makes its own decision.' : 'Every listed office must approve. Forwarded offices branch off to the side, and the parent office still makes its own decision.'}</p>
                     </div>
                     <span className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${getStatusClasses(document.status || 'pending')}`}>{statusLabel(document.status || 'pending')}</span>
                 </div>
@@ -1761,6 +1839,7 @@ export function DocumentRouteProgress({ document }: { document: DocumentRoutePro
                     <span><strong className="text-foreground">{allSteps.length}</strong> {allSteps.length === 1 ? 'office' : 'offices'}</span>
                     <span><strong className="text-success">{approvedCount}</strong> approved</span>
                     <span><strong className="text-foreground">{allSteps.length - approvedCount}</strong> remaining</span>
+                    {requiredSignatureSteps.length > 0 && <span><strong className="text-primary">{signedStepCount} of {requiredSignatureSteps.length}</strong> signatures complete</span>}
                 </div>
                 {/* Small legend so the lines are easy to read */}
                 <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-muted" aria-label="Legend">
@@ -1930,6 +2009,7 @@ function RouteOfficeCard({
                 <span className={`shrink-0 rounded-full font-semibold capitalize ${compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'} ${getStatusClasses(step.status)}`}>{statusLabel(step.status)}</span>
             </div>
             {step.status === 'waiting_on_branch' && <p className="mt-3 text-xs text-muted">This office is waiting for its forwarded offices to finish.</p>}
+            {step.signature_required && <p className={`mt-3 inline-block max-w-full rounded-lg border px-3 py-2 text-xs font-medium ${step.signature_status === 'signed' ? 'border-success/20 bg-success-soft/50 text-success' : 'border-warning/30 bg-warning-soft text-warning'}`}>{step.signature_status === 'signed' ? `Signed${step.signed_by ? ` by ${step.signed_by}` : ''}${step.signature_method === 'wet_ink' ? ' · wet-signed PDF' : ''}${step.signed_at ? ` · ${step.signed_at}` : ''}` : 'Signature required for this office'}</p>}
             {childBranchApproved && step.status === 'in_progress' && <p className="mt-3 rounded-lg bg-success-soft/50 px-3 py-2 text-xs font-medium text-success">Forwarded branch complete. This office still needs to approve.</p>}
             {(step.decided_by || step.received_by || step.decided_at || step.received_at) && <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-border/70 pt-2.5 text-xs text-muted">
                 {(step.decided_by || step.received_by) && <span>{isTerminal ? 'Recorded by' : isDecision ? 'Decision by' : 'Received by'} <strong className="font-medium text-foreground">{step.decided_by || step.received_by}</strong></span>}
@@ -1947,6 +2027,13 @@ function ReadOnlyDetail({ label, value }: { label: string; value?: string | null
             <p role="cell" className="break-words text-sm font-medium text-foreground">{value || '—'}</p>
         </div>
     );
+}
+
+function SelectedFile({ file, onRemove }: { file: File; onRemove: () => void }) {
+    return <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm">
+        <span className="min-w-0 break-all text-foreground">{file.name}<span className="ml-2 text-xs text-muted">{(file.size / 1024 / 1024).toFixed(1)} MB</span></span>
+        <button type="button" onClick={onRemove} className="shrink-0 rounded-md p-1 text-muted hover:bg-secondary hover:text-foreground" aria-label={`Remove ${file.name}`} title="Remove file"><X size={16} aria-hidden="true" /></button>
+    </div>;
 }
 
 function DocumentReferenceDetails({ document, loading = false }: { document: DocumentItem; loading?: boolean }) {
@@ -1976,7 +2063,7 @@ function DocumentReferenceDetails({ document, loading = false }: { document: Doc
                 <div className="mt-5">
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                         <p className="text-sm font-semibold text-foreground">Attached files</p>
-                        {document.signature_status && document.signature_status !== 'not_required' && <p className="text-xs text-muted">Signing applies to the primary document only. iPluma PDF submission is not connected yet.</p>}
+                        {document.signature_status && document.signature_status !== 'not_required' && <p className="text-xs text-muted">Each required office signs its own route step. iPluma is not connected; wet-signed PDF upload is available during approval.</p>}
                     </div>
                     {document.files?.length ? (
                         <ul className="mt-3 space-y-2">
@@ -1998,9 +2085,8 @@ function DocumentReferenceDetails({ document, loading = false }: { document: Doc
                                         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:shrink-0 sm:flex-wrap">
                                             {file.view_url && <a href={file.view_url} target="_blank" rel="noopener noreferrer" className="dots-button-secondary min-h-9 w-full px-3 py-1.5 text-xs sm:w-auto"><Eye size={14} aria-hidden="true" />View</a>}
                                             {file.url && <a href={file.url} className="dots-button-secondary min-h-9 w-full px-3 py-1.5 text-xs sm:w-auto"><Download size={14} aria-hidden="true" />Download</a>}
-                                            {file.type === 'original' && file.is_pdf && document.signature_status === 'needs_signature' && <button type="button" disabled title={document.approval_status === 'approved' ? 'iPluma file submission is not connected yet.' : 'Available after approval.'} className="dots-button-secondary col-span-2 min-h-9 w-full px-3 py-1.5 text-xs sm:w-auto"><FileSignature size={14} aria-hidden="true" />Sign with iPluma</button>}
-                                            {file.type === 'original' && file.is_pdf && document.signature_status === 'sent_to_ipluma' && <span className="col-span-2 inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-warning-soft px-3 py-1.5 text-xs font-medium text-warning sm:w-auto"><FileSignature size={14} aria-hidden="true" />Sent to iPluma</span>}
                                             {file.type === 'signed' && <span className="col-span-2 inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-success-soft px-3 py-1.5 text-xs font-medium text-success sm:w-auto"><FileSignature size={14} aria-hidden="true" />Signed</span>}
+                                            {file.type === 'original' && file.is_pdf && document.signature_status === 'needs_signature' && <button type="button" disabled title="iPluma signing is not connected yet." className="dots-button-secondary col-span-2 min-h-9 w-full cursor-not-allowed px-3 py-1.5 text-xs opacity-50 sm:w-auto"><FileSignature size={14} aria-hidden="true" />Sign with iPluma</button>}
                                         </div>
                                     </div>
                                 </li>

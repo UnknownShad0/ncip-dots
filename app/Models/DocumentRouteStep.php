@@ -16,6 +16,10 @@ class DocumentRouteStep extends Model
         'office_id',
         'position',
         'status',
+        'signature_required',
+        'signature_status',
+        'signed_at',
+        'signed_by',
         'dispatch_trail_id',
         'decision_trail_id',
         'received_by',
@@ -32,8 +36,10 @@ class DocumentRouteStep extends Model
     {
         return [
             'position' => 'integer',
+            'signature_required' => 'boolean',
             'received_at' => 'datetime',
             'decided_at' => 'datetime',
+            'signed_at' => 'datetime',
         ];
     }
 
@@ -80,5 +86,10 @@ class DocumentRouteStep extends Model
     public function signedFile(): BelongsTo
     {
         return $this->belongsTo(DocumentFile::class, 'signed_document_file_id');
+    }
+
+    public function signer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'signed_by');
     }
 }
