@@ -15,6 +15,7 @@
 client_secret_*.json
 /bootstrap/ssr
 /node_modules
+/chrome-headless-shell
 /public/build
 /public/hot
 /public/storage

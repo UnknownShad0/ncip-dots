@@ -2,17 +2,55 @@
 // inherited pipes. No debugging port or application HTTP session is exposed.
 import { spawn } from 'node:child_process';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { accessSync, constants as fsConstants } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const options = JSON.parse(await readFile(process.argv[2], 'utf8'));
 const documentUrl = pathToFileURL(path.resolve(options.html)).href;
 await mkdir(options.profile, { recursive: true, mode: 0o700 });
+await mkdir(options.crashDumps, { recursive: true, mode: 0o700 });
+const browserEnvironment = { ...process.env, ...(options.browserEnv ?? {}) };
+if (process.platform === 'win32') {
+    if (!browserEnvironment.USERPROFILE && browserEnvironment.HOMEDRIVE && browserEnvironment.HOMEPATH) {
+        browserEnvironment.USERPROFILE = `${browserEnvironment.HOMEDRIVE}${browserEnvironment.HOMEPATH}`;
+    }
+    if (browserEnvironment.USERPROFILE) {
+        browserEnvironment.APPDATA ||= path.join(browserEnvironment.USERPROFILE, 'AppData', 'Roaming');
+        browserEnvironment.LOCALAPPDATA ||= path.join(browserEnvironment.USERPROFILE, 'AppData', 'Local');
+        browserEnvironment.TEMP ||= path.join(browserEnvironment.USERPROFILE, 'AppData', 'Local', 'Temp');
+        browserEnvironment.TMP ||= browserEnvironment.TEMP;
+    }
+    browserEnvironment.SystemRoot ||= browserEnvironment.WINDIR;
+    browserEnvironment.WINDIR ||= browserEnvironment.SystemRoot;
+}
+const profilePathDiagnostics = Object.fromEntries(
+    ['SystemRoot', 'WINDIR', 'APPDATA', 'LOCALAPPDATA', 'USERPROFILE', 'TEMP', 'TMP'].map(name => {
+        const value = browserEnvironment[name] || '';
+        let exists = false;
+        let writable = false;
+        try { accessSync(value, fsConstants.F_OK); exists = true; } catch {}
+        try { accessSync(value, fsConstants.W_OK); writable = true; } catch {}
+        return [name, { path: value || '(missing)', exists, writable }];
+    }),
+);
+const environmentSummary = `USERNAME=${browserEnvironment.USERNAME || '(missing)'}; USERDOMAIN=${browserEnvironment.USERDOMAIN || '(missing)'}; `
+    + Object.entries(profilePathDiagnostics).map(([name, info]) => `${name}=${info.path} (exists: ${info.exists ? 'yes' : 'no'}, writable: ${info.writable ? 'yes' : 'no'})`).join('; ');
+let invalidWindowsEnvironment = [];
+if (process.platform === 'win32') {
+    invalidWindowsEnvironment = ['SystemRoot', 'WINDIR', 'APPDATA', 'LOCALAPPDATA', 'USERPROFILE', 'TEMP', 'TMP'].filter(name => {
+        return !profilePathDiagnostics[name].exists;
+    });
+}
+const isHeadlessShell = /chrome-headless-shell(?:\.exe)?$/i.test(options.browser);
 const arguments_ = [
-    '--headless=new', '--remote-debugging-pipe', `--user-data-dir=${options.profile}`,
+    isHeadlessShell ? '--headless' : '--headless=new',
+    '--remote-debugging-pipe', `--user-data-dir=${options.profile}`,
     '--no-first-run', '--no-default-browser-check', '--disable-background-networking',
-    '--disable-component-update', '--disable-default-apps', '--disable-sync',
-    '--disable-extensions', '--disable-dev-shm-usage', '--metrics-recording-only',
+    ...(!isHeadlessShell ? ['--disable-component-update'] : []),
+    '--disable-default-apps', '--disable-sync', '--disable-extensions',
+    '--disable-dev-shm-usage', '--metrics-recording-only',
+    '--disable-crash-reporter', '--disable-breakpad', `--crash-dumps-dir=${options.crashDumps}`,
     '--noerrdialogs', '--hide-scrollbars', '--force-color-profile=srgb',
 ];
 if (options.sandbox === false) arguments_.push('--no-sandbox');
@@ -32,8 +70,9 @@ function command(method, params = {}, sessionId = session) {
         const id = ++sequence;
         const timer = setTimeout(() => {
             pending.delete(id);
-            reject(new Error(`Chromium timed out during ${method}.`));
-        }, Math.max(1, Math.min(15000, deadline - Date.now())));
+            const diagnostics = errorText.trim();
+            reject(new Error(`Chromium timed out during ${method}.${diagnostics ? ` ${diagnostics}` : ''}`));
+        }, Math.max(1, Math.min(30000, deadline - Date.now())));
         pending.set(id, { resolve, reject, timer });
         browser.stdio[3].write(`${JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) })}\0`);
     });
@@ -62,7 +101,14 @@ function receive(message) {
 }
 
 try {
-    browser = spawn(options.browser, arguments_, { stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'] });
+    if (invalidWindowsEnvironment.length) {
+        throw new Error(`Invalid Windows browser environment: ${invalidWindowsEnvironment.join(', ')}.`);
+    }
+    browser = spawn(options.browser, arguments_, {
+        stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'],
+        env: browserEnvironment,
+        windowsHide: true,
+    });
     browser.stderr.on('data', chunk => { errorText = (errorText + chunk.toString()).slice(-4000); });
     browser.stdio[3].on('error', () => {});
     browser.stdio[4].setEncoding('utf8');
@@ -128,14 +174,31 @@ try {
     await writeFile(options.output, bytes, { mode: 0o600 });
     process.stdout.write(JSON.stringify(layout));
 } catch (error) {
-    process.stderr.write(`${error.message}\n`);
+    const diagnostics = errorText.trim();
+    const stderr = diagnostics ? `\nRecent Chromium stderr:\n${diagnostics}` : '';
+    process.stderr.write(`${error.message}\nBrowser: ${options.browser}\nWindows environment: ${environmentSummary}${stderr}\n`);
     process.exitCode = 1;
 } finally {
     if (browser && browser.exitCode === null) {
-        await command('Browser.close', {}, null).catch(() => {});
+        // Send shutdown outside command(): the render deadline may already
+        // have expired, but Chromium still needs a chance to close its children.
+        try {
+            browser.stdio[3].write(`${JSON.stringify({ id: ++sequence, method: 'Browser.close', params: {} })}\0`);
+        } catch {}
+        await Promise.race([new Promise(resolve => browser.once('exit', resolve)), pause(2000)]);
+        if (browser.exitCode === null && process.platform === 'win32' && browser.pid) {
+            // Node's child.kill() only ends Edge's root process on Windows.
+            // Kill the tree we spawned so a timed-out render cannot leave GPU
+            // processes holding profile/cache files open.
+            const killer = spawn('taskkill.exe', ['/PID', String(browser.pid), '/T', '/F'], {
+                stdio: 'ignore', windowsHide: true,
+            });
+            killer.on('error', () => {});
+            await Promise.race([new Promise(resolve => killer.once('exit', resolve)), pause(3000)]);
+        }
         if (browser.exitCode === null) {
-            await Promise.race([new Promise(resolve => browser.once('exit', resolve)), pause(1500)]);
-            if (browser.exitCode === null) browser.kill('SIGKILL');
+            browser.kill('SIGKILL');
+            await Promise.race([new Promise(resolve => browser.once('exit', resolve)), pause(1000)]);
         }
     }
     for (const request of pending.values()) clearTimeout(request.timer);

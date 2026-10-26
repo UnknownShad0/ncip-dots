@@ -151,7 +151,17 @@ class TrackingNumberPdfStamper
             throw new RuntimeException('PDF tracking stamps require Node.js. Set DOCUMENT_PDF_NODE_BINARY to its executable.');
         }
 
-        $process = new Process([$node, base_path('scripts/generate-qr-matrix.mjs')], base_path());
+        // Web SAPIs on Windows may expose a filtered process environment.
+        // Node needs the Windows profile/system paths when it initializes
+        // crypto, which the QR matrix generator uses for its random state.
+        $processEnvironment = DIRECTORY_SEPARATOR === '\\'
+            ? DocumentPdf::windowsBrowserEnvironment()
+            : [];
+        $process = new Process(
+            [$node, base_path('scripts/generate-qr-matrix.mjs')],
+            base_path(),
+            $processEnvironment,
+        );
         $process->setInput(json_encode(['value' => $trackingUrl], JSON_THROW_ON_ERROR));
         $process->setTimeout(10)->run();
         if (! $process->isSuccessful()) {

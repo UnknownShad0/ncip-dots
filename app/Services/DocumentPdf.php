@@ -4,9 +4,11 @@ namespace App\Services;
 
 use App\Models\DocumentCreationDraft;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
 use Symfony\Component\Process\ExecutableFinder;
 use Symfony\Component\Process\Process;
+use Throwable;
 
 class DocumentPdf
 {
@@ -45,13 +47,30 @@ class DocumentPdf
     {
         $html = $this->browserHtml($title, $content, $measureEditor);
         $browser = $this->browserBinary();
-        $node = $this->executable((string) config('document_pdf.node_binary', 'node'));
+        $node = $this->nodeBinary();
         if (! $node) {
             throw new \RuntimeException('Document PDF rendering requires Node.js. Set DOCUMENT_PDF_NODE_BINARY to its executable.');
+        }
+        $browserEnvironment = DIRECTORY_SEPARATOR === '\\' ? self::windowsBrowserEnvironment() : [];
+        $environmentDiagnostics = self::environmentDiagnostics($browserEnvironment);
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $invalidEnvironment = self::invalidWindowsBrowserEnvironment($environmentDiagnostics);
+            if ($invalidEnvironment !== []) {
+                $details = self::formatEnvironmentDiagnostics($environmentDiagnostics);
+                $message = 'Document PDF rendering requires valid Windows user-profile paths. Browser: '.$browser.'; Node: '.$node
+                    .'. Invalid environment: '.implode(', ', $invalidEnvironment)."\n".$details;
+                Log::error('Document PDF rendering could not start: invalid Windows browser environment.', [
+                    'browser' => $browser,
+                    'node' => $node,
+                    'environment' => $environmentDiagnostics,
+                ]);
+                throw new \RuntimeException($message);
+            }
         }
         $directory = storage_path('app/private/document-renderer/'.bin2hex(random_bytes(16)));
         File::ensureDirectoryExists($directory, 0700, true);
 
+        $process = null;
         try {
             $input = $directory.'/document.html';
             $output = $directory.'/document.pdf';
@@ -59,25 +78,24 @@ class DocumentPdf
             chmod($input, 0600);
             $options = [
                 'html' => $input, 'output' => $output, 'profile' => $directory.'/profile',
+                'crashDumps' => $directory.'/crash-dumps',
                 'browser' => $browser, 'sandbox' => (bool) config('document_pdf.sandbox', true),
+                'browserEnv' => $browserEnvironment,
                 'timeout' => max(10, (int) config('document_pdf.timeout', 45)),
             ];
             $job = $directory.'/job.json';
             File::put($job, json_encode($options, JSON_THROW_ON_ERROR));
-            $processEnv = [];
-            if (DIRECTORY_SEPARATOR === '\\') {
-                // Symfony filters inherited environment variables for web SAPIs.
-                // Node on Windows needs SystemRoot during startup, even when the
-                // parent PHP process can still read it with getenv().
-                $systemRoot = getenv('SystemRoot') ?: getenv('WINDIR') ?: ($_SERVER['SystemRoot'] ?? $_SERVER['WINDIR'] ?? null);
-                if (is_string($systemRoot) && $systemRoot !== '') {
-                    $processEnv['SystemRoot'] = $systemRoot;
-                }
-            }
+            $processEnv = $browserEnvironment;
             $process = new Process([$node, base_path('scripts/render-document-pdf.mjs'), $job], base_path(), $processEnv);
+            // PHP's web request limit can be lower than the renderer's timeout.
+            // Extend this request so Symfony can collect the renderer's error
+            // and the Node process can close Chromium and remove its profile.
+            if (function_exists('set_time_limit')) {
+                set_time_limit($options['timeout'] + 20);
+            }
             $process->setTimeout($options['timeout'] + 10)->run();
             if (! $process->isSuccessful()) {
-                throw new \RuntimeException('Document PDF rendering failed: '.trim($process->getErrorOutput()));
+                throw new \RuntimeException('The Node renderer exited unsuccessfully.');
             }
             $layout = json_decode($process->getOutput(), true, 512, JSON_THROW_ON_ERROR);
             if (! is_array($layout) || ! is_int($layout['pages'] ?? null) || $layout['pages'] < 1 || ! File::exists($output)) {
@@ -85,8 +103,35 @@ class DocumentPdf
             }
 
             return new RenderedDocumentPdf(File::get($output), $layout);
+        } catch (Throwable $error) {
+            if (DIRECTORY_SEPARATOR === '\\' && $process instanceof Process && $process->getPid()) {
+                $this->killProcessTree($process->getPid());
+            }
+            $stderr = $process instanceof Process ? self::lastLines($process->getErrorOutput(), 40) : '';
+            $exitCode = $process instanceof Process ? $process->getExitCode() : null;
+            preg_match('/Chromium exited \((-?\d+)\)/', $stderr, $browserExitMatch);
+            $browserExitCode = isset($browserExitMatch[1]) ? (int) $browserExitMatch[1] : null;
+            $message = sprintf(
+                "Document PDF rendering failed. Browser: %s; Node: %s; Node exit code: %s; Chromium exit code: %s.%s%s",
+                $browser,
+                $node,
+                $exitCode === null ? 'unavailable' : (string) $exitCode,
+                $browserExitCode === null ? 'unavailable' : $browserExitCode.' (0x'.strtoupper(sprintf('%08X', $browserExitCode & 0xFFFFFFFF)).')',
+                $stderr !== '' ? "\nChromium/Node stderr:\n".$stderr : '',
+                DIRECTORY_SEPARATOR === '\\' ? "\nWindows environment:\n".self::formatEnvironmentDiagnostics($environmentDiagnostics) : '',
+            );
+            Log::error('Document PDF rendering failed.', [
+                'browser' => $browser,
+                'node' => $node,
+                'node_exit_code' => $exitCode,
+                'chromium_exit_code' => $browserExitCode,
+                'stderr' => $stderr,
+                'environment' => $environmentDiagnostics,
+                'exception' => $error->getMessage(),
+            ]);
+            throw new \RuntimeException($message, previous: $error);
         } finally {
-            File::deleteDirectory($directory);
+            $this->deleteDirectoryWithRetry($directory);
         }
     }
 
@@ -154,24 +199,185 @@ class DocumentPdf
         ];
     }
 
-    private function browserBinary(): string
+    public function browserBinary(): string
     {
         $configured = config('document_pdf.browser_binary');
         if ($configured) {
             $binary = $this->executable($configured);
             if ($binary) return $binary;
-            throw new \RuntimeException('DOCUMENT_PDF_BROWSER_BINARY does not point to an executable Chrome or Chromium browser.');
+            throw new \RuntimeException('DOCUMENT_PDF_BROWSER_BINARY does not point to an executable Chrome, Chromium, Edge, or chrome-headless-shell browser.');
         }
-        foreach ([
+        if (DIRECTORY_SEPARATOR === '\\' && config('document_pdf.prefer_headless_shell', true)) {
+            foreach ($this->headlessShellCandidates() as $candidate) {
+                $binary = $this->executable($candidate);
+                if ($binary) return $binary;
+            }
+        }
+        $candidates = DIRECTORY_SEPARATOR === '\\' ? $this->windowsBrowserCandidates() : [];
+        $candidates = [...$candidates, ...[
             '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
             '/Applications/Chromium.app/Contents/MacOS/Chromium',
             'google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser',
-        ] as $candidate) {
+        ]];
+        foreach ($candidates as $candidate) {
             $binary = $this->executable($candidate);
             if ($binary) return $binary;
         }
 
-        throw new \RuntimeException('Document PDF rendering requires Google Chrome or Chromium. Install it and set DOCUMENT_PDF_BROWSER_BINARY.');
+        throw new \RuntimeException('Document PDF rendering requires Chrome, Chromium, Edge, or chrome-headless-shell. Install it and set DOCUMENT_PDF_BROWSER_BINARY.');
+    }
+
+    public function nodeBinary(): ?string
+    {
+        return $this->executable((string) config('document_pdf.node_binary', 'node'));
+    }
+
+    /** @return array<string, string> Environment explicitly inherited by Chromium on Windows. */
+    public static function windowsBrowserEnvironment(?array $source = null): array
+    {
+        $environment = [];
+        foreach ([
+            'USERNAME', 'USERDOMAIN', 'SystemRoot', 'WINDIR', 'USERPROFILE',
+            'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP',
+            'PUPPETEER_CACHE_DIR',
+        ] as $name) {
+            $value = $source === null ? getenv($name) : ($source[$name] ?? null);
+            if ($source === null && (! is_string($value) || trim($value) === '') && isset($_SERVER[$name])) {
+                $value = $_SERVER[$name];
+            }
+            if (is_string($value) && trim($value) !== '') {
+                $environment[$name] = trim($value);
+            }
+        }
+
+        if (empty($environment['USERPROFILE']) && ! empty($environment['HOMEDRIVE']) && ! empty($environment['HOMEPATH'])) {
+            $environment['USERPROFILE'] = rtrim($environment['HOMEDRIVE'], '\\/').$environment['HOMEPATH'];
+        }
+        if (empty($environment['SystemRoot']) && ! empty($environment['WINDIR'])) {
+            $environment['SystemRoot'] = $environment['WINDIR'];
+        }
+        if (empty($environment['WINDIR']) && ! empty($environment['SystemRoot'])) {
+            $environment['WINDIR'] = $environment['SystemRoot'];
+        }
+
+        $profile = $environment['USERPROFILE'] ?? null;
+        if ($profile) {
+            $environment['APPDATA'] ??= rtrim($profile, '\\/').'\\AppData\\Roaming';
+            $environment['LOCALAPPDATA'] ??= rtrim($profile, '\\/').'\\AppData\\Local';
+            $environment['TEMP'] ??= rtrim($profile, '\\/').'\\AppData\\Local\\Temp';
+            $environment['TMP'] ??= $environment['TEMP'];
+        }
+
+        return $environment;
+    }
+
+    public static function environmentDiagnostics(?array $environment = null): array
+    {
+        $environment ??= DIRECTORY_SEPARATOR === '\\' ? self::windowsBrowserEnvironment() : [];
+        $diagnostics = [
+            'USERNAME' => $environment['USERNAME'] ?? '(missing)',
+            'USERDOMAIN' => $environment['USERDOMAIN'] ?? '(missing)',
+        ];
+        foreach (['SystemRoot', 'WINDIR', 'APPDATA', 'LOCALAPPDATA', 'USERPROFILE', 'TEMP', 'TMP'] as $name) {
+            $path = $environment[$name] ?? '';
+            $diagnostics[$name] = [
+                'path' => $path !== '' ? $path : '(missing)',
+                'exists' => $path !== '' && is_dir($path),
+                'writable' => $path !== '' && is_dir($path) && is_writable($path),
+            ];
+        }
+
+        return $diagnostics;
+    }
+
+    public static function invalidWindowsBrowserEnvironment(array $diagnostics): array
+    {
+        $invalid = [];
+        foreach (['SystemRoot', 'WINDIR', 'APPDATA', 'LOCALAPPDATA', 'USERPROFILE', 'TEMP', 'TMP'] as $name) {
+            $item = $diagnostics[$name] ?? [];
+            if (! ($item['exists'] ?? false)) $invalid[] = $name.' missing or not a directory';
+        }
+
+        return $invalid;
+    }
+
+    public static function formatEnvironmentDiagnostics(array $diagnostics): string
+    {
+        $lines = [];
+        foreach ($diagnostics as $name => $value) {
+            if (is_array($value)) {
+                $lines[] = sprintf('%s=%s (exists: %s, writable: %s)', $name, $value['path'], $value['exists'] ? 'yes' : 'no', $value['writable'] ? 'yes' : 'no');
+            } else {
+                $lines[] = $name.'='.$value;
+            }
+        }
+
+        return implode("\n", $lines);
+    }
+
+    public static function lastLines(string $text, int $limit = 40): string
+    {
+        $lines = preg_split('/\r?\n/', trim($text)) ?: [];
+
+        return implode("\n", array_slice($lines, -$limit));
+    }
+
+    private function headlessShellCandidates(): array
+    {
+        $environment = self::windowsBrowserEnvironment();
+        $roots = array_filter([
+            config('document_pdf.puppeteer_cache_dir'),
+            $environment['PUPPETEER_CACHE_DIR'] ?? null,
+            isset($environment['USERPROFILE']) ? rtrim($environment['USERPROFILE'], '\\/').'\\.cache\\puppeteer' : null,
+        ]);
+        $candidates = [];
+        foreach ($roots as $root) {
+            $pattern = rtrim($root, '\\/').DIRECTORY_SEPARATOR.'chrome-headless-shell'.DIRECTORY_SEPARATOR.'*'.DIRECTORY_SEPARATOR.'chrome-headless-shell-win64'.DIRECTORY_SEPARATOR.'chrome-headless-shell.exe';
+            $candidates = [...$candidates, ...glob($pattern) ?: []];
+        }
+
+        return array_reverse($candidates);
+    }
+
+    private function windowsBrowserCandidates(): array
+    {
+        $environment = self::windowsBrowserEnvironment();
+        $programFiles = getenv('ProgramFiles') ?: ($_SERVER['ProgramFiles'] ?? 'C:\\Program Files');
+        $programFilesX86 = getenv('ProgramFiles(x86)') ?: ($_SERVER['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)');
+        $localAppData = $environment['LOCALAPPDATA'] ?? '';
+
+        return array_filter([
+            $localAppData !== '' ? $localAppData.'\\Google\\Chrome\\Application\\chrome.exe' : null,
+            $programFiles.'\\Google\\Chrome\\Application\\chrome.exe',
+            $programFilesX86.'\\Google\\Chrome\\Application\\chrome.exe',
+            $localAppData !== '' ? $localAppData.'\\Microsoft\\Edge\\Application\\msedge.exe' : null,
+            $programFiles.'\\Microsoft\\Edge\\Application\\msedge.exe',
+            $programFilesX86.'\\Microsoft\\Edge\\Application\\msedge.exe',
+        ]);
+    }
+
+    private function killProcessTree(?int $pid): void
+    {
+        if (! $pid || DIRECTORY_SEPARATOR !== '\\') return;
+        try {
+            (new Process(['taskkill.exe', '/PID', (string) $pid, '/T', '/F']))->setTimeout(5)->run();
+        } catch (Throwable $error) {
+            Log::warning('Could not terminate the document PDF process tree.', ['pid' => $pid, 'error' => $error->getMessage()]);
+        }
+    }
+
+    private function deleteDirectoryWithRetry(string $directory): void
+    {
+        foreach ([0, 150000, 300000, 600000] as $delay) {
+            if ($delay > 0) usleep($delay);
+            try {
+                File::deleteDirectory($directory);
+                if (! File::exists($directory)) return;
+            } catch (Throwable $error) {
+                Log::debug('Retrying document PDF temporary directory cleanup.', ['directory' => $directory, 'error' => $error->getMessage()]);
+            }
+        }
+        Log::warning('Could not completely remove a document PDF temporary directory.', ['directory' => $directory]);
     }
 
     private function executable(string $candidate): ?string

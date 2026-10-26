@@ -90,9 +90,18 @@ function verifyPrintedText(expected: ReturnType<typeof geometry>) {
     });
     const ordered = (rectangles: typeof actual) => [...rectangles].sort((a, b) => a.y - b.y || a.x - b.x || a.width - b.width);
     const source = ordered(expected.text);
-    const matches = actual.length === source.length && ordered(actual).every((rect, index) =>
-        (['x', 'y', 'width', 'height'] as const).every(key => Math.abs(rect[key] - source[index][key]) < .1));
-    return { lines: actual.length, ...(matches ? {} : { error: 'The frozen print sheets changed the document text layout.' }) };
+    const printed = ordered(actual);
+    const tolerances = { x: 1, y: 1, width: .5, height: .5 } as const;
+    const mismatch = printed.findIndex((rect, index) => !source[index]
+        || (Object.keys(tolerances) as (keyof typeof tolerances)[])
+            .some(key => Math.abs(rect[key] - source[index][key]) > tolerances[key]));
+    const matches = printed.length === source.length && mismatch === -1;
+    const detail = mismatch >= 0
+        ? ` First mismatch at line ${mismatch + 1}: screen ${JSON.stringify(source[mismatch])}, print ${JSON.stringify(printed[mismatch])}.`
+        : '';
+    return { lines: actual.length, ...(matches ? {} : {
+        error: `The frozen print sheets changed the document text layout (screen lines: ${source.length}, print lines: ${printed.length}).${detail}`,
+    }) };
 }
 
 async function render() {
