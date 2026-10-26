@@ -176,7 +176,11 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
 
         const updateFitScale = () => {
             const availableWidth = host.clientWidth;
-            setFitScale(Math.min(1, Math.max(.3, (availableWidth - 2) / 816)));
+            const scale = Math.min(1, Math.max(.3, (availableWidth - 2) / 816));
+            // The toolbar rounds 99.5% and above to 100%. Use the same exact
+            // scale in that range so screen measurement and print output do
+            // not disagree by sub-pixels while both appear to be at 100%.
+            setFitScale(scale >= .995 ? 1 : scale);
         };
         updateFitScale();
         const observer = new ResizeObserver(updateFitScale);
