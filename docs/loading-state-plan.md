@@ -104,6 +104,7 @@ Loading UI does not resolve the remaining server-side dashboard analytics delay 
 
 The first UI pass is now applied in the React pages:
 
+- Cross-page Inertia GET navigations show a centered spinner after a 250 ms delay; the existing top progress bar remains enabled. Same-page visits such as searches and filters continue to use their local indicators.
 - Dashboard analytics render chart-shaped skeleton panels until the deferred analytics prop arrives. When changing the chart office, existing chart content remains visible and an inline spinner/status indicates the refresh.
 - Documents and latest documents keep current table rows visible during server search, filtering, sorting, and pagination. A spinner appears after a short delay, and the table region exposes its busy state to assistive technology.
 - Archive and audit filter/pagination interactions show inline progress while retaining the current rows.
