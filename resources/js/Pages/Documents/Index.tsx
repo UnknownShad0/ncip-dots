@@ -46,6 +46,8 @@ type EditableApprovalRoute = {
     steps: RouteTreeStep[];
 };
 
+type UploadTarget = 'document' | 'release' | 'approval';
+
 export type DocumentRouteProgressData = {
     route_tree?: RouteTree[];
     route_steps?: RouteTreeStep[];
@@ -221,6 +223,8 @@ const validateDocumentFile = (file: File | null, maxSizeKb: number): string | nu
     return null;
 };
 
+const documentFileAccept = '.pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
 const validateSupportingFiles = (files: File[], maxSizeKb: number, maxCount: number): string | null => {
     if (files.length > maxCount) return `Choose no more than ${maxCount} supporting files.`;
     for (const file of files) {
@@ -302,6 +306,7 @@ export default function DocumentsIndex({
 }) {
     const uploadLimitKb = Number(maxUploadSizeKb ?? 0);
     const [processing, setProcessing] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState<{ target: UploadTarget; percentage: number } | null>(null);
     const [formError, setFormError] = useState('');
     const formBaseline = useRef('');
     const autoOpenedDraftId = useRef<string | null>(null);
@@ -498,10 +503,13 @@ export default function DocumentsIndex({
         });
         if (file) data.append('file', file);
         supporting_files.forEach((supportingFile) => data.append('supporting_files[]', supportingFile));
+        const hasUpload = Boolean(file || supporting_files.length);
         setProcessing(true);
+        setUploadProgress(hasUpload ? { target: 'document', percentage: 0 } : null);
         setFormError('');
         router.post('/documents', data, {
-            onFinish: () => setProcessing(false),
+            onProgress: (progress) => { if (hasUpload) setUploadProgress({ target: 'document', percentage: progress?.percentage ?? 0 }); },
+            onFinish: () => { setProcessing(false); setUploadProgress(null); },
             onError: (errors) => setFormError(Object.values(errors).join(' ')),
             onSuccess: () => {
                 closeModal();
@@ -547,6 +555,7 @@ export default function DocumentsIndex({
         data.append('remarks', releaseForm.remarks);
         data.append('document_source', releaseForm.source);
         if (releaseForm.source === 'upload' && releaseForm.file) data.append('file', releaseForm.file);
+        const hasUpload = releaseForm.source === 'upload' && Boolean(releaseForm.file);
 
         const selectedOffices = releaseForm.officeIds
             .map((officeId) => offices.find((office) => String(office.id) === officeId)?.name)
@@ -554,9 +563,11 @@ export default function DocumentsIndex({
         const documentReference = releasingRow.tracking_number || releasingRow.title || 'The document';
 
         setProcessing(true);
+        setUploadProgress(hasUpload ? { target: 'release', percentage: 0 } : null);
         setReleaseError('');
         router.post(`/documents/${releasingRow.id}/release`, data, {
-            onFinish: () => setProcessing(false),
+            onProgress: (progress) => { if (hasUpload) setUploadProgress({ target: 'release', percentage: progress?.percentage ?? 0 }); },
+            onFinish: () => { setProcessing(false); setUploadProgress(null); },
             onSuccess: () => {
                 setReleasingRow(null);
                 setReleaseForm({ actionTypeId: '', otherAction: '', routingMode: 'sequential', officeIds: [], signatureOfficeIds: [], remarks: '', source: 'current', approvedDraftId: '', file: null });
@@ -869,10 +880,13 @@ export default function DocumentsIndex({
             data.append('signed_file', approvalSignedFile);
             data.append('source_document_file_id', String(viewingRow.active_source_document_file_id));
         }
+        const hasUpload = decision === 'approved' && Boolean(viewingRow.active_step_signature_required && approvalSignedFile);
+        setUploadProgress(hasUpload ? { target: 'approval', percentage: 0 } : null);
         router.post(`/documents/${viewingRow.id}/approval`, data, {
             forceFormData: true,
             preserveScroll: true,
-            onFinish: () => setProcessing(false),
+            onProgress: (progress) => { if (hasUpload) setUploadProgress({ target: 'approval', percentage: progress?.percentage ?? 0 }); },
+            onFinish: () => { setProcessing(false); setUploadProgress(null); },
             onError: (errors) => setApprovalError(Object.values(errors).join(' ')),
             onSuccess: () => {
                 closeDocumentDetails();
@@ -957,9 +971,12 @@ export default function DocumentsIndex({
             if (value !== null && value !== undefined) data.append(key, value instanceof File ? value : typeof value === 'boolean' ? (value ? '1' : '0') : String(value));
         });
         setProcessing(true);
+        const hasUpload = Boolean(form.file);
+        setUploadProgress(hasUpload ? { target: 'document', percentage: 0 } : null);
         setFormError('');
         router.post(`/documents/${editingRow.id}`, data, {
-            onFinish: () => setProcessing(false),
+            onProgress: (progress) => { if (hasUpload) setUploadProgress({ target: 'document', percentage: progress?.percentage ?? 0 }); },
+            onFinish: () => { setProcessing(false); setUploadProgress(null); },
             onError: (errors) => setFormError(Object.values(errors).join(' ')),
             onSuccess: () => {
                 closeModal();
@@ -1344,8 +1361,18 @@ export default function DocumentsIndex({
                                     {viewingRow.active_step_signature_required && (viewingRow.active_step_route_mode !== 'parallel' || viewingRow.signature_claim?.is_mine) && <div className="rounded-xl border border-warning/30 bg-warning-soft p-4">
                                         <p className="text-sm font-semibold text-foreground">This office must sign before approving</p>
                                         <p className="mt-1 text-xs text-muted">Upload the wet-signed PDF for the latest document version. The upload and approval are recorded together.</p>
-                                        <input type="file" accept="application/pdf,.pdf" onChange={(event) => { const input = event.currentTarget; setApprovalSignedFile(input.files?.[0] ?? null); input.value = ''; }} className="mt-3 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
+                                        <FileDropZone accept="application/pdf,.pdf" disabled={processing} onFiles={(files) => {
+                                            if (files.length > 1) { setApprovalError('Choose one signed PDF at a time.'); return; }
+                                            const file = files[0];
+                                            if (!file) return;
+                                            if (!/\.pdf$/i.test(file.name)) { setApprovalError('Choose a PDF file.'); return; }
+                                            const error = validateDocumentFile(file, uploadLimitKb);
+                                            if (error) { setApprovalError(error); return; }
+                                            setApprovalSignedFile(file);
+                                            setApprovalError('');
+                                        }} />
                                         {approvalSignedFile && <SelectedFile file={approvalSignedFile} onRemove={() => setApprovalSignedFile(null)} />}
+                                        <UploadProgressIndicator progress={uploadProgress?.target === 'approval' ? uploadProgress.percentage : null} processing={processing && uploadProgress?.target === 'approval'} />
                                     </div>}
                                     {approvalError && <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{approvalError}</p>}
                                     <div className="space-y-2">
@@ -1711,8 +1738,17 @@ export default function DocumentsIndex({
                                     {releaseForm.source === 'current' && <p className="text-xs text-muted">Forward with the current document version.</p>}
                                     {releaseForm.source === 'upload' && <>
                                         <label htmlFor="release-file" className="mb-1 block text-sm font-medium text-foreground">New version</label>
-                                        <input id="release-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => { const input = event.currentTarget; setReleaseForm({ ...releaseForm, file: input.files?.[0] ?? null }); input.value = ''; setReleaseError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
+                                        <FileDropZone accept={documentFileAccept} disabled={processing} onFiles={(files) => {
+                                            if (files.length > 1) { setReleaseError('Choose one document version at a time.'); return; }
+                                            const file = files[0];
+                                            if (!file) return;
+                                            const error = validateDocumentFile(file, uploadLimitKb);
+                                            if (error) { setReleaseError(error); return; }
+                                            setReleaseForm((current) => ({ ...current, file }));
+                                            setReleaseError('');
+                                        }} />
                                         {releaseForm.file && <SelectedFile file={releaseForm.file} onRemove={() => { setReleaseForm((current) => ({ ...current, file: null })); setReleaseError(''); }} />}
+                                        <UploadProgressIndicator progress={uploadProgress?.target === 'release' ? uploadProgress.percentage : null} processing={processing && uploadProgress?.target === 'release'} />
                                         <p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Maximum file size: {uploadLimitKb / 1024} MB.</p>
                                     </>}
                                 </div>
@@ -1848,30 +1884,28 @@ export default function DocumentsIndex({
 
                             {form.document_source === 'upload' && <div>
                                 <label className="mb-1 block text-sm font-medium text-foreground">Source file</label>
-                                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => { const input = event.currentTarget; const file = input.files?.[0] ?? null; setForm({ ...form, file }); input.value = ''; setUploadError(''); }} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
+                                <FileDropZone accept={documentFileAccept} disabled={processing} onFiles={(files) => {
+                                    if (files.length > 1) { setUploadError('Choose one source file at a time.'); return; }
+                                    const file = files[0];
+                                    if (!file) return;
+                                    const error = validateDocumentFile(file, uploadLimitKb);
+                                    if (error) { setUploadError(error); return; }
+                                    setForm((current) => ({ ...current, file }));
+                                    setUploadError('');
+                                }} />
                                 {form.file && <SelectedFile file={form.file} onRemove={() => setForm((current) => ({ ...current, file: null }))} />}
                                 <p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Uploaded PDFs receive a QR code and DOTS No. when attached to the routing record; other file types remain unchanged. A source file is required to create a routing record. Maximum file size: {uploadLimitKb / 1024} MB.</p>
                             </div>}
                             {!editingRow && <div>
                                 <label htmlFor="supporting-files" className="mb-1 block text-sm font-medium text-foreground">Supporting files <span className="font-normal text-muted">(optional)</span></label>
-                                <input
-                                    id="supporting-files"
-                                    type="file"
-                                    multiple
-                                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                                    onChange={(event) => {
-                                        const files = Array.from(event.currentTarget.files ?? []);
-                                        const error = validateSupportingFiles(files, uploadLimitKb, maxSupportingFiles);
-                                        if (error) {
-                                            setUploadError(error);
-                                            event.currentTarget.value = '';
-                                            return;
-                                        }
-                                        setForm((current) => ({ ...current, supporting_files: files }));
-                                        setUploadError('');
-                                    }}
-                                    className="w-full rounded-lg border border-border px-3 py-2 text-sm"
-                                />
+                                <FileDropZone accept={documentFileAccept} multiple disabled={processing} onFiles={(files) => {
+                                    if (files.length === 0) return;
+                                    const combinedFiles = [...form.supporting_files, ...files];
+                                    const error = validateSupportingFiles(combinedFiles, uploadLimitKb, maxSupportingFiles);
+                                    if (error) { setUploadError(error); return; }
+                                    setForm((current) => ({ ...current, supporting_files: [...current.supporting_files, ...files] }));
+                                    setUploadError('');
+                                }} />
                                 <p className="mt-1 text-xs text-muted">Add up to {maxSupportingFiles} PDF, JPG, PNG, DOC, or DOCX files. Each can be up to {uploadLimitKb / 1024} MB. Supporting PDFs receive the same QR code and DOTS No.; other file types remain unchanged. They are stored separately and are not part of the approval signature sequence.</p>
                                 {form.supporting_files.length > 0 && <ul className="mt-3 space-y-2" aria-label="Selected supporting files">
                                     {form.supporting_files.map((file, index) => <li key={`${file.name}-${file.lastModified}-${index}`} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm">
@@ -1880,6 +1914,7 @@ export default function DocumentsIndex({
                                     </li>)}
                                 </ul>}
                             </div>}
+                            <UploadProgressIndicator progress={uploadProgress?.target === 'document' ? uploadProgress.percentage : null} processing={processing && uploadProgress?.target === 'document'} />
                             {uploadError && <p role="alert" className="text-sm text-danger">{uploadError}</p>}
                             <div className="flex flex-wrap gap-5">
                                 <label className="inline-flex items-center gap-2 text-sm text-foreground"><input type="checkbox" checked={form.urgent} onChange={(e) => setForm({ ...form, urgent: e.target.checked })} /> Mark as urgent</label>
@@ -2186,6 +2221,65 @@ function ReadOnlyDetail({ label, value }: { label: string; value?: string | null
         <div role="row" className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-3 py-2 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-4">
             <p role="rowheader" className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</p>
             <p role="cell" className="break-words text-sm font-medium text-foreground">{value || '—'}</p>
+        </div>
+    );
+}
+
+function FileDropZone({ accept, multiple = false, disabled = false, onFiles }: { accept: string; multiple?: boolean; disabled?: boolean; onFiles: (files: File[]) => void }) {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const [isDragging, setIsDragging] = useState(false);
+
+    const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        setIsDragging(false);
+        if (disabled) return;
+        onFiles(Array.from(event.dataTransfer.files));
+    };
+
+    return (
+        <div
+            onDragEnter={(event) => { event.preventDefault(); if (!disabled) setIsDragging(true); }}
+            onDragOver={(event) => { event.preventDefault(); if (!disabled) event.dataTransfer.dropEffect = 'copy'; }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            className={`rounded-xl border-2 border-dashed p-4 text-center transition-colors ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-default'} ${isDragging ? 'border-primary bg-secondary' : 'border-border bg-background'}`}
+        >
+            <input
+                ref={inputRef}
+                type="file"
+                accept={accept}
+                multiple={multiple}
+                disabled={disabled}
+                className="sr-only"
+                tabIndex={-1}
+                onChange={(event) => {
+                    onFiles(Array.from(event.currentTarget.files ?? []));
+                    event.currentTarget.value = '';
+                }}
+            />
+            <p className="text-sm font-medium text-foreground">{isDragging ? 'Drop files to attach' : multiple ? 'Drag and drop files here' : 'Drag and drop a file here'}</p>
+            <p className="mt-1 text-xs text-muted">or</p>
+            <button type="button" disabled={disabled} onClick={() => inputRef.current?.click()} className="mt-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-foreground hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed">
+                {multiple ? 'Choose files' : 'Choose file'}
+            </button>
+        </div>
+    );
+}
+
+function UploadProgressIndicator({ progress, processing }: { progress: number | null | undefined; processing: boolean }) {
+    if (progress == null) return null;
+    const percentage = Math.max(0, Math.min(100, Math.round(progress)));
+    const isProcessing = processing && percentage >= 100;
+
+    return (
+        <div className="mt-3 rounded-lg border border-border bg-background p-3" role="status" aria-live="polite">
+            <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                <span className="font-medium text-foreground">{isProcessing ? 'Upload complete. Processing file…' : 'Uploading…'}</span>
+                {!isProcessing && <span className="tabular-nums text-muted">{percentage}%</span>}
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-secondary" role="progressbar" aria-label="File upload progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percentage}>
+                <div className="h-full rounded-full bg-primary transition-[width] duration-200" style={{ width: `${percentage}%` }} />
+            </div>
         </div>
     );
 }
