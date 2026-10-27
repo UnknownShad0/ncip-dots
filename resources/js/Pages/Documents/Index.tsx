@@ -176,6 +176,17 @@ type DocumentItem = {
 };
 
 type LibraryOption = { id: number | string; name: string; source?: string; disabled?: boolean };
+type StagedUploadPurpose = 'document' | 'supporting' | 'version' | 'signed_pdf';
+type StagedUploadEntry = {
+    id: string;
+    purpose: StagedUploadPurpose;
+    documentId: number | null;
+    token?: string;
+    failed?: boolean;
+    controller: AbortController;
+    promise?: Promise<string>;
+};
+type StagedUploadDisplay = { status: 'uploading' | 'checking' | 'uploaded' | 'failed'; percentage: number; error?: string };
 type ApprovedDocument = { id: number; title: string; document_type_id: number; document_type?: string; status?: string; disabled?: boolean };
 type CrudAlert = { variant?: WorkspaceAlertVariant; title: string; message: string; onConfirm?: () => void; confirmLabel?: string; isDestructive?: boolean };
 type RoutingForm = {
@@ -307,6 +318,8 @@ export default function DocumentsIndex({
     const uploadLimitKb = Number(maxUploadSizeKb ?? 0);
     const [processing, setProcessing] = useState(false);
     const [uploadProgress, setUploadProgress] = useState<{ target: UploadTarget; percentage: number } | null>(null);
+    const stagedUploadEntries = useRef(new Map<File, StagedUploadEntry>());
+    const [stagedUploadDisplays, setStagedUploadDisplays] = useState<Record<string, StagedUploadDisplay>>({});
     const [formError, setFormError] = useState('');
     const formBaseline = useRef('');
     const autoOpenedDraftId = useRef<string | null>(null);
@@ -371,14 +384,99 @@ export default function DocumentsIndex({
         setShowListUpdating(false);
     };
 
+    const setStagedUploadDisplay = (id: string, display: StagedUploadDisplay | null) => {
+        setStagedUploadDisplays((current) => {
+            if (display === null) {
+                const next = { ...current };
+                delete next[id];
+                return next;
+            }
+            return { ...current, [id]: display };
+        });
+    };
+
+    const stageDocumentFile = (file: File, purpose: StagedUploadPurpose, documentId: number | null = null): Promise<string> => {
+        const existing = stagedUploadEntries.current.get(file);
+        if (existing && existing.purpose === purpose && existing.documentId === documentId) {
+            if (!existing.failed && existing.token) return Promise.resolve(existing.token);
+            if (!existing.failed && existing.promise) return existing.promise;
+            setStagedUploadDisplay(existing.id, null);
+            stagedUploadEntries.current.delete(file);
+        } else if (existing) {
+            void discardStagedDocumentFile(file);
+        }
+
+        const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const entry: StagedUploadEntry = { id, purpose, documentId, controller: new AbortController() };
+        stagedUploadEntries.current.set(file, entry);
+        setStagedUploadDisplay(id, { status: 'uploading', percentage: 0 });
+
+        const data = new FormData();
+        data.append('file', file);
+        data.append('purpose', purpose);
+        if (documentId !== null) data.append('document_id', String(documentId));
+
+        entry.promise = axios.post<{ token: string }>('/document-uploads', data, {
+            signal: entry.controller.signal,
+            onUploadProgress: (event) => {
+                const percentage = event.total ? Math.round((event.loaded / event.total) * 100) : 0;
+                if (stagedUploadEntries.current.get(file) === entry) {
+                    setStagedUploadDisplay(id, { status: percentage >= 100 ? 'checking' : 'uploading', percentage });
+                }
+            },
+        }).then(({ data: response }) => {
+            if (stagedUploadEntries.current.get(file) !== entry) {
+                void axios.delete(`/document-uploads/${response.token}`).catch(() => undefined);
+                throw new Error('This upload was removed.');
+            }
+            entry.token = response.token;
+            setStagedUploadDisplay(id, { status: 'uploaded', percentage: 100 });
+            return response.token;
+        }).catch((error: unknown) => {
+            entry.failed = true;
+            if (stagedUploadEntries.current.get(file) === entry) {
+                const responseErrors = axios.isAxiosError(error) ? error.response?.data?.errors : null;
+                const message = responseErrors ? Object.values(responseErrors).flat().join(' ') : 'Upload failed. Retry the upload.';
+                setStagedUploadDisplay(id, { status: 'failed', percentage: 0, error: message });
+            }
+            throw error;
+        });
+
+        return entry.promise;
+    };
+
+    const discardStagedDocumentFile = async (file: File) => {
+        const entry = stagedUploadEntries.current.get(file);
+        if (!entry) return;
+        stagedUploadEntries.current.delete(file);
+        entry.controller.abort();
+        setStagedUploadDisplay(entry.id, null);
+        if (entry.token) {
+            await axios.delete(`/document-uploads/${entry.token}`).catch(() => undefined);
+        }
+    };
+
+    const stagedTokenFor = (file: File): string | null => stagedUploadEntries.current.get(file)?.token ?? null;
+    const stagedDisplayFor = (file: File): StagedUploadDisplay | null => {
+        const entry = stagedUploadEntries.current.get(file);
+        return entry ? stagedUploadDisplays[entry.id] ?? null : null;
+    };
+
     useEffect(() => { formBaseline.current = formFingerprint(form); }, [isCreateOpen, editingRow]);
 
     const closeRelease = () => {
         if (processing) return;
         const dirty = releaseForm.source !== 'current' || releaseForm.officeIds.length > 0 || releaseForm.remarks.length > 0
             || Boolean(releaseForm.actionTypeId || releaseForm.otherAction || releaseForm.file);
-        if (!dirty) { setReleasingRow(null); setReleaseOfficeSearch(''); return; }
-        setCrudAlert({ title: 'Discard forwarding details?', message: 'Your unsaved changes will be lost.', confirmLabel: 'Discard changes', isDestructive: true, onConfirm: () => { setCrudAlert(null); setReleasingRow(null); setReleaseOfficeSearch(''); } });
+        if (!dirty) {
+            if (releaseForm.file) void discardStagedDocumentFile(releaseForm.file);
+            setReleasingRow(null);
+            setReleaseOfficeSearch('');
+            return;
+        }
+        setCrudAlert({ title: 'Discard forwarding details?', message: 'Your unsaved changes will be lost.', confirmLabel: 'Discard changes', isDestructive: true, onConfirm: () => { setCrudAlert(null); if (releaseForm.file) void discardStagedDocumentFile(releaseForm.file); setReleasingRow(null); setReleaseOfficeSearch(''); } });
     };
     const requestCloseForm = () => {
         if (processing) return;
@@ -386,6 +484,7 @@ export default function DocumentsIndex({
         setCrudAlert({ title: 'Discard unsaved changes?', message: 'Close this form without saving your changes?', confirmLabel: 'Discard changes', isDestructive: true, onConfirm: () => { setCrudAlert(null); closeModal(); } });
     };
     const closeModal = () => {
+        [form.file, ...form.supporting_files].forEach((file) => { if (file) void discardStagedDocumentFile(file); });
         setEditingRow(null);
         setIsCreateOpen(false);
         setForm({
@@ -495,20 +594,23 @@ export default function DocumentsIndex({
         const supportingFilesError = validateSupportingFiles(form.supporting_files, uploadLimitKb, maxSupportingFiles);
         if (supportingFilesError) { setUploadError(supportingFilesError); return; }
         if (finalize && form.document_source === 'upload' && !form.file) { setUploadError('Attach the source file before creating the routing record.'); return; }
+        const fileUploadToken = form.file ? stagedTokenFor(form.file) : null;
+        if (form.file && !fileUploadToken) { setUploadError('Wait for the source file upload to finish, or retry it before submitting.'); return; }
+        const supportingUploadTokens = form.supporting_files.map((file) => stagedTokenFor(file));
+        if (supportingUploadTokens.some((token) => !token)) { setUploadError('Wait for all supporting file uploads to finish, or retry them before submitting.'); return; }
 
         const data = new FormData();
         const { file, supporting_files, ...fields } = form;
+        void supporting_files;
         Object.entries({ ...fields, is_finalized: finalize ? '1' : '0' }).forEach(([key, value]) => {
             if (value !== null && value !== undefined) data.append(key, typeof value === 'boolean' ? (value ? '1' : '0') : String(value));
         });
-        if (file) data.append('file', file);
-        supporting_files.forEach((supportingFile) => data.append('supporting_files[]', supportingFile));
-        const hasUpload = Boolean(file || supporting_files.length);
+        if (fileUploadToken) data.append('file_upload_token', fileUploadToken);
+        supportingUploadTokens.forEach((token) => { if (token) data.append('supporting_upload_tokens[]', token); });
         setProcessing(true);
-        setUploadProgress(hasUpload ? { target: 'document', percentage: 0 } : null);
+        setUploadProgress(null);
         setFormError('');
         router.post('/documents', data, {
-            onProgress: (progress) => { if (hasUpload) setUploadProgress({ target: 'document', percentage: progress?.percentage ?? 0 }); },
             onFinish: () => { setProcessing(false); setUploadProgress(null); },
             onError: (errors) => setFormError(Object.values(errors).join(' ')),
             onSuccess: () => {
@@ -545,6 +647,11 @@ export default function DocumentsIndex({
             setReleaseError('Choose a file to upload.');
             return;
         }
+        const fileUploadToken = releaseForm.source === 'upload' && releaseForm.file ? stagedTokenFor(releaseForm.file) : null;
+        if (releaseForm.source === 'upload' && !fileUploadToken) {
+            setReleaseError('Wait for the file upload to finish, or retry it before forwarding.');
+            return;
+        }
 
         const data = new FormData();
         data.append('action_type_id', releaseForm.actionTypeId);
@@ -554,21 +661,19 @@ export default function DocumentsIndex({
         releaseForm.signatureOfficeIds.forEach((officeId) => data.append('signature_required_office_ids[]', officeId));
         data.append('remarks', releaseForm.remarks);
         data.append('document_source', releaseForm.source);
-        if (releaseForm.source === 'upload' && releaseForm.file) data.append('file', releaseForm.file);
-        const hasUpload = releaseForm.source === 'upload' && Boolean(releaseForm.file);
-
+        if (fileUploadToken) data.append('file_upload_token', fileUploadToken);
         const selectedOffices = releaseForm.officeIds
             .map((officeId) => offices.find((office) => String(office.id) === officeId)?.name)
             .filter((officeName): officeName is string => Boolean(officeName));
         const documentReference = releasingRow.tracking_number || releasingRow.title || 'The document';
 
         setProcessing(true);
-        setUploadProgress(hasUpload ? { target: 'release', percentage: 0 } : null);
+        setUploadProgress(null);
         setReleaseError('');
         router.post(`/documents/${releasingRow.id}/release`, data, {
-            onProgress: (progress) => { if (hasUpload) setUploadProgress({ target: 'release', percentage: progress?.percentage ?? 0 }); },
             onFinish: () => { setProcessing(false); setUploadProgress(null); },
             onSuccess: () => {
+                if (releaseForm.file) void discardStagedDocumentFile(releaseForm.file);
                 setReleasingRow(null);
                 setReleaseForm({ actionTypeId: '', otherAction: '', routingMode: 'sequential', officeIds: [], signatureOfficeIds: [], remarks: '', source: 'current', approvedDraftId: '', file: null });
                 setReleaseError('');
@@ -644,6 +749,7 @@ export default function DocumentsIndex({
     };
 
     const openDocumentDetails = async (document: DocumentItem) => {
+        if (approvalSignedFile) void discardStagedDocumentFile(approvalSignedFile);
         setApprovalRemarks('');
         setApprovalError('');
         setApprovalSignedFile(null);
@@ -659,6 +765,7 @@ export default function DocumentsIndex({
     };
 
     const closeDocumentDetails = () => {
+        if (approvalSignedFile) void discardStagedDocumentFile(approvalSignedFile);
         setViewingRow(null);
         setApprovalSignedFile(null);
         const url = new URL(window.location.href);
@@ -903,15 +1010,19 @@ export default function DocumentsIndex({
                 setProcessing(false);
                 return;
             }
-            data.append('signed_file', approvalSignedFile);
+            const signedFileToken = stagedTokenFor(approvalSignedFile);
+            if (!signedFileToken) {
+                setApprovalError('Wait for the signed PDF upload to finish, or retry it before approving.');
+                setProcessing(false);
+                return;
+            }
+            data.append('signed_file_upload_token', signedFileToken);
             data.append('source_document_file_id', String(viewingRow.active_source_document_file_id));
         }
-        const hasUpload = decision === 'approved' && Boolean(viewingRow.active_step_signature_required && approvalSignedFile);
-        setUploadProgress(hasUpload ? { target: 'approval', percentage: 0 } : null);
+        setUploadProgress(null);
         router.post(`/documents/${viewingRow.id}/approval`, data, {
             forceFormData: true,
             preserveScroll: true,
-            onProgress: (progress) => { if (hasUpload) setUploadProgress({ target: 'approval', percentage: progress?.percentage ?? 0 }); },
             onFinish: () => { setProcessing(false); setUploadProgress(null); },
             onError: (errors) => setApprovalError(Object.values(errors).join(' ')),
             onSuccess: () => {
@@ -991,17 +1102,20 @@ export default function DocumentsIndex({
         }
         const fileError = validateDocumentFile(form.file, uploadLimitKb);
         if (fileError) { setUploadError(fileError); return; }
+        const fileUploadToken = form.file ? stagedTokenFor(form.file) : null;
+        if (form.file && !fileUploadToken) { setUploadError('Wait for the file upload to finish, or retry it before saving.'); return; }
 
         const data = new FormData();
-        Object.entries({ ...form, is_finalized: finalize ? '1' : '0', _method: 'put' }).forEach(([key, value]) => {
-            if (value !== null && value !== undefined) data.append(key, value instanceof File ? value : typeof value === 'boolean' ? (value ? '1' : '0') : String(value));
+        const { file, supporting_files, ...fields } = form;
+        void supporting_files;
+        Object.entries({ ...fields, is_finalized: finalize ? '1' : '0', _method: 'put' }).forEach(([key, value]) => {
+            if (value !== null && value !== undefined) data.append(key, typeof value === 'boolean' ? (value ? '1' : '0') : String(value));
         });
+        if (fileUploadToken) data.append('file_upload_token', fileUploadToken);
         setProcessing(true);
-        const hasUpload = Boolean(form.file);
-        setUploadProgress(hasUpload ? { target: 'document', percentage: 0 } : null);
+        setUploadProgress(null);
         setFormError('');
         router.post(`/documents/${editingRow.id}`, data, {
-            onProgress: (progress) => { if (hasUpload) setUploadProgress({ target: 'document', percentage: progress?.percentage ?? 0 }); },
             onFinish: () => { setProcessing(false); setUploadProgress(null); },
             onError: (errors) => setFormError(Object.values(errors).join(' ')),
             onSuccess: () => {
@@ -1405,11 +1519,15 @@ export default function DocumentsIndex({
                                             if (!/\.pdf$/i.test(file.name)) { setApprovalError('Choose a PDF file.'); return; }
                                             const error = validateDocumentFile(file, uploadLimitKb);
                                             if (error) { setApprovalError(error); return; }
+                                            if (approvalSignedFile && approvalSignedFile !== file) void discardStagedDocumentFile(approvalSignedFile);
                                             setApprovalSignedFile(file);
+                                            if (viewingRow.id != null) void stageDocumentFile(file, 'signed_pdf', Number(viewingRow.id)).catch(() => undefined);
                                             setApprovalError('');
                                         }} />
-                                        {approvalSignedFile && <SelectedFile file={approvalSignedFile} onRemove={() => setApprovalSignedFile(null)} />}
-                                        <UploadProgressIndicator progress={uploadProgress?.target === 'approval' ? uploadProgress.percentage : null} processing={processing && uploadProgress?.target === 'approval'} />
+                                        {approvalSignedFile && <>
+                                            <SelectedFile file={approvalSignedFile} onRemove={() => { void discardStagedDocumentFile(approvalSignedFile); setApprovalSignedFile(null); }} />
+                                            <StagedUploadProgress state={stagedDisplayFor(approvalSignedFile)} onRetry={() => { if (viewingRow.id != null) void stageDocumentFile(approvalSignedFile, 'signed_pdf', Number(viewingRow.id)).catch(() => undefined); }} />
+                                        </>}
                                     </div>}
                                     {approvalError && <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{approvalError}</p>}
                                     <div className="space-y-2">
@@ -1417,7 +1535,7 @@ export default function DocumentsIndex({
                                             <button type="button" disabled={processing} onClick={() => decideDocument('rejected')} className="dots-button-secondary w-full text-danger disabled:opacity-50">Reject</button>
                                             <button type="button" disabled={processing} onClick={() => decideDocument('changes_requested')} className="dots-button-secondary w-full px-2 disabled:opacity-50">Request changes</button>
                                         </div>
-                                        <button type="button" disabled={processing || (viewingRow.active_step_signature_required === true && (!approvalSignedFile || !viewingRow.active_source_document_file_id || (viewingRow.active_step_route_mode === 'parallel' && !viewingRow.signature_claim?.is_mine)))} onClick={() => decideDocument('approved')} className="dots-button-primary w-full disabled:opacity-50">{viewingRow.active_step_signature_required ? 'Upload signed PDF and approve' : 'Approve'}</button>
+                                        <button type="button" disabled={processing || (viewingRow.active_step_signature_required === true && (!approvalSignedFile || !stagedTokenFor(approvalSignedFile) || !viewingRow.active_source_document_file_id || (viewingRow.active_step_route_mode === 'parallel' && !viewingRow.signature_claim?.is_mine)))} onClick={() => decideDocument('approved')} className="dots-button-primary w-full disabled:opacity-50">{viewingRow.active_step_signature_required ? 'Upload signed PDF and approve' : 'Approve'}</button>
                                     </div>
                                 </form>}
                             </section>}
@@ -1774,7 +1892,7 @@ export default function DocumentsIndex({
                                     <p className="mb-2 text-sm font-medium text-foreground">Document version</p>
                                     <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Document version source">
                                         {[['current', 'Keep current document'], ['upload', 'Upload new version']].map(([source, label]) => (
-                                            <button key={source} type="button" aria-pressed={releaseForm.source === source} onClick={() => { setReleaseForm({ ...releaseForm, source, approvedDraftId: '', file: null }); setReleaseError(''); }} className={`rounded-lg border px-3 py-2 text-sm font-medium ${releaseForm.source === source ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>{label}</button>
+                                            <button key={source} type="button" aria-pressed={releaseForm.source === source} onClick={() => { if (releaseForm.file) void discardStagedDocumentFile(releaseForm.file); setReleaseForm({ ...releaseForm, source, approvedDraftId: '', file: null }); setReleaseError(''); }} className={`rounded-lg border px-3 py-2 text-sm font-medium ${releaseForm.source === source ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>{label}</button>
                                         ))}
                                     </div>
                                     {releaseForm.source === 'current' && <p className="text-xs text-muted">Forward with the current document version.</p>}
@@ -1786,11 +1904,15 @@ export default function DocumentsIndex({
                                             if (!file) return;
                                             const error = validateDocumentFile(file, uploadLimitKb);
                                             if (error) { setReleaseError(error); return; }
+                                            if (releaseForm.file && releaseForm.file !== file) void discardStagedDocumentFile(releaseForm.file);
                                             setReleaseForm((current) => ({ ...current, file }));
+                                            if (releasingRow?.id != null) void stageDocumentFile(file, 'version', Number(releasingRow.id)).catch(() => undefined);
                                             setReleaseError('');
                                         }} />
-                                        {releaseForm.file && <SelectedFile file={releaseForm.file} onRemove={() => { setReleaseForm((current) => ({ ...current, file: null })); setReleaseError(''); }} />}
-                                        <UploadProgressIndicator progress={uploadProgress?.target === 'release' ? uploadProgress.percentage : null} processing={processing && uploadProgress?.target === 'release'} />
+                                        {releaseForm.file && <>
+                                            <SelectedFile file={releaseForm.file} onRemove={() => { void discardStagedDocumentFile(releaseForm.file!); setReleaseForm((current) => ({ ...current, file: null })); setReleaseError(''); }} />
+                                            <StagedUploadProgress state={stagedDisplayFor(releaseForm.file)} onRetry={() => { if (releasingRow?.id != null) void stageDocumentFile(releaseForm.file!, 'version', Number(releasingRow.id)).catch(() => undefined); }} />
+                                        </>}
                                         <p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Maximum file size: {uploadLimitKb / 1024} MB.</p>
                                     </>}
                                 </div>
@@ -1840,8 +1962,8 @@ export default function DocumentsIndex({
                                 {!editingRow && <div className="mb-4">
                                     <label htmlFor="document-source-select" className="mb-1 block text-sm font-medium text-foreground">Document source</label>
                                     <div className="flex flex-wrap gap-2" role="group" aria-label="Document source">
-                                        <button type="button" onClick={() => setForm({ ...form, document_source: 'upload', approved_draft_id: '', file: null })} className={`rounded-lg border px-3 py-2 text-sm font-medium ${form.document_source === 'upload' ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>Upload a document</button>
-                                        <button type="button" onClick={() => setForm({ ...form, document_source: 'approved', approved_draft_id: '', file: null })} className={`rounded-lg border px-3 py-2 text-sm font-medium ${form.document_source === 'approved' ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>Use generated document</button>
+                                        <button type="button" onClick={() => { if (form.file) void discardStagedDocumentFile(form.file); setForm({ ...form, document_source: 'upload', approved_draft_id: '', file: null }); }} className={`rounded-lg border px-3 py-2 text-sm font-medium ${form.document_source === 'upload' ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>Upload a document</button>
+                                        <button type="button" onClick={() => { if (form.file) void discardStagedDocumentFile(form.file); setForm({ ...form, document_source: 'approved', approved_draft_id: '', file: null }); }} className={`rounded-lg border px-3 py-2 text-sm font-medium ${form.document_source === 'approved' ? 'border-primary bg-secondary text-primary' : 'border-border bg-surface text-foreground'}`}>Use generated document</button>
                                     </div>
                                 </div>}
                                 {!editingRow && form.document_source === 'approved' && <div className="mb-4">
@@ -1932,10 +2054,17 @@ export default function DocumentsIndex({
                                     if (!file) return;
                                     const error = validateDocumentFile(file, uploadLimitKb);
                                     if (error) { setUploadError(error); return; }
-                                    setForm((current) => ({ ...current, file }));
+                                    setForm((current) => {
+                                        if (current.file && current.file !== file) void discardStagedDocumentFile(current.file);
+                                        return { ...current, file };
+                                    });
+                                    void stageDocumentFile(file, 'document', editingRow?.id == null ? null : Number(editingRow.id)).catch(() => undefined);
                                     setUploadError('');
                                 }} />
-                                {form.file && <SelectedFile file={form.file} onRemove={() => setForm((current) => ({ ...current, file: null }))} />}
+                                {form.file && <>
+                                    <SelectedFile file={form.file} onRemove={() => { void discardStagedDocumentFile(form.file!); setForm((current) => ({ ...current, file: null })); }} />
+                                    <StagedUploadProgress state={stagedDisplayFor(form.file)} onRetry={() => void stageDocumentFile(form.file!, 'document', editingRow?.id == null ? null : Number(editingRow.id)).catch(() => undefined)} />
+                                </>}
                                 <p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Uploaded PDFs receive a QR code and DOTS No. when attached to the routing record; other file types remain unchanged. A source file is required to create a routing record. Maximum file size: {uploadLimitKb / 1024} MB.</p>
                             </div>}
                             {!editingRow && <div>
@@ -1946,17 +2075,20 @@ export default function DocumentsIndex({
                                     const error = validateSupportingFiles(combinedFiles, uploadLimitKb, maxSupportingFiles);
                                     if (error) { setUploadError(error); return; }
                                     setForm((current) => ({ ...current, supporting_files: [...current.supporting_files, ...files] }));
+                                    files.forEach((file) => { void stageDocumentFile(file, 'supporting').catch(() => undefined); });
                                     setUploadError('');
                                 }} />
                                 <p className="mt-1 text-xs text-muted">Add up to {maxSupportingFiles} PDF, JPG, PNG, DOC, or DOCX files. Each can be up to {uploadLimitKb / 1024} MB. Supporting PDFs receive the same QR code and DOTS No.; other file types remain unchanged. They are stored separately and are not part of the approval signature sequence.</p>
                                 {form.supporting_files.length > 0 && <ul className="mt-3 space-y-2" aria-label="Selected supporting files">
-                                    {form.supporting_files.map((file, index) => <li key={`${file.name}-${file.lastModified}-${index}`} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm">
-                                        <span className="min-w-0 break-all text-foreground">{file.name}<span className="ml-2 text-xs text-muted">{(file.size / 1024 / 1024).toFixed(1)} MB</span></span>
-                                        <button type="button" onClick={() => setForm((current) => ({ ...current, supporting_files: current.supporting_files.filter((_, fileIndex) => fileIndex !== index) }))} className="shrink-0 rounded-md p-1 text-muted hover:bg-secondary hover:text-foreground" aria-label={`Remove ${file.name}`} title="Remove file"><X size={16} aria-hidden="true" /></button>
+                                    {form.supporting_files.map((file, index) => <li key={`${file.name}-${file.lastModified}-${index}`} className="rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <span className="min-w-0 break-all text-foreground">{file.name}<span className="ml-2 text-xs text-muted">{(file.size / 1024 / 1024).toFixed(1)} MB</span></span>
+                                            <button type="button" onClick={() => { void discardStagedDocumentFile(file); setForm((current) => ({ ...current, supporting_files: current.supporting_files.filter((_, fileIndex) => fileIndex !== index) })); }} className="shrink-0 rounded-md p-1 text-muted hover:bg-secondary hover:text-foreground" aria-label={`Remove ${file.name}`} title="Remove file"><X size={16} aria-hidden="true" /></button>
+                                        </div>
+                                        <StagedUploadProgress state={stagedDisplayFor(file)} onRetry={() => void stageDocumentFile(file, 'supporting').catch(() => undefined)} />
                                     </li>)}
                                 </ul>}
                             </div>}
-                            <UploadProgressIndicator progress={uploadProgress?.target === 'document' ? uploadProgress.percentage : null} processing={processing && uploadProgress?.target === 'document'} />
                             {uploadError && <p role="alert" className="text-sm text-danger">{uploadError}</p>}
                             <div className="flex flex-wrap gap-5">
                                 <label className="inline-flex items-center gap-2 text-sm text-foreground"><input type="checkbox" checked={form.urgent} onChange={(e) => setForm({ ...form, urgent: e.target.checked })} /> Mark as urgent</label>
@@ -2324,6 +2456,26 @@ function UploadProgressIndicator({ progress, processing }: { progress: number | 
             </div>
         </div>
     );
+}
+
+function StagedUploadProgress({ state, onRetry }: { state: StagedUploadDisplay | null; onRetry: () => void }) {
+    if (!state) return <p className="mt-1 text-xs text-muted">Preparing upload…</p>;
+    if (state.status === 'uploaded') return <p className="mt-1 text-xs font-medium text-success">Uploaded and ready to submit.</p>;
+    if (state.status === 'failed') return <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-danger">
+        <span role="alert">{state.error || 'Upload failed.'}</span>
+        <button type="button" onClick={onRetry} className="rounded-md border border-danger/30 px-2 py-1 font-medium hover:bg-danger-soft">Retry upload</button>
+    </div>;
+
+    const percentage = Math.max(0, Math.min(100, Math.round(state.percentage)));
+    return <div className="mt-2" role="status" aria-live="polite">
+        <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+            <span className="font-medium text-foreground">{state.status === 'checking' ? 'Upload received. Checking file…' : 'Uploading before submit…'}</span>
+            <span className="tabular-nums text-muted">{percentage}%</span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-secondary" role="progressbar" aria-label="Pre-upload progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percentage}>
+            <div className="h-full rounded-full bg-primary transition-[width] duration-200" style={{ width: `${percentage}%` }} />
+        </div>
+    </div>;
 }
 
 function SelectedFile({ file, onRemove }: { file: File; onRemove: () => void }) {

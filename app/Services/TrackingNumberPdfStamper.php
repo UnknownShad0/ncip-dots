@@ -23,6 +23,22 @@ class TrackingNumberPdfStamper
     // Matches the generated document's existing 8px bottom offset and line box.
     private const DOTS_NUMBER_BOTTOM_MM = 2.12;
 
+    public function validateSource(string $sourcePath): void
+    {
+        $pdf = new Fpdi;
+        $pageCount = $pdf->setSourceFile($sourcePath);
+        if ($pageCount < 1) {
+            throw new RuntimeException('The uploaded PDF has no pages.');
+        }
+
+        // Import every page here so pre-upload checks catch parser errors that
+        // would otherwise only surface when the document is submitted.
+        for ($pageNumber = 1; $pageNumber <= $pageCount; $pageNumber++) {
+            $template = $pdf->importPage($pageNumber);
+            $pdf->getTemplateSize($template);
+        }
+    }
+
     public function stamp(string $sourcePath, string $trackingNumber, string $trackingUrl): string
     {
         $matrix = $this->qrMatrix($trackingUrl);

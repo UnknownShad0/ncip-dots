@@ -767,6 +767,18 @@ class DocumentController extends Controller
 
     public function store(Request $request)
     {
+        $stagedUploads = app(\App\Services\StagedDocumentUploadService::class);
+        $stagedUploadTokens = array_filter([
+            $stagedUploads->attachSingle($request, 'file_upload_token', 'file', 'document', (int) $request->user()->id),
+        ]);
+        $stagedUploadTokens = array_merge($stagedUploadTokens, $stagedUploads->attachMany(
+            $request,
+            'supporting_upload_tokens',
+            'supporting_files',
+            'supporting',
+            (int) $request->user()->id,
+        ));
+
         $validated = $request->validate([
             'approved_draft_id' => ['nullable', 'integer', 'exists:document_creation_drafts,id'],
             'title' => ['required_without:approved_draft_id', 'nullable', 'string', 'max:255'],
@@ -926,6 +938,8 @@ class DocumentController extends Controller
             throw $exception;
         }
 
+        $stagedUploads->consume($stagedUploadTokens, (int) $request->user()->id);
+
         app(AuditTrailWriter::class)->record(
             $approvedDraft ? 'document.registered' : 'document.created',
             $document,
@@ -1011,6 +1025,15 @@ class DocumentController extends Controller
     public function decideApproval(Request $request, int $id)
     {
         $user = $request->user();
+        $stagedUploads = app(\App\Services\StagedDocumentUploadService::class);
+        $stagedUploadToken = $stagedUploads->attachSingle(
+            $request,
+            'signed_file_upload_token',
+            'signed_file',
+            'signed_pdf',
+            (int) $user->id,
+            $id,
+        );
         $validated = $request->validate([
             'decision' => ['required', 'in:approved,changes_requested,rejected'],
             'remarks' => ['nullable', 'string', 'max:4000'],
@@ -1343,11 +1366,25 @@ class DocumentController extends Controller
             throw $exception;
         }
 
+        if ($stagedUploadToken) {
+            $stagedUploads->consume([$stagedUploadToken], (int) $user->id);
+        }
+
         return back()->with('success', 'Approval decision recorded in the routing history.');
     }
 
     public function update(Request $request, $id)
     {
+        $stagedUploads = app(\App\Services\StagedDocumentUploadService::class);
+        $stagedUploadToken = $stagedUploads->attachSingle(
+            $request,
+            'file_upload_token',
+            'file',
+            'document',
+            (int) $request->user()->id,
+            (int) $id,
+        );
+
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'remarks' => ['nullable', 'string'],
@@ -1412,11 +1449,24 @@ class DocumentController extends Controller
             'changes' => $changes,
         ]);
 
+        if ($stagedUploadToken) {
+            $stagedUploads->consume([$stagedUploadToken], (int) $request->user()->id);
+        }
+
         return redirect()->route('documents.index')->with('success', 'Document updated successfully.');
     }
 
     public function release(Request $request, $id)
     {
+        $stagedUploads = app(\App\Services\StagedDocumentUploadService::class);
+        $stagedUploadToken = $stagedUploads->attachSingle(
+            $request,
+            'file_upload_token',
+            'file',
+            'version',
+            (int) $request->user()->id,
+            (int) $id,
+        );
         $validated = $request->validate([
             'action_type_id' => ['required', 'integer', 'exists:action_types,id'],
             'other_action' => ['nullable', 'string', 'max:255'],
@@ -1569,6 +1619,10 @@ class DocumentController extends Controller
                 Storage::disk('document_private')->delete($storedPath);
             }
             throw $exception;
+        }
+
+        if ($stagedUploadToken) {
+            $stagedUploads->consume([$stagedUploadToken], (int) $request->user()->id);
         }
 
         return back()->with('success', 'Document routed to the selected offices successfully.');
@@ -2829,8 +2883,8 @@ class DocumentController extends Controller
             } catch (\Throwable $exception) {
                 report($exception);
                 $message = $validationKey === 'supporting_files'
-                    ? 'DOTS could not stamp supporting PDF "'.$file->getClientOriginalName().'". Upload a standard, unprotected PDF and try again.'
-                    : 'DOTS could not stamp this PDF. Upload a standard, unprotected PDF and try again.';
+                    ? 'DOTS could not read and stamp supporting PDF "'.$file->getClientOriginalName().'". It may be damaged, incomplete, password-protected, or use unsupported PDF features. Re-save it as a new PDF and try again.'
+                    : 'DOTS could not read and stamp this PDF. It may be damaged, incomplete, password-protected, or use unsupported PDF features. Re-save it as a new PDF and try again.';
                 throw ValidationException::withMessages([
                     $validationKey => $message,
                 ]);

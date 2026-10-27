@@ -23,6 +23,7 @@ use App\Http\Controllers\QrDocumentWorkflowController;
 use App\Http\Controllers\RangeController;
 use App\Http\Controllers\SetupController;
 use App\Http\Controllers\SystemMaintenanceController;
+use App\Http\Controllers\StagedDocumentUploadController;
 use App\Http\Controllers\UserAccountController;
 use App\Services\DocumentTemplates;
 use Illuminate\Support\Facades\Route;
@@ -61,6 +62,8 @@ Route::middleware(['auth', 'active.user', 'verified', 'system.maintenance', 'nav
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::get('/documents', [DocumentController::class, 'index'])->name('documents.index');
+    Route::post('/document-uploads', [StagedDocumentUploadController::class, 'store'])->middleware('throttle:30,1')->name('document-uploads.store');
+    Route::delete('/document-uploads/{token}', [StagedDocumentUploadController::class, 'destroy'])->whereUuid('token')->name('document-uploads.destroy');
     Route::get('/documents/latest', [DocumentController::class, 'latest'])->name('documents.latest');
     Route::get('/documents/{id}/details', [DocumentController::class, 'details'])->whereNumber('id')->name('documents.details');
     Route::post('/documents/{id}/signature-claim', [DocumentController::class, 'claimSignature'])->whereNumber('id')->name('documents.signature-claim');
