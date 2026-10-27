@@ -9,6 +9,7 @@ use App\Models\Document;
 use App\Models\DocumentCreationDraft;
 use App\Models\DocumentRoute;
 use App\Models\DocumentRouteStep;
+use App\Models\DocumentSignatureClaim;
 use App\Models\DocumentTrail;
 use App\Models\DocumentType;
 use App\Models\Office;
@@ -56,14 +57,14 @@ class DocumentController extends Controller
         $user = auth()->user();
         $document = app(DocumentAccess::class)->scope(Document::query(), $user)
             ->with([
-                'files', 'creator', 'office', 'documentType', 'purposeType',
+                'files.routeStep.office', 'files.uploader', 'creator', 'office', 'documentType', 'purposeType',
                 'latestTrail.creator', 'latestTrail.fromOffice', 'latestTrail.toOffice',
                 'trails.creator', 'trails.fromOffice', 'trails.toOffice', 'trails.holderOffice', 'trails.legacyReceivingOffice',
                 'latestRoute.fromOffice', 'latestRoute.steps.office', 'latestRoute.steps.receiver', 'latestRoute.steps.decider',
                 'routes.fromOffice', 'routes.steps.office', 'routes.steps.receiver', 'routes.steps.decider', 'routes.steps.signedFile.uploader', 'routes.steps.signer',
             ])
             ->findOrFail($id);
-        $latestFile = $document->files->sortByDesc('id')->first();
+        $latestFile = $document->files->whereIn('type', ['original', 'version', 'signed'])->sortByDesc('id')->first();
         $rootRoute = $document->routes->whereNull('parent_step_id')->sortByDesc('id')->first();
         $currentOfficeId = app(DocumentAccess::class)->currentOfficeId($user);
         $activeRouteStep = $currentOfficeId
@@ -79,7 +80,9 @@ class DocumentController extends Controller
             'approval_status' => $document->approval_status ?? 'not_required',
             'signature_status' => $document->signature_status ?? 'not_required',
             'active_step_signature_required' => (bool) ($activeRouteStep[1]->signature_required ?? false),
+            'active_step_route_mode' => $activeRouteStep[0]->mode ?? null,
             'active_source_document_file_id' => $document->files()->whereIn('type', ['original', 'version', 'signed'])->latest('id')->value('id'),
+            'signature_claim' => $this->serializeSignatureClaim($document, $user),
             'can_approve' => $this->canApproveDocument($document, $user),
             'can_receive' => $document->routes->isNotEmpty()
                 ? $this->canReceiveRouteStep($document, $user)
@@ -132,6 +135,9 @@ class DocumentController extends Controller
                 'id' => $file->id,
                 'name' => $file->original_name ?: $file->file_name,
                 'type' => $file->type ?: 'original',
+                'office' => $file->routeStep?->office?->name,
+                'uploaded_by' => $file->uploader?->name,
+                'source_document_file_id' => $file->source_document_file_id,
                 'url' => $file->downloadUrl(),
                 'view_url' => $file->previewUrl(),
                 'is_pdf' => $file->isPdf(),
@@ -929,6 +935,79 @@ class DocumentController extends Controller
         return redirect()->route('documents.index')->with('success', 'Routing record created successfully.');
     }
 
+    public function claimSignature(Request $request, int $id)
+    {
+        $user = $request->user();
+        $access = app(DocumentAccess::class);
+        $document = $access->scope(Document::query(), $user)->findOrFail($id);
+        $officeId = $access->currentOfficeId($user);
+
+        DB::transaction(function () use ($document, $user, $officeId) {
+            $lockedDocument = Document::query()->lockForUpdate()->findOrFail($document->id);
+            $routes = $lockedDocument->routes()->with('steps')->orderByDesc('id')->lockForUpdate()->get();
+            $lockedDocument->setRelation('routes', $routes);
+            abort_unless($this->canApproveDocument($lockedDocument, $user), 403, 'Only an authorized approver at an active route office can claim this PDF.');
+            $activeStep = $officeId ? $this->findRouteStepForOffice($lockedDocument, (int) $officeId, 'in_progress') : null;
+            abort_unless($activeStep, 403, 'This office does not have an active approval step.');
+            [$route, $step] = $activeStep;
+            abort_unless($route->mode === 'parallel' && $step->signature_required, 422, 'Only signature-required parallel route steps need a signing claim.');
+
+            $existingClaim = DocumentSignatureClaim::query()->where('document_id', $lockedDocument->id)->lockForUpdate()->first();
+            if ($existingClaim) {
+                throw ValidationException::withMessages(['signature_claim' => 'The latest PDF is being processed by another office.']);
+            }
+            $sourceFile = $lockedDocument->files()->whereIn('type', ['original', 'version', 'signed'])->latest('id')->first();
+            if (! $sourceFile?->isPdf()) {
+                throw ValidationException::withMessages(['signature_claim' => 'The latest document version is not a PDF and cannot be signed.']);
+            }
+
+            $claim = DocumentSignatureClaim::query()->create([
+                'document_id' => $lockedDocument->id,
+                'route_step_id' => $step->id,
+                'claimed_by' => $user->id,
+                'source_document_file_id' => $sourceFile->id,
+                'claimed_at' => now(),
+            ]);
+            app(AuditTrailWriter::class)->record('document.signature_claimed', $lockedDocument, [
+                'document_route_id' => $route->id,
+                'route_step_id' => $step->id,
+                'office_id' => $step->office_id,
+                'claimed_by' => $user->id,
+                'source_document_file_id' => $sourceFile->id,
+                'claim_id' => $claim->id,
+            ], actor: $user);
+        });
+
+        return back()->with('success', 'The latest PDF is reserved for your office to sign.');
+    }
+
+    public function releaseSignatureClaim(Request $request, int $id)
+    {
+        $user = $request->user();
+        $document = app(DocumentAccess::class)->scope(Document::query(), $user)->findOrFail($id);
+
+        DB::transaction(function () use ($document, $user) {
+            $lockedDocument = Document::query()->lockForUpdate()->findOrFail($document->id);
+            $claim = DocumentSignatureClaim::query()->where('document_id', $lockedDocument->id)->lockForUpdate()->first();
+            abort_unless($claim, 404, 'There is no active signing claim.');
+            $step = DocumentRouteStep::query()->with('route')->findOrFail($claim->route_step_id);
+            $claim->setRelation('routeStep', $step);
+            abort_unless($claim->canBeReleasedBy($user), 403, 'Only the claimant, an administrator in the claiming office, or a system administrator can release this signing claim.');
+            $metadata = [
+                'document_route_id' => $step->document_route_id,
+                'route_step_id' => $step->id,
+                'office_id' => $step->office_id,
+                'claimed_by' => $claim->claimed_by,
+                'source_document_file_id' => $claim->source_document_file_id,
+                'released_by' => $user->id,
+            ];
+            $claim->delete();
+            app(AuditTrailWriter::class)->record('document.signature_claim_released', $lockedDocument, $metadata, actor: $user);
+        });
+
+        return back()->with('success', 'The signing claim was released.');
+    }
+
     public function decideApproval(Request $request, int $id)
     {
         $user = $request->user();
@@ -962,15 +1041,26 @@ class DocumentController extends Controller
                 $decision = $validated['decision'];
                 $signedUpload = $request->file('signed_file');
                 if ($step->signature_required && $decision === 'approved') {
-                    if ($route->mode !== 'sequential') {
-                        throw ValidationException::withMessages(['decision' => 'Signature-required routes must use sequential approval.']);
-                    }
                     if (! $signedUpload) {
                         throw ValidationException::withMessages(['signed_file' => 'Upload this office’s signed PDF to approve the step.']);
                     }
                     $sourceFile = $document->files()->whereIn('type', ['original', 'version', 'signed'])->latest('id')->first();
+                    $signatureClaim = null;
+                    if ($route->mode === 'parallel') {
+                        $signatureClaim = DocumentSignatureClaim::query()
+                            ->where('document_id', $document->id)
+                            ->lockForUpdate()
+                            ->first();
+                        if (! $signatureClaim || (int) $signatureClaim->route_step_id !== (int) $step->id
+                            || (int) $signatureClaim->claimed_by !== (int) $user->id) {
+                            throw ValidationException::withMessages(['signed_file' => 'Claim the latest PDF for signing before uploading.']);
+                        }
+                    }
                     if (! $sourceFile || ! $sourceFile->isPdf() || (int) ($validated['source_document_file_id'] ?? 0) !== (int) $sourceFile->id) {
                         throw ValidationException::withMessages(['source_document_file_id' => 'The document version changed. Reload the document and sign the latest PDF.']);
+                    }
+                    if ($signatureClaim && (int) $signatureClaim->source_document_file_id !== (int) $sourceFile->id) {
+                        throw ValidationException::withMessages(['source_document_file_id' => 'The claimed PDF is no longer the latest version. Release the claim and claim the latest PDF.']);
                     }
                     $storedPathForSignature = $signedUpload->storeAs('documents/'.$document->id.'/signed', Str::uuid().'.pdf', 'document_private');
                     if (! $storedPathForSignature) {
@@ -1012,6 +1102,15 @@ class DocumentController extends Controller
                         'signed_document_file_id' => $signedFile->id,
                         'sha256' => $signedFile->sha256,
                     ], actor: $user);
+                    if ($signatureClaim) {
+                        $signatureClaim->delete();
+                        app(AuditTrailWriter::class)->record('document.signature_claim_released', $document, [
+                            'route_step_id' => $step->id,
+                            'office_id' => $step->office_id,
+                            'reason' => 'signed_upload_completed',
+                            'signed_document_file_id' => $signedFile->id,
+                        ], actor: $user);
+                    }
                 } elseif ($step->signature_required && $decision !== 'approved' && $signedUpload) {
                     throw ValidationException::withMessages(['signed_file' => 'A signed PDF is only accepted with an approval decision.']);
                 } elseif (! $step->signature_required && $signedUpload) {
@@ -1043,6 +1142,15 @@ class DocumentController extends Controller
                 ]);
 
                 if ($decision !== 'approved') {
+                    $claim = DocumentSignatureClaim::query()->where('document_id', $document->id)->lockForUpdate()->first();
+                    if ($claim) {
+                        $claim->delete();
+                        app(AuditTrailWriter::class)->record('document.signature_claim_released', $document, [
+                            'route_step_id' => $claim->route_step_id,
+                            'office_id' => $claim->routeStep()->value('office_id'),
+                            'reason' => 'route_stopped',
+                        ], actor: $user);
+                    }
                     foreach ($routes as $candidateRoute) {
                         if ($candidateRoute->status !== 'pending') {
                             continue;
@@ -1334,9 +1442,6 @@ class DocumentController extends Controller
         $document = app(DocumentAccess::class)->scope(Document::query(), $request->user())
             ->with(['latestTrail', 'latestRoute'])
             ->findOrFail($id);
-        if ($signatureOfficeIds !== [] && $validated['routing_mode'] !== 'sequential') {
-            throw ValidationException::withMessages(['routing_mode' => 'Routes with signature-required offices must be sequential so each office signs the latest PDF.']);
-        }
         if ($signatureOfficeIds !== [] && $request->hasFile('file') && ! preg_match('/\.pdf$/i', $request->file('file')->getClientOriginalName())) {
             throw ValidationException::withMessages(['file' => 'A route with signature-required offices can only be forwarded with a PDF version.']);
         }
@@ -1377,9 +1482,6 @@ class DocumentController extends Controller
         try {
             $trail = DB::transaction(function () use ($request, $document, $validated, $officeIds, $signatureOfficeIds, $targetOffices, $officeId, $sourceOfficeName, &$storedPath) {
                 $lockedDocument = Document::query()->with(['latestTrail', 'latestRoute'])->lockForUpdate()->findOrFail($document->id);
-                if ($signatureOfficeIds !== [] && $validated['routing_mode'] !== 'sequential') {
-                    throw ValidationException::withMessages(['routing_mode' => 'Routes with signature-required offices must be sequential so each office signs the latest PDF.']);
-                }
                 if ($signatureOfficeIds !== [] && $request->hasFile('file') && ! preg_match('/\.pdf$/i', $request->file('file')->getClientOriginalName())) {
                     throw ValidationException::withMessages(['file' => 'A route with signature-required offices can only be forwarded with a PDF version.']);
                 }
@@ -1504,9 +1606,6 @@ class DocumentController extends Controller
             $documentRoute->load(['steps.office', 'steps.receiver', 'steps.decider']);
 
             abort_unless($this->canEditApprovalRoute($document, $documentRoute, $user), 403, 'You cannot edit this approval route.');
-            if (($signatureOfficeIds !== [] || $documentRoute->steps()->where('signature_required', true)->exists()) && $documentRoute->mode !== 'sequential') {
-                throw ValidationException::withMessages(['route' => 'Signature-required routes must remain sequential.']);
-            }
             if (! hash_equals($this->routeRevisionToken($documentRoute), $validated['revision'])) {
                 throw ValidationException::withMessages([
                     'route' => 'The approval route changed while you were editing it. Reload the document and try again.',
@@ -1520,9 +1619,6 @@ class DocumentController extends Controller
             $lockedOfficeIds = $lockedSteps->pluck('office_id')->map(fn ($id) => (int) $id)->all();
             $currentEditableOfficeIds = $editableSteps->pluck('office_id')->map(fn ($id) => (int) $id)->all();
             $isParallel = $documentRoute->mode === 'parallel';
-            if ($isParallel && $signatureOfficeIds !== []) {
-                throw ValidationException::withMessages(['signature_required_office_ids' => 'Signature-required offices need sequential routing.']);
-            }
             $submittedComparison = $officeIds;
             $currentComparison = $currentEditableOfficeIds;
             if ($isParallel) {
@@ -2358,6 +2454,28 @@ class DocumentController extends Controller
 
         $allSigned = $requiredSteps->every(fn (DocumentRouteStep $step) => $step->signature_status === 'signed' && $step->signed_document_file_id !== null);
         $document->update(['signature_status' => $allSigned ? 'signed' : 'needs_signature']);
+    }
+
+    private function serializeSignatureClaim(Document $document, User $user): ?array
+    {
+        $claim = DocumentSignatureClaim::query()
+            ->with(['claimant:id,name', 'routeStep.office:id,name', 'sourceFile:id,original_name,file_name'])
+            ->where('document_id', $document->id)
+            ->first();
+        if (! $claim) {
+            return null;
+        }
+
+        return [
+            'route_step_id' => $claim->route_step_id,
+            'office' => $claim->routeStep?->office?->name,
+            'claimed_by' => $claim->claimant?->name,
+            'claimed_at' => DateTimePresenter::format($claim->claimed_at, 'M j, Y g:i A'),
+            'source_file_name' => $claim->sourceFile?->original_name ?: $claim->sourceFile?->file_name,
+            'source_document_file_id' => $claim->source_document_file_id,
+            'is_mine' => (int) $claim->claimed_by === (int) $user->id,
+            'can_release' => $claim->canBeReleasedBy($user),
+        ];
     }
 
     private function serializeRouteTree(Document $document, bool $public = false): array

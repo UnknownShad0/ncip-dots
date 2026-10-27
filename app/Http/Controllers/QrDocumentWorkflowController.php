@@ -166,6 +166,20 @@ class QrDocumentWorkflowController extends Controller
         return app(DocumentController::class)->receive($document->id);
     }
 
+    public function claimSignature(Request $request, string $trackingNumber)
+    {
+        $document = $this->scopedDocument($request, $trackingNumber);
+
+        return app(DocumentController::class)->claimSignature($request, $document->id);
+    }
+
+    public function releaseSignatureClaim(Request $request, string $trackingNumber)
+    {
+        $document = $this->scopedDocument($request, $trackingNumber);
+
+        return app(DocumentController::class)->releaseSignatureClaim($request, $document->id);
+    }
+
     public function decide(Request $request, string $trackingNumber)
     {
         $document = $this->scopedDocument($request, $trackingNumber);

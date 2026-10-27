@@ -5,7 +5,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import CrudAlertModal, { type WorkspaceAlertVariant } from '@/Components/WorkspaceAlert';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
-import { Archive, ArrowDown, ArrowDownUp, ArrowUp, ChevronLeft, ChevronRight, Download, Eye, FilePlus2, FileSignature, FileText, GripVertical, Inbox, LoaderCircle, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
+import { Archive, PenLine, PenOff, ArrowDown, ArrowDownUp, ArrowUp, ChevronLeft, ChevronRight, Download, Eye, FilePlus2, FileSignature, FileText, GripVertical, Inbox, LoaderCircle, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 
@@ -88,7 +88,7 @@ type DocumentItem = {
     created_by_short_name?: string | null;
     file_name?: string;
     file_url?: string | null;
-    files?: Array<{ id: number; name: string; type: 'original' | 'version' | string; url: string | null; view_url?: string | null; is_pdf?: boolean; uploaded_at?: string | null }>;
+    files?: Array<{ id: number; name: string; type: 'original' | 'version' | string; office?: string | null; uploaded_by?: string | null; source_document_file_id?: number | null; url: string | null; view_url?: string | null; is_pdf?: boolean; uploaded_at?: string | null }>;
     origin_type?: string;
     last_transaction?: string;
     last_transaction_summary?: {
@@ -148,7 +148,9 @@ type DocumentItem = {
     approval_status?: string;
     signature_status?: string;
     active_step_signature_required?: boolean;
+    active_step_route_mode?: 'sequential' | 'parallel' | null;
     active_source_document_file_id?: number | null;
+    signature_claim?: { route_step_id: number; office?: string | null; claimed_by?: string | null; claimed_at?: string | null; source_file_name?: string | null; source_document_file_id: number; is_mine: boolean; can_release: boolean } | null;
     can_approve?: boolean;
     revision_draft_id?: number | null;
     route_mode?: 'sequential' | 'parallel' | null;
@@ -594,7 +596,6 @@ export default function DocumentsIndex({
             return {
                 ...current,
                 signatureOfficeIds,
-                routingMode: signatureOfficeIds.length ? 'sequential' : current.routingMode,
             };
         });
         setReleaseError('');
@@ -722,7 +723,6 @@ export default function DocumentsIndex({
     };
 
     const toggleRouteEditSignature = (officeId: string) => {
-        if (routeEditingDocument?.editable_route?.mode === 'parallel') return;
         setRouteEditForm((current) => ({
             ...current,
             signatureOfficeIds: current.signatureOfficeIds.includes(officeId)
@@ -827,6 +827,32 @@ export default function DocumentsIndex({
         openDocumentDetails(document);
     }, [documents, openDocumentId]);
 
+    useEffect(() => {
+        const documentId = viewingRow?.id;
+        if (documentId == null || viewingRow?.details_loading) return;
+
+        let cancelled = false;
+        const refreshClaimStatus = async () => {
+            if (processing) return;
+            try {
+                const { data } = await axios.get<Partial<DocumentItem>>(route('documents.details', documentId));
+                if (!cancelled) {
+                    setViewingRow((current) => current?.id === documentId
+                        ? { ...current, ...data, details_loading: false }
+                        : current);
+                }
+            } catch {
+                // Keep the last loaded state visible if a transient refresh fails.
+            }
+        };
+
+        const interval = window.setInterval(refreshClaimStatus, 2500);
+        return () => {
+            cancelled = true;
+            window.clearInterval(interval);
+        };
+    }, [viewingRow?.id, viewingRow?.details_loading, processing]);
+
     const decideDocument = (decision: 'approved' | 'changes_requested' | 'rejected') => {
         if (!viewingRow?.id || processing) return;
         setProcessing(true);
@@ -855,6 +881,44 @@ export default function DocumentsIndex({
                 router.visit(route('documents.index'), { replace: true });
             },
         });
+    };
+
+    const refreshViewingDocument = async (document: DocumentItem) => {
+        const details = await fetchDocumentDetails(document);
+        setViewingRow((current) => current?.id === document.id ? details : current);
+    };
+
+    const claimSigningFile = async () => {
+        if (!viewingRow?.id || processing) return;
+        setProcessing(true);
+        setApprovalError('');
+        try {
+            await axios.post(route('documents.signature-claim', viewingRow.id));
+            await refreshViewingDocument(viewingRow);
+        } catch (error) {
+            const responseErrors = axios.isAxiosError(error) ? error.response?.data?.errors : null;
+            setApprovalError(responseErrors ? Object.values(responseErrors).flat().join(' ') : 'The latest PDF could not be claimed. Reload and try again.');
+            await refreshViewingDocument(viewingRow).catch(() => undefined);
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const releaseSigningFile = async () => {
+        if (!viewingRow?.id || processing) return;
+        setProcessing(true);
+        setApprovalError('');
+        try {
+            await axios.post(route('documents.signature-claim.release', viewingRow.id));
+            await refreshViewingDocument(viewingRow);
+            setApprovalSignedFile(null);
+        } catch (error) {
+            const responseErrors = axios.isAxiosError(error) ? error.response?.data?.errors : null;
+            setApprovalError(responseErrors ? Object.values(responseErrors).flat().join(' ') : 'The signing claim could not be released. Reload and try again.');
+            await refreshViewingDocument(viewingRow).catch(() => undefined);
+        } finally {
+            setProcessing(false);
+        }
     };
 
     const printDisposition = async (document: DocumentItem) => {
@@ -1268,10 +1332,16 @@ export default function DocumentsIndex({
                                     <div><h3 className="font-semibold text-foreground">Approval and signing</h3><p className="mt-1 text-sm text-muted">For signing-enabled documents, each office signs and approves its own route step.</p></div>
                                     <div className="flex flex-wrap gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${getStatusClasses(viewingRow.approval_status)}`}>{viewingRow.approval_status.replaceAll('_', ' ')}</span><span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold capitalize text-foreground">{(viewingRow.signature_status || 'not_required').replaceAll('_', ' ')}</span></div>
                                 </div>
-                                {viewingRow.can_approve && <form className="mt-4 space-y-3" onSubmit={(event) => event.preventDefault()}>
+                                {viewingRow.signature_claim && !viewingRow.signature_claim.is_mine && <p role="status" className="mt-3 rounded-lg border border-primary/20 bg-secondary/50 px-3 py-2 text-sm text-foreground">Latest PDF is being processed by <strong>{viewingRow.signature_claim.office || 'an office'}</strong> ({viewingRow.signature_claim.claimed_by || 'authorized user'}). Source file: <strong>{viewingRow.signature_claim.source_file_name || 'latest PDF'}</strong>.</p>}
+                                {viewingRow.can_approve && !(viewingRow.active_step_signature_required && viewingRow.active_step_route_mode === 'parallel' && viewingRow.signature_claim && !viewingRow.signature_claim.is_mine) && <form className="mt-4 space-y-3" onSubmit={(event) => event.preventDefault()}>
                                     <label htmlFor="approval-remarks" className="block text-sm font-medium text-foreground">Remarks</label>
                                     <textarea id="approval-remarks" maxLength={4000} rows={3} value={approvalRemarks} onChange={(event) => setApprovalRemarks(event.target.value)} className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm" placeholder="Add a note for this decision" />
-                                    {viewingRow.active_step_signature_required && <div className="rounded-xl border border-warning/30 bg-warning-soft p-4">
+                                    {viewingRow.active_step_signature_required && viewingRow.active_step_route_mode === 'parallel' && <div className="rounded-xl border border-primary/20 bg-secondary/50 p-4">
+                                        {viewingRow.signature_claim
+                                            ? <><p className="text-sm font-semibold text-foreground">You claimed {viewingRow.signature_claim.source_file_name || 'the latest PDF'} for signing.</p>{viewingRow.signature_claim.can_release && <button type="button" disabled={processing} onClick={releaseSigningFile} className="dots-button-secondary mt-3 px-3 py-2">Release signing claim</button>}</>
+                                            : <><p className="text-sm font-semibold text-foreground">Claim the latest PDF before signing</p><p className="mt-1 text-xs text-muted">Only one office can upload a signed version at a time. Other offices can keep reviewing and approving.</p>{viewingRow.can_approve && <button type="button" disabled={processing} onClick={claimSigningFile} className="dots-button-primary mt-3 px-3 py-2">Claim latest PDF</button>}</>}
+                                    </div>}
+                                    {viewingRow.active_step_signature_required && (viewingRow.active_step_route_mode !== 'parallel' || viewingRow.signature_claim?.is_mine) && <div className="rounded-xl border border-warning/30 bg-warning-soft p-4">
                                         <p className="text-sm font-semibold text-foreground">This office must sign before approving</p>
                                         <p className="mt-1 text-xs text-muted">Upload the wet-signed PDF for the latest document version. The upload and approval are recorded together.</p>
                                         <input type="file" accept="application/pdf,.pdf" onChange={(event) => { const input = event.currentTarget; setApprovalSignedFile(input.files?.[0] ?? null); input.value = ''; }} className="mt-3 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
@@ -1283,7 +1353,7 @@ export default function DocumentsIndex({
                                             <button type="button" disabled={processing} onClick={() => decideDocument('rejected')} className="dots-button-secondary w-full text-danger disabled:opacity-50">Reject</button>
                                             <button type="button" disabled={processing} onClick={() => decideDocument('changes_requested')} className="dots-button-secondary w-full px-2 disabled:opacity-50">Request changes</button>
                                         </div>
-                                        <button type="button" disabled={processing || (viewingRow.active_step_signature_required === true && (!approvalSignedFile || !viewingRow.active_source_document_file_id))} onClick={() => decideDocument('approved')} className="dots-button-primary w-full disabled:opacity-50">{viewingRow.active_step_signature_required ? 'Upload signed PDF and approve' : 'Approve'}</button>
+                                        <button type="button" disabled={processing || (viewingRow.active_step_signature_required === true && (!approvalSignedFile || !viewingRow.active_source_document_file_id || (viewingRow.active_step_route_mode === 'parallel' && !viewingRow.signature_claim?.is_mine)))} onClick={() => decideDocument('approved')} className="dots-button-primary w-full disabled:opacity-50">{viewingRow.active_step_signature_required ? 'Upload signed PDF and approve' : 'Approve'}</button>
                                     </div>
                                 </form>}
                             </section>}
@@ -1315,7 +1385,7 @@ export default function DocumentsIndex({
                             <div className="space-y-6 p-5 sm:p-6">
                                 <div className="rounded-xl border border-primary/20 bg-secondary/50 px-4 py-3 text-sm text-foreground">
                                     {routeEditIsParallel
-                                        ? <><strong>Parallel approval:</strong> new offices receive the document immediately. Approved and received offices stay locked.</>
+                                        ? <><strong>Parallel approval:</strong> new offices receive the document immediately. Offices can review in parallel; signed PDF uploads are claimed one at a time. Approved and received offices stay locked.</>
                                         : <><strong>Sequential approval:</strong> approved and received offices stay locked. Waiting offices can be added, removed, or reordered.</>}
                                 </div>
 
@@ -1379,7 +1449,7 @@ export default function DocumentsIndex({
                                                     {isPreservedAvailable && <p className="mt-0.5 text-[11px] font-medium text-primary">Waiting to be received</p>}
                                                     {routeEditIsParallel && !isPreservedAvailable && <p className="mt-0.5 text-[11px] font-medium text-primary">Will be available immediately</p>}
                                                 </div>
-                                                <label className={`flex items-center gap-2 text-xs font-medium ${routeEditIsParallel ? 'cursor-not-allowed text-muted' : 'text-foreground'}`} title={routeEditIsParallel ? 'Signature-required offices need sequential routing.' : undefined}><input type="checkbox" disabled={routeEditIsParallel} checked={routeEditForm.signatureOfficeIds.includes(officeId)} onChange={() => toggleRouteEditSignature(officeId)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />Requires signature</label>
+                                                <label className="flex items-center gap-2 text-xs font-medium text-foreground"><input type="checkbox" checked={routeEditForm.signatureOfficeIds.includes(officeId)} onChange={() => toggleRouteEditSignature(officeId)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />Requires signature</label>
                                                 <div className="flex shrink-0 gap-1">
                                                     {!routeEditIsParallel && <button type="button" disabled={index === 0} onClick={() => moveRouteEditOffice(officeId, -1)} aria-label={`Move ${office?.name} up`} className="rounded-md p-2 text-muted hover:bg-secondary disabled:opacity-30"><ArrowUp size={15} /></button>}
                                                     {!routeEditIsParallel && <button type="button" disabled={index === routeEditForm.officeIds.length - 1} onClick={() => moveRouteEditOffice(officeId, 1)} aria-label={`Move ${office?.name} down`} className="rounded-md p-2 text-muted hover:bg-secondary disabled:opacity-30"><ArrowDown size={15} /></button>}
@@ -1461,15 +1531,15 @@ export default function DocumentsIndex({
                                     <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Approval flow">
                                         {([
                                             ['sequential', 'Sequential approval', 'Offices review in order. The next office receives the document after the current office approves.'],
-                                            ['parallel', 'Parallel approval', 'All selected offices receive the document immediately and can review independently.'],
+                                            ['parallel', 'Parallel approval', 'All offices review at the same time; signature-required offices take turns with the latest PDF.'],
                                         ] as const).map(([mode, label, description]) => (
-                                            <button key={mode} type="button" disabled={mode === 'parallel' && releaseForm.signatureOfficeIds.length > 0} aria-pressed={releaseForm.routingMode === mode} onClick={() => setReleaseForm({ ...releaseForm, routingMode: mode })} className={`rounded-xl border p-3 text-left disabled:cursor-not-allowed disabled:opacity-50 ${releaseForm.routingMode === mode ? 'border-primary bg-secondary' : 'border-border bg-surface'}`}>
+                                            <button key={mode} type="button" aria-pressed={releaseForm.routingMode === mode} onClick={() => setReleaseForm({ ...releaseForm, routingMode: mode })} className={`rounded-xl border p-3 text-left ${releaseForm.routingMode === mode ? 'border-primary bg-secondary' : 'border-border bg-surface'}`}>
                                                 <span className="block text-sm font-semibold text-foreground">{label}</span>
                                                 <span className="mt-1 block text-xs text-muted">{description}</span>
                                             </button>
                                         ))}
                                     </div>
-                                    <p className="mt-2 text-xs text-muted">Mark signatures on individual route steps below. If any office requires a signature, routing switches to sequential so each signer receives the latest PDF.</p>
+                                    <p className="mt-2 text-xs text-muted">Mark signature requirements per office. In parallel approval, offices review at the same time; signature-required offices claim and sign the latest PDF one at a time.</p>
                                 </div>
                                 <div className="sm:col-span-2">
                                     <p className="mb-2 text-sm font-medium text-foreground">Required offices <span className="text-danger">*</span><span className="ml-2 text-xs font-normal text-muted">Choose up to 30; every selected office must approve.</span></p>
@@ -1495,45 +1565,136 @@ export default function DocumentsIndex({
                                     <p className="mt-2 text-xs text-muted">{releaseForm.officeIds.length}/30 offices selected</p>
                                 </div>
                                 {releaseForm.officeIds.length > 0 && (
-                                    <div className="sm:col-span-2">
-                                        <p className="mb-2 text-sm font-medium text-foreground">Route preview</p>
-                                        {releaseForm.routingMode === 'sequential' ? (
-                                            <ol className="space-y-2" aria-label="Sequential office order">
-                                                {releaseForm.officeIds.map((officeId, index) => {
-                                                    const office = offices.find((option) => String(option.id) === officeId);
-                                                    return <li key={officeId} draggable onDragStart={() => setDraggedOfficeId(officeId)} onDragOver={(event) => event.preventDefault()} onDrop={() => reorderReleaseOffice(officeId)} onDragEnd={() => setDraggedOfficeId(null)} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface p-3">
-                                                        <GripVertical size={17} className="shrink-0 cursor-grab text-muted" aria-label="Drag to reorder" />
-                                                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-white">{index + 1}</span>
-                                                        <span className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">{office?.name}</span>
-                                                        <label className="flex items-center gap-2 text-xs font-medium text-foreground"><input type="checkbox" checked={releaseForm.signatureOfficeIds.includes(officeId)} onChange={() => toggleReleaseSignature(officeId)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />Requires signature</label>
-                                                        <div className="flex shrink-0 gap-1">
-                                                            <button type="button" disabled={index === 0} onClick={() => moveReleaseOffice(officeId, -1)} aria-label={`Move ${office?.name} up`} className="rounded-md p-2 text-muted hover:bg-secondary disabled:opacity-30"><ArrowUp size={15} /></button>
-                                                            <button type="button" disabled={index === releaseForm.officeIds.length - 1} onClick={() => moveReleaseOffice(officeId, 1)} aria-label={`Move ${office?.name} down`} className="rounded-md p-2 text-muted hover:bg-secondary disabled:opacity-30"><ArrowDown size={15} /></button>
-                                                            <button type="button" onClick={() => toggleReleaseOffice(officeId)} aria-label={`Remove ${office?.name}`} className="rounded-md p-2 text-muted hover:bg-danger-soft hover:text-danger"><X size={15} /></button>
-                                                        </div>
-                                                    </li>;
-                                                })}
-                                            </ol>
-                                        ) : (
-                                            <div className="rounded-xl border border-border bg-background p-4">
-                                                <div className="mx-auto w-fit rounded-xl border border-primary bg-surface px-4 py-2 text-sm font-semibold text-foreground">This document</div>
-                                                <div className="mx-auto h-6 w-px bg-border" aria-hidden="true" />
-                                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                                    {releaseForm.officeIds.map((officeId) => {
-                                                        const office = offices.find((option) => String(option.id) === officeId);
-                                                        return <div key={officeId} className="relative rounded-xl border border-primary/40 bg-surface p-3 text-center">
-                                                            <span className="absolute -top-3 left-1/2 h-3 w-px -translate-x-1/2 bg-border" aria-hidden="true" />
-                                                            <span className="mx-auto mb-2 block h-2.5 w-2.5 rounded-full bg-primary" aria-hidden="true" />
-                                                            <p className="break-words text-sm font-semibold text-foreground">{office?.name}</p>
-                                                            <p className="mt-1 text-xs text-muted">Required approval</p>
-                                                            <label className="mt-2 inline-flex items-center gap-2 text-xs font-medium text-foreground"><input type="checkbox" checked={releaseForm.signatureOfficeIds.includes(officeId)} onChange={() => toggleReleaseSignature(officeId)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />Requires signature</label>
-                                                            <button type="button" onClick={() => toggleReleaseOffice(officeId)} className="mt-2 text-xs font-medium text-danger hover:underline">Remove</button>
-                                                        </div>;
-                                                    })}
+                                <div className="sm:col-span-2">
+                                    <p className="mb-2 text-sm font-medium text-foreground">Route preview</p>
+
+                                    {releaseForm.routingMode === 'sequential' ? (
+                                    <>
+                                        <ol className="relative space-y-5" aria-label="Sequential office order">
+                                        {releaseForm.officeIds.map((officeId, index) => {
+                                            const office = offices.find((o) => String(o.id) === officeId);
+                                            const needsSig = releaseForm.signatureOfficeIds.includes(officeId);
+                                            const isFirst = index === 0;
+                                            const isLast = index === releaseForm.officeIds.length - 1;
+
+                                            return (
+                                            <li
+                                                key={officeId}
+                                                draggable
+                                                onDragStart={() => setDraggedOfficeId(officeId)}
+                                                onDragOver={(e) => e.preventDefault()}
+                                                onDrop={() => reorderReleaseOffice(officeId)}
+                                                onDragEnd={() => setDraggedOfficeId(null)}
+                                                className={`relative flex flex-wrap items-center gap-3 rounded-xl border bg-surface px-3 py-2.5 transition ${
+                                                draggedOfficeId === officeId ? 'border-primary opacity-60' : 'border-border hover:border-primary/40'
+                                                }`}
+                                            >
+                                                {/* connector to previous step */}
+                                                {!isFirst && (
+                                                <span aria-hidden="true" className="absolute -top-5 left-[2.15rem] h-5 w-0.5 bg-border" />
+                                                )}
+
+                                                <GripVertical size={18} className="shrink-0 cursor-grab text-muted active:cursor-grabbing" aria-label="Drag to reorder" />
+
+                                                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                                                {index + 1}
+                                                </span>
+
+                                                <span className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">
+                                                {office?.name}
+                                                </span>
+
+                                                <button
+                                                type="button"
+                                                role="switch"
+                                                aria-checked={needsSig}
+                                                onClick={() => toggleReleaseSignature(officeId)}
+                                                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${
+                                                    needsSig
+                                                    ? 'border-success/40 bg-success-soft text-success'
+                                                    : 'border-border text-muted hover:bg-secondary'
+                                                }`}
+                                                >
+                                                {needsSig ? <PenLine size={13} /> : <PenOff size={13} />}
+                                                {needsSig ? 'Signature required' : 'No signature'}
+                                                </button>
+
+                                                <div className="flex shrink-0 items-center">
+                                                <button type="button" disabled={isFirst} onClick={() => moveReleaseOffice(officeId, -1)}
+                                                    aria-label={`Move ${office?.name} up`}
+                                                    className="grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-secondary disabled:opacity-30">
+                                                    <ArrowUp size={16} />
+                                                </button>
+                                                <button type="button" disabled={isLast} onClick={() => moveReleaseOffice(officeId, 1)}
+                                                    aria-label={`Move ${office?.name} down`}
+                                                    className="grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-secondary disabled:opacity-30">
+                                                    <ArrowDown size={16} />
+                                                </button>
+                                                <button type="button" onClick={() => toggleReleaseOffice(officeId)}
+                                                    aria-label={`Remove ${office?.name}`}
+                                                    className="grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-danger-soft hover:text-danger">
+                                                    <X size={16} />
+                                                </button>
                                                 </div>
-                                            </div>
-                                        )}
-                                    </div>
+                                            </li>
+                                            );
+                                        })}
+                                        </ol>
+                                        <p className="mt-3 text-xs text-muted">
+                                        Each office approves in order. The next one is notified after the previous finishes.
+                                        </p>
+                                    </>
+                                    ) : (
+                                    <>
+                                        <div className="rounded-xl border border-border bg-background p-4">
+                                        <div className="mx-auto flex w-fit items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white">
+                                            <FileText size={15} /> This document
+                                        </div>
+                                        <div className="mx-auto h-4 w-0.5 bg-border" aria-hidden="true" />
+
+                                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                            {releaseForm.officeIds.map((officeId) => {
+                                            const office = offices.find((o) => String(o.id) === officeId);
+                                            const needsSig = releaseForm.signatureOfficeIds.includes(officeId);
+                                            return (
+                                                <div key={officeId} className="relative flex flex-col gap-2 rounded-xl border border-border bg-surface p-3">
+                                                <span aria-hidden="true" className="absolute -top-3 left-1/2 h-3 w-0.5 -translate-x-1/2 bg-border" />
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <p className="min-w-0 break-words text-sm font-semibold text-foreground">{office?.name}</p>
+                                                    <button type="button" onClick={() => toggleReleaseOffice(officeId)}
+                                                    aria-label={`Remove ${office?.name}`}
+                                                    className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-muted hover:bg-danger-soft hover:text-danger">
+                                                    <X size={14} />
+                                                    </button>
+                                                </div>
+                                                <span className="w-fit rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-medium text-warning">
+                                                    Required approval
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    role="switch"
+                                                    aria-checked={needsSig}
+                                                    onClick={() => toggleReleaseSignature(officeId)}
+                                                    className={`inline-flex w-fit items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${
+                                                    needsSig
+                                                        ? 'border-success/40 bg-success-soft text-success'
+                                                        : 'border-border text-muted hover:bg-secondary'
+                                                    }`}
+                                                >
+                                                    {needsSig ? <PenLine size={13} /> : <PenOff size={13} />}
+                                                    {needsSig ? 'Signature required' : 'No signature'}
+                                                </button>
+                                                </div>
+                                            );
+                                            })}
+                                        </div>
+                                        </div>
+                                        <p className="mt-3 text-xs text-muted">
+                                        All offices are notified at once. The document is released when every approval is in.
+                                        </p>
+                                    </>
+                                    )}
+                                </div>
                                 )}
                                 <div className="sm:col-span-2">
                                     <label htmlFor="release-remarks" className="mb-1 block text-sm font-medium text-foreground">Remarks</label>
@@ -2063,7 +2224,7 @@ function DocumentReferenceDetails({ document, loading = false }: { document: Doc
                 <div className="mt-5">
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                         <p className="text-sm font-semibold text-foreground">Attached files</p>
-                        {document.signature_status && document.signature_status !== 'not_required' && <p className="text-xs text-muted">Each required office signs its own route step. iPluma is not connected; wet-signed PDF upload is available during approval.</p>}
+                        {document.signature_status && document.signature_status !== 'not_required' && <p className="text-xs text-muted">Signed PDFs are cumulative versions. Each file shows the office that uploaded it and the version it was based on. iPluma is not connected; wet-signed PDF upload is available during approval.</p>}
                     </div>
                     {document.files?.length ? (
                         <ul className="mt-3 space-y-2">
@@ -2076,6 +2237,8 @@ function DocumentReferenceDetails({ document, loading = false }: { document: Doc
                                                 <p className="break-words text-sm font-semibold text-foreground">{file.name}</p>
                                                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
                                                     <span>{file.type === 'original' ? 'Primary document' : file.type === 'supporting' ? 'Supporting file' : file.type}</span>
+                                                    {file.office && <><span aria-hidden="true">Â·</span><span>{file.office}{file.uploaded_by ? ` signed by ${file.uploaded_by}` : ''}</span></>}
+                                                    {file.source_document_file_id && <><span aria-hidden="true">Â·</span><span>Based on file #{file.source_document_file_id}</span></>}
                                                     {file.is_pdf && <><span aria-hidden="true">·</span><span>PDF</span></>}
                                                     {file.uploaded_at && <><span aria-hidden="true">·</span><span>{file.uploaded_at}</span></>}
                                                     {!file.url && !file.view_url && <span className="text-warning">File not available</span>}

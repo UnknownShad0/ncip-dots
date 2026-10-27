@@ -44,6 +44,8 @@ Route::delete('/track/{trackingNumber}/session', [QrDocumentWorkflowController::
 
 Route::middleware(['qr.document', 'throttle:qr-document-actions'])->group(function () {
     Route::post('/track/{trackingNumber}/receive', [QrDocumentWorkflowController::class, 'receive'])->name('documents.track.receive');
+    Route::post('/track/{trackingNumber}/signature-claim', [QrDocumentWorkflowController::class, 'claimSignature'])->name('documents.track.signature-claim');
+    Route::post('/track/{trackingNumber}/signature-claim/release', [QrDocumentWorkflowController::class, 'releaseSignatureClaim'])->name('documents.track.signature-claim.release');
     Route::post('/track/{trackingNumber}/decision', [QrDocumentWorkflowController::class, 'decide'])->name('documents.track.decision');
     Route::post('/track/{trackingNumber}/wet-signed', [QrDocumentWorkflowController::class, 'uploadWetSignedAndApprove'])->name('documents.track.wet-signed');
     Route::post('/track/{trackingNumber}/forward', [QrDocumentWorkflowController::class, 'forward'])->name('documents.track.forward');
@@ -61,6 +63,8 @@ Route::middleware(['auth', 'active.user', 'verified', 'system.maintenance', 'nav
     Route::get('/documents', [DocumentController::class, 'index'])->name('documents.index');
     Route::get('/documents/latest', [DocumentController::class, 'latest'])->name('documents.latest');
     Route::get('/documents/{id}/details', [DocumentController::class, 'details'])->whereNumber('id')->name('documents.details');
+    Route::post('/documents/{id}/signature-claim', [DocumentController::class, 'claimSignature'])->whereNumber('id')->name('documents.signature-claim');
+    Route::post('/documents/{id}/signature-claim/release', [DocumentController::class, 'releaseSignatureClaim'])->whereNumber('id')->name('documents.signature-claim.release');
     Route::post('/documents/{id}/approval', [DocumentController::class, 'decideApproval'])->whereNumber('id')->name('documents.approval');
     Route::get('/documents/{document}/files/{file}/view', [DocumentController::class, 'viewFile'])
         ->whereNumber('document')->whereNumber('file')->name('documents.files.view');

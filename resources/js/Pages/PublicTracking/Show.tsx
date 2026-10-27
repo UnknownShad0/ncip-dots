@@ -48,7 +48,7 @@ type TrackedDocument = {
     trails: Trail[];
 };
 
-type WorkflowFile = { id: number; name: string; type: string; size_bytes: number; is_pdf: boolean; view_url?: string | null; download_url: string };
+type WorkflowFile = { id: number; name: string; type: string; office?: string | null; uploaded_by?: string | null; source_document_file_id?: number | null; size_bytes: number; is_pdf: boolean; view_url?: string | null; download_url: string };
 type WorkflowOption = { id: number; name: string };
 type QrWorkflow = {
     state: 'public' | 'otp_pending' | 'verified';
@@ -66,11 +66,16 @@ type QrWorkflow = {
     can_approve: boolean;
     can_forward: boolean;
     receive_url?: string | null;
+    claim_signature_url?: string | null;
+    release_signature_claim_url?: string | null;
     decision_url?: string | null;
     wet_signed_url?: string | null;
     forward_url?: string | null;
     signature_status?: string | null;
     step_signature_required?: boolean;
+    step_route_mode?: 'sequential' | 'parallel' | null;
+    can_claim_signature?: boolean;
+    signature_claim?: { office?: string | null; claimed_by?: string | null; claimed_at?: string | null; source_file_name?: string | null; source_document_file_id: number; is_mine: boolean; can_release: boolean } | null;
     source_document_file_id?: number | null;
     ipluma_available: boolean;
     files: WorkflowFile[];
@@ -262,7 +267,6 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
             ? signatureOfficeIds.filter((id) => id !== officeId)
             : [...signatureOfficeIds, officeId];
         setSignatureOfficeIds(next);
-        if (next.length > 0) setRoutingMode('sequential');
         setForwardError('');
     };
 
@@ -367,11 +371,13 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
                 <p className="mt-2 text-xs text-blue-700">This access is limited to this document and expires automatically.</p>
             </div>
 
+            {workflow.signature_claim && !workflow.signature_claim.is_mine && <p role="status" className="rounded-lg border border-primary/20 bg-secondary/50 px-3 py-2 text-sm text-foreground">Latest PDF is being processed by <strong>{workflow.signature_claim.office || 'an office'}</strong> ({workflow.signature_claim.claimed_by || 'authorized user'}). Source file: <strong>{workflow.signature_claim.source_file_name || 'latest PDF'}</strong>.</p>}
+
             {workflow.can_receive && <button type="button" disabled={busy} onClick={() => post(workflow.receive_url)}
                 className="w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60">Mark physical document as received</button>}
 
             {(workflow.can_approve || workflow.can_forward) && <div className="grid gap-3 sm:grid-cols-2">
-                {workflow.can_approve && <button type="button" disabled={busy} onClick={() => setReviewOpen(true)} className="dots-button-primary justify-center py-3 disabled:opacity-60">
+                {workflow.can_approve && !(workflow.step_signature_required && workflow.step_route_mode === 'parallel' && workflow.signature_claim && !workflow.signature_claim.is_mine) && <button type="button" disabled={busy} onClick={() => setReviewOpen(true)} className="dots-button-primary justify-center py-3 disabled:opacity-60">
                     <FileSignature size={17} aria-hidden="true" /> Review and Decide
                 </button>}
                 {workflow.can_forward && <button type="button" disabled={busy} onClick={() => setForwardOpen(true)} className="dots-button-secondary justify-center py-3 disabled:opacity-60">
@@ -399,7 +405,7 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
                     <h3 id="qr-files-title" className="font-semibold text-foreground">Document files and versions</h3>
                     {workflow.files.length > 0 ? <ul className="mt-3 divide-y divide-border rounded-xl border border-border bg-background">
                         {workflow.files.map((file) => <li key={file.id} className="flex flex-col gap-3 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-                            <div className="min-w-0"><p className="break-words font-medium text-foreground">{file.name}</p><p className="mt-0.5 text-xs capitalize text-muted">{file.type} · {(file.size_bytes / 1024).toFixed(1)} KB</p></div>
+                            <div className="min-w-0"><p className="break-words font-medium text-foreground">{file.name}</p><p className="mt-0.5 text-xs capitalize text-muted">{file.type}{file.office ? ` · ${file.office}${file.uploaded_by ? ` signed by ${file.uploaded_by}` : ''}` : ''}{file.source_document_file_id ? ` · based on file #${file.source_document_file_id}` : ''} · {(file.size_bytes / 1024).toFixed(1)} KB</p></div>
                             <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:shrink-0 sm:flex-wrap">
                                 {file.view_url && <a href={file.view_url} target="_blank" rel="noreferrer" className="dots-button-secondary w-full px-3 py-2 sm:w-auto"><Eye size={15} /> View</a>}
                                 <a href={file.download_url} className="dots-button-secondary w-full px-3 py-2 sm:w-auto"><Download size={15} /> Download</a>
@@ -417,7 +423,13 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
                         <textarea id="qr-approval-remarks" maxLength={4000} rows={3} value={remarks} onChange={(event) => setRemarks(event.target.value)} className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm" placeholder="Add a note for this decision" />
                         {qrErrors.length > 0 && <div role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{qrErrors.map((error, index) => <p key={index}>{error}</p>)}</div>}
 
-                        {workflow.step_signature_required && <div className="rounded-xl border border-warning/30 bg-warning-soft p-4">
+                        {workflow.step_signature_required && workflow.step_route_mode === 'parallel' && <div className="rounded-xl border border-primary/20 bg-secondary/50 p-4">
+                            {workflow.signature_claim
+                                ? <><p className="text-sm font-semibold text-foreground">You claimed {workflow.signature_claim.source_file_name || 'the latest PDF'} for signing.</p>{workflow.signature_claim.can_release && <button type="button" disabled={busy} onClick={() => post(workflow.release_signature_claim_url)} className="dots-button-secondary mt-3 px-3 py-2">Release signing claim</button>}</>
+                                : <><p className="text-sm font-semibold text-foreground">Claim the latest PDF before signing</p><p className="mt-1 text-xs text-muted">Only one office can upload a signed version at a time. Other offices can keep reviewing and approving.</p>{workflow.can_claim_signature && <button type="button" disabled={busy} onClick={() => post(workflow.claim_signature_url)} className="dots-button-primary mt-3 px-3 py-2">Claim latest PDF</button>}</>}
+                        </div>}
+
+                        {workflow.step_signature_required && (workflow.step_route_mode !== 'parallel' || workflow.signature_claim?.is_mine) && <div className="rounded-xl border border-warning/30 bg-warning-soft p-4">
                             <p className="text-sm font-semibold text-foreground">A signed copy is required</p>
                             <p className="mt-1 text-xs text-muted">Scan the wet-signed paper as a clear PDF. The upload is attached to this office’s step and approves it.</p>
                             <input type="file" accept="application/pdf,.pdf" onChange={(event) => { const input = event.currentTarget; setSignedFile(input.files?.[0] ?? null); input.value = ''; }} className="mt-3 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
@@ -430,7 +442,7 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
                                 <button type="button" disabled={busy} onClick={() => post(workflow.decision_url, { decision: 'changes_requested', remarks }, false, () => setReviewOpen(false))} className="dots-button-secondary w-full px-2 disabled:opacity-50">Request changes</button>
                             </div>
                             {workflow.step_signature_required
-                                ? <button type="button" disabled={busy || !signedFile || !workflow.source_document_file_id} onClick={() => post(workflow.wet_signed_url, { signed_file: signedFile, source_document_file_id: workflow.source_document_file_id, remarks }, true, () => { setReviewOpen(false); setSignedFile(null); })} className="dots-button-primary w-full disabled:opacity-50">Upload signed PDF and approve</button>
+                                ? <button type="button" disabled={busy || !signedFile || !workflow.source_document_file_id || (workflow.step_route_mode === 'parallel' && !workflow.signature_claim?.is_mine)} onClick={() => post(workflow.wet_signed_url, { signed_file: signedFile, source_document_file_id: workflow.source_document_file_id, remarks }, true, () => { setReviewOpen(false); setSignedFile(null); })} className="dots-button-primary w-full disabled:opacity-50">Upload signed PDF and approve</button>
                                 : <button type="button" disabled={busy} onClick={() => post(workflow.decision_url, { decision: 'approved', remarks }, false, () => setReviewOpen(false))} className="dots-button-primary w-full disabled:opacity-50">Approve</button>}
                         </div>
                     </div>
@@ -464,9 +476,9 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
                         <div className="sm:col-span-2">
                             <p className="mb-2 text-sm font-medium text-foreground">Approval flow</p>
                             <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Approval flow">
-                                {([['sequential', 'Sequential approval', 'Offices review in order. Signers receive the latest PDF.'], ['parallel', 'Parallel approval', 'All selected offices can review independently.']] as const).map(([mode, label, description]) => <button key={mode} type="button" disabled={mode === 'parallel' && signatureOfficeIds.length > 0} aria-pressed={routingMode === mode} onClick={() => setRoutingMode(mode)} className={`rounded-xl border p-3 text-left disabled:cursor-not-allowed disabled:opacity-50 ${routingMode === mode ? 'border-primary bg-secondary' : 'border-border bg-surface'}`}><span className="block text-sm font-semibold text-foreground">{label}</span><span className="mt-1 block text-xs text-muted">{description}</span></button>)}
+                                {([['sequential', 'Sequential approval', 'Offices review in order. Signers receive the latest PDF.'], ['parallel', 'Parallel approval', 'All offices review at the same time; required signers take turns with the latest PDF.']] as const).map(([mode, label, description]) => <button key={mode} type="button" aria-pressed={routingMode === mode} onClick={() => setRoutingMode(mode)} className={`rounded-xl border p-3 text-left ${routingMode === mode ? 'border-primary bg-secondary' : 'border-border bg-surface'}`}><span className="block text-sm font-semibold text-foreground">{label}</span><span className="mt-1 block text-xs text-muted">{description}</span></button>)}
                             </div>
-                            <p className="mt-2 text-xs text-muted">Mark signature requirements on individual offices in the route order. Any required signatures use sequential routing.</p>
+                            <p className="mt-2 text-xs text-muted">Mark signature requirements per office. Parallel review allows simultaneous approvals; signed PDF uploads are claimed and processed one at a time.</p>
                         </div>
 
                         <div className="sm:col-span-2">

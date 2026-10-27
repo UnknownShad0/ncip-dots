@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ActionType;
 use App\Models\Document;
+use App\Models\DocumentSignatureClaim;
 use App\Models\Office;
 use App\Services\QrDocumentAccess;
 use App\Support\DateTimePresenter;
@@ -23,7 +24,7 @@ class PublicDocumentTrackingController extends Controller
                 'trails.fromOffice:id,name', 'trails.toOffice:id,name',
                 'latestRoute.fromOffice:id,name', 'latestRoute.steps.office:id,name',
                 'routes.fromOffice:id,name', 'routes.steps.office:id,name',
-                'files',
+                'files.routeStep.office', 'files.uploader',
             ])
             ->first();
 
@@ -35,6 +36,10 @@ class PublicDocumentTrackingController extends Controller
             $verified = $qrDocument && (int) $qrDocument->id === (int) $document->id;
             $user = $verified ? $request->user() : null;
             $step = $verified ? $request->attributes->get('qr_route_step') : null;
+            $signatureClaim = $verified ? DocumentSignatureClaim::query()
+                ->with(['claimant:id,name', 'routeStep.office:id,name', 'sourceFile:id,original_name,file_name'])
+                ->where('document_id', $document->id)
+                ->first() : null;
             $pending = $request->session()->get('qr_otp_pending');
             $otpPending = is_array($pending) && (int) ($pending['document_id'] ?? 0) === (int) $document->id;
             $expiresAt = now()->addMinutes((int) config('qr_document.otp_ttl_minutes', 10));
@@ -64,10 +69,24 @@ class PublicDocumentTrackingController extends Controller
                 'expires_at' => $verified ? data_get($request->session()->get('qr_document_access'), 'expires_at') : null,
                 'step_status' => $step?->status,
                 'step_signature_required' => (bool) ($step?->signature_required ?? false),
+                'step_route_mode' => $step?->route()->value('mode'),
                 'can_receive' => $verified && $step?->status === 'available' && $user->canReceiveDocuments(),
                 'can_approve' => $verified && app(QrDocumentAccess::class)->canApprove($document, $user, $step),
+                'can_claim_signature' => $verified && $step?->signature_required && $step?->route()->value('mode') === 'parallel'
+                    && app(QrDocumentAccess::class)->canApprove($document, $user, $step) && ! $signatureClaim,
+                'signature_claim' => $signatureClaim ? [
+                    'office' => $signatureClaim->routeStep?->office?->name,
+                    'claimed_by' => $signatureClaim->claimant?->name,
+                    'claimed_at' => DateTimePresenter::format($signatureClaim->claimed_at, 'M j, Y g:i A'),
+                    'source_file_name' => $signatureClaim->sourceFile?->original_name ?: $signatureClaim->sourceFile?->file_name,
+                    'source_document_file_id' => $signatureClaim->source_document_file_id,
+                    'is_mine' => (int) $signatureClaim->claimed_by === (int) $user?->id,
+                    'can_release' => $signatureClaim->canBeReleasedBy($user),
+                ] : null,
                 'can_forward' => $verified && $step?->status === 'in_progress' && $user->isAdministrator(),
                 'receive_url' => $verified ? route('documents.track.receive', ['trackingNumber' => $trackingNumber]) : null,
+                'claim_signature_url' => $verified ? route('documents.track.signature-claim', ['trackingNumber' => $trackingNumber]) : null,
+                'release_signature_claim_url' => $verified ? route('documents.track.signature-claim.release', ['trackingNumber' => $trackingNumber]) : null,
                 'decision_url' => $verified ? route('documents.track.decision', ['trackingNumber' => $trackingNumber]) : null,
                 'wet_signed_url' => $verified ? route('documents.track.wet-signed', ['trackingNumber' => $trackingNumber]) : null,
                 'forward_url' => $verified ? route('documents.track.forward', ['trackingNumber' => $trackingNumber]) : null,
@@ -78,6 +97,9 @@ class PublicDocumentTrackingController extends Controller
                     'id' => $file->id,
                     'name' => $file->original_name,
                     'type' => $file->type,
+                    'office' => $file->routeStep?->office?->name,
+                    'uploaded_by' => $file->uploader?->name,
+                    'source_document_file_id' => $file->source_document_file_id,
                     'size_bytes' => $file->size_bytes,
                     'is_pdf' => strtolower(pathinfo($file->original_name, PATHINFO_EXTENSION)) === 'pdf',
                     'download_url' => route('documents.track.files.download', ['trackingNumber' => $trackingNumber, 'file' => $file->id]),
