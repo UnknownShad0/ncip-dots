@@ -28,9 +28,7 @@ class QrDocumentAccess
                 continue;
             }
 
-            if ($route->mode === 'sequential'
-                && $route->steps->where('position', '<', $step->position)
-                    ->contains(fn (DocumentRouteStep $previous) => $previous->status !== 'approved')) {
+            if (! app(SequentialRouteStepAccess::class)->canAccess($route, $step)) {
                 continue;
             }
 

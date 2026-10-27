@@ -1188,7 +1188,10 @@ class DocumentController extends Controller
                     $nextStep = $route->mode === 'sequential'
                         ? $route->steps
                             ->filter(fn (DocumentRouteStep $candidate) => $candidate->status === 'waiting'
-                                && (int) $candidate->position > (int) $step->position)
+                                && (int) $candidate->position > (int) $step->position
+                                && $route->steps
+                                    ->where('position', '<', $candidate->position)
+                                    ->every(fn (DocumentRouteStep $previous) => $previous->status === 'approved'))
                             ->sortBy('position')
                             ->first()
                         : null;
@@ -1612,13 +1615,19 @@ class DocumentController extends Controller
                 ]);
             }
 
-            $editableStatuses = ['available', 'waiting'];
+            $isParallel = $documentRoute->mode === 'parallel';
+            $editableStatuses = $isParallel
+                ? ['available', 'waiting']
+                : ['in_progress', 'waiting_on_branch', 'available', 'waiting'];
             $orderedSteps = $documentRoute->steps->sortBy('position')->values();
             $lockedSteps = $orderedSteps->reject(fn (DocumentRouteStep $step) => in_array($step->status, $editableStatuses, true))->values();
             $editableSteps = $orderedSteps->filter(fn (DocumentRouteStep $step) => in_array($step->status, $editableStatuses, true))->values();
+            $hasOutOfOrderApprovedStep = ! $isParallel && $orderedSteps->contains(
+                fn (DocumentRouteStep $step, int $index) => $step->status === 'approved'
+                    && $orderedSteps->take($index)->contains(fn (DocumentRouteStep $previous) => $previous->status !== 'approved')
+            );
             $lockedOfficeIds = $lockedSteps->pluck('office_id')->map(fn ($id) => (int) $id)->all();
             $currentEditableOfficeIds = $editableSteps->pluck('office_id')->map(fn ($id) => (int) $id)->all();
-            $isParallel = $documentRoute->mode === 'parallel';
             $submittedComparison = $officeIds;
             $currentComparison = $currentEditableOfficeIds;
             if ($isParallel) {
@@ -1634,14 +1643,43 @@ class DocumentController extends Controller
                 throw ValidationException::withMessages([
                     'office_ids' => $isParallel
                         ? 'Add or remove at least one unreceived office before saving.'
-                        : 'Change at least one remaining office or its position before saving.',
+                        : 'Change an office, its position, or the reason before saving.',
                 ]);
             }
 
             if (array_intersect($officeIds, $lockedOfficeIds) !== []) {
                 throw ValidationException::withMessages([
-                    'office_ids' => 'Approved, received, or branch-active offices cannot be added to the editable remainder.',
+                    'office_ids' => 'Approved offices are locked and cannot be added to the editable route.',
                 ]);
+            }
+            if ($hasOutOfOrderApprovedStep
+                && (count($officeIds) !== count($currentEditableOfficeIds)
+                    || array_diff($officeIds, $currentEditableOfficeIds) !== []
+                    || array_diff($currentEditableOfficeIds, $officeIds) !== [])) {
+                throw ValidationException::withMessages([
+                    'office_ids' => 'An office has already approved out of order. You can reorder the unfinished offices, but cannot add or remove offices.',
+                ]);
+            }
+            if (! $isParallel) {
+                $activeOfficeIds = $editableSteps
+                    ->filter(fn (DocumentRouteStep $step) => in_array($step->status, ['in_progress', 'waiting_on_branch'], true))
+                    ->pluck('office_id')->map(fn ($id) => (int) $id)->all();
+                if (array_diff($activeOfficeIds, $officeIds) !== []) {
+                    throw ValidationException::withMessages([
+                        'office_ids' => 'In-progress and branch-active offices must remain in the route.',
+                    ]);
+                }
+
+                $currentActiveSignatureOfficeIds = $editableSteps
+                    ->filter(fn (DocumentRouteStep $step) => in_array($step->status, ['in_progress', 'waiting_on_branch'], true) && $step->signature_required)
+                    ->pluck('office_id')->map(fn ($id) => (int) $id)->sort()->values()->all();
+                $submittedActiveSignatureOfficeIds = array_values(array_intersect($signatureOfficeIds, $activeOfficeIds));
+                sort($submittedActiveSignatureOfficeIds);
+                if ($currentActiveSignatureOfficeIds !== $submittedActiveSignatureOfficeIds) {
+                    throw ValidationException::withMessages([
+                        'signature_required_office_ids' => 'Signature requirements for active offices cannot be changed while editing the route.',
+                    ]);
+                }
             }
             if ($lockedSteps->count() + count($officeIds) > 30) {
                 throw ValidationException::withMessages(['office_ids' => 'A route may contain no more than 30 active offices.']);
@@ -1662,6 +1700,9 @@ class DocumentController extends Controller
 
             $targetOffices = Office::query()->with('range')->whereIn('id', $officeIds)->get()->keyBy('id');
             foreach ($officeIds as $targetOfficeId) {
+                if (in_array($targetOfficeId, $currentEditableOfficeIds, true)) {
+                    continue;
+                }
                 $targetOffice = $targetOffices->get($targetOfficeId);
                 if (! $targetOffice || ! $this->officeIsInCurrentUserRange($targetOffice)) {
                     throw ValidationException::withMessages([
@@ -1729,71 +1770,113 @@ class DocumentController extends Controller
                     $newlyAvailableSteps->push($step);
                 }
             } else {
-                $currentAvailable = $editableSteps->first(fn (DocumentRouteStep $step) => $step->status === 'available');
-                $preserveAvailable = $currentAvailable && ($officeIds[0] ?? null) === (int) $currentAvailable->office_id;
-
-                if ($currentAvailable && ! $preserveAvailable) {
+                $existingEditableByOffice = $editableSteps->keyBy(fn (DocumentRouteStep $step) => (int) $step->office_id);
+                $removedSteps = $editableSteps->reject(fn (DocumentRouteStep $step) => in_array((int) $step->office_id, $officeIds, true));
+                $removedAvailableIds = $removedSteps->where('status', 'available')->pluck('id')->all();
+                $originalAvailableSteps = $editableSteps->where('status', 'available')->values();
+                foreach ($removedSteps->where('status', 'available') as $removedStep) {
                     $document->trails()->create([
                         'from_office_id' => $documentRoute->from_office_id,
-                        'to_office_id' => $currentAvailable->office_id,
+                        'to_office_id' => $removedStep->office_id,
                         'created_by' => $user->id,
                         'status' => 'cancelled',
                         'action' => 'Approval assignment cancelled before receipt',
                     ]);
                 }
 
-                // Move existing rows away from their active positions first so the unique
-                // route/position constraint cannot collide while the sequence is rebuilt.
+                $originalLockedPositions = $lockedSteps->mapWithKeys(fn (DocumentRouteStep $step) => [(int) $step->id => (int) $step->position]);
+                $editablePositions = $editableSteps->pluck('position')->map(fn ($position) => (int) $position)->sort()->values();
+                // Temporarily move all rows to avoid collisions on the unique position constraint.
                 $temporaryPosition = max(1000, ((int) $orderedSteps->max('position')) + $orderedSteps->count() + 100);
                 foreach ($orderedSteps as $index => $existingStep) {
                     $existingStep->update(['position' => $temporaryPosition + $index]);
                 }
-                foreach ($editableSteps as $editableStep) {
-                    if (! $preserveAvailable || $editableStep->id !== $currentAvailable->id) {
-                        $editableStep->delete();
-                    }
+                foreach ($removedSteps as $removedStep) {
+                    $removedStep->delete();
                 }
 
                 $position = 1;
                 foreach ($lockedSteps as $lockedStep) {
-                    $lockedStep->update(['position' => $position++]);
+                    $lockedStep->update(['position' => $hasOutOfOrderApprovedStep
+                        ? $originalLockedPositions->get((int) $lockedStep->id)
+                        : $position++]);
                 }
-                $hasActiveLockedStep = $lockedSteps->contains(fn (DocumentRouteStep $step) => in_array($step->status, ['in_progress', 'waiting_on_branch'], true));
 
-                foreach ($officeIds as $index => $targetOfficeId) {
-                    $status = ! $hasActiveLockedStep && $index === 0 ? 'available' : 'waiting';
-                    if ($preserveAvailable && $index === 0) {
-                        $step = $currentAvailable;
-                        $signatureRequired = in_array($targetOfficeId, $signatureOfficeIds, true);
-                        $step->update([
-                            'position' => $position,
-                            'status' => $status,
-                            'signature_required' => $signatureRequired,
-                            'signature_status' => $signatureRequired ? 'needs_signature' : 'not_required',
-                        ]);
+                foreach ($officeIds as $editableIndex => $targetOfficeId) {
+                    $existingStep = $existingEditableByOffice->get($targetOfficeId);
+                    $targetPosition = $hasOutOfOrderApprovedStep
+                        ? $editablePositions->get($editableIndex)
+                        : $position;
+                    if ($existingStep) {
+                        if (in_array($existingStep->status, ['in_progress', 'waiting_on_branch'], true)) {
+                            // Preserve the received work, active status, signature state, and child route.
+                            $existingStep->update(['position' => $targetPosition]);
+                        } else {
+                            $signatureRequired = in_array($targetOfficeId, $signatureOfficeIds, true);
+                            $existingStep->update([
+                                'position' => $targetPosition,
+                                'status' => 'waiting',
+                                'signature_required' => $signatureRequired,
+                                'signature_status' => $signatureRequired ? 'needs_signature' : 'not_required',
+                            ]);
+                        }
                     } else {
                         $signatureRequired = in_array($targetOfficeId, $signatureOfficeIds, true);
-                        $step = $documentRoute->steps()->create([
+                        $documentRoute->steps()->create([
                             'office_id' => $targetOfficeId,
-                            'position' => $position,
-                            'status' => $status,
+                            'position' => $targetPosition,
+                            'status' => 'waiting',
                             'signature_required' => $signatureRequired,
                             'signature_status' => $signatureRequired ? 'needs_signature' : 'not_required',
                         ]);
                     }
+                    if (! $hasOutOfOrderApprovedStep) {
+                        $position++;
+                    }
+                }
 
-                    if ($status === 'available' && ! $preserveAvailable) {
+                $documentRoute->load('steps.office');
+                $currentAvailable = $originalAvailableSteps->first();
+                $firstEligibleStep = $documentRoute->steps
+                    ->sortBy('position')
+                    ->first(fn (DocumentRouteStep $step) => $step->status === 'waiting'
+                        && $documentRoute->steps->where('position', '<', $step->position)
+                            ->every(fn (DocumentRouteStep $previous) => $previous->status === 'approved'));
+
+                foreach ($originalAvailableSteps as $availableStep) {
+                    if (in_array($availableStep->id, $removedAvailableIds, true)
+                        || (int) $availableStep->id === (int) $firstEligibleStep?->id) {
+                        continue;
+                    }
+                    $document->trails()->create([
+                        'from_office_id' => $documentRoute->from_office_id,
+                        'to_office_id' => $availableStep->office_id,
+                        'created_by' => $user->id,
+                        'status' => 'cancelled',
+                        'action' => 'Approval assignment cancelled before receipt after route reorder',
+                    ]);
+                }
+
+                if ($firstEligibleStep) {
+                    $preserveAvailable = $currentAvailable
+                        && (int) $currentAvailable->id === (int) $firstEligibleStep->id
+                        && ! in_array($currentAvailable->id, $removedAvailableIds, true);
+                    if (! $preserveAvailable) {
                         $dispatchTrail = $document->trails()->create([
                             'from_office_id' => $documentRoute->from_office_id,
-                            'to_office_id' => $targetOfficeId,
+                            'to_office_id' => $firstEligibleStep->office_id,
                             'created_by' => $user->id,
                             'status' => 'available',
-                            'action' => 'Approval route updated; advanced to sequential approval step '.$position,
+                            'action' => 'Approval route updated; office activated in the revised order',
                         ]);
-                        $step->update(['dispatch_trail_id' => $dispatchTrail->id]);
-                        $newlyAvailableSteps->push($step);
+                        $firstEligibleStep->update([
+                            'status' => 'available',
+                            'dispatch_trail_id' => $dispatchTrail->id,
+                        ]);
+                        $newlyAvailableSteps->push($firstEligibleStep);
+                    } else {
+                        $firstEligibleStep->update(['status' => 'available']);
                     }
-                    $position++;
                 }
             }
 
@@ -2281,8 +2364,7 @@ class DocumentController extends Controller
             if (! $step) {
                 continue;
             }
-            if ($route->mode === 'sequential'
-                && $route->steps->where('position', '<', $step->position)->contains(fn (DocumentRouteStep $previous) => $previous->status !== 'approved')) {
+            if (! app(\App\Services\SequentialRouteStepAccess::class)->canAccess($route, $step)) {
                 continue;
             }
 
@@ -2620,6 +2702,7 @@ class DocumentController extends Controller
         return User::query()
             ->where('office_id', $office->id)
             ->where('is_active', true)
+            ->where('is_locked', false)
             ->get()
             ->contains(fn (User $user) => $user->isAdministrator() && $user->canReceiveDocuments()
                 && (int) $user->id !== (int) $exceptUserId);
@@ -2634,6 +2717,7 @@ class DocumentController extends Controller
         User::query()
             ->where('office_id', $office->id)
             ->where('is_active', true)
+            ->where('is_locked', false)
             ->get()
             ->filter(fn (User $user) => $user->isAdministrator() && $user->canReceiveDocuments()
                 && (int) $user->id !== (int) $document->created_by
