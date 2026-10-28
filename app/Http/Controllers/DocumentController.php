@@ -1670,9 +1670,7 @@ class DocumentController extends Controller
             }
 
             $isParallel = $documentRoute->mode === 'parallel';
-            $editableStatuses = $isParallel
-                ? ['available', 'waiting']
-                : ['in_progress', 'waiting_on_branch', 'available', 'waiting'];
+            $editableStatuses = ['available', 'waiting'];
             $orderedSteps = $documentRoute->steps->sortBy('position')->values();
             $lockedSteps = $orderedSteps->reject(fn (DocumentRouteStep $step) => in_array($step->status, $editableStatuses, true))->values();
             $editableSteps = $orderedSteps->filter(fn (DocumentRouteStep $step) => in_array($step->status, $editableStatuses, true))->values();
@@ -1697,13 +1695,13 @@ class DocumentController extends Controller
                 throw ValidationException::withMessages([
                     'office_ids' => $isParallel
                         ? 'Add or remove at least one unreceived office before saving.'
-                        : 'Change an office, its position, or the reason before saving.',
+                        : 'Change at least one remaining office or its position before saving.',
                 ]);
             }
 
             if (array_intersect($officeIds, $lockedOfficeIds) !== []) {
                 throw ValidationException::withMessages([
-                    'office_ids' => 'Approved offices are locked and cannot be added to the editable route.',
+                    'office_ids' => 'Approved, received, or branch-active offices are locked and cannot be added to the editable route.',
                 ]);
             }
             if ($hasOutOfOrderApprovedStep
@@ -1711,29 +1709,8 @@ class DocumentController extends Controller
                     || array_diff($officeIds, $currentEditableOfficeIds) !== []
                     || array_diff($currentEditableOfficeIds, $officeIds) !== [])) {
                 throw ValidationException::withMessages([
-                    'office_ids' => 'An office has already approved out of order. You can reorder the unfinished offices, but cannot add or remove offices.',
+                    'office_ids' => 'An office has already approved out of order. You can reorder the unreceived offices, but cannot add or remove offices.',
                 ]);
-            }
-            if (! $isParallel) {
-                $activeOfficeIds = $editableSteps
-                    ->filter(fn (DocumentRouteStep $step) => in_array($step->status, ['in_progress', 'waiting_on_branch'], true))
-                    ->pluck('office_id')->map(fn ($id) => (int) $id)->all();
-                if (array_diff($activeOfficeIds, $officeIds) !== []) {
-                    throw ValidationException::withMessages([
-                        'office_ids' => 'In-progress and branch-active offices must remain in the route.',
-                    ]);
-                }
-
-                $currentActiveSignatureOfficeIds = $editableSteps
-                    ->filter(fn (DocumentRouteStep $step) => in_array($step->status, ['in_progress', 'waiting_on_branch'], true) && $step->signature_required)
-                    ->pluck('office_id')->map(fn ($id) => (int) $id)->sort()->values()->all();
-                $submittedActiveSignatureOfficeIds = array_values(array_intersect($signatureOfficeIds, $activeOfficeIds));
-                sort($submittedActiveSignatureOfficeIds);
-                if ($currentActiveSignatureOfficeIds !== $submittedActiveSignatureOfficeIds) {
-                    throw ValidationException::withMessages([
-                        'signature_required_office_ids' => 'Signature requirements for active offices cannot be changed while editing the route.',
-                    ]);
-                }
             }
             if ($lockedSteps->count() + count($officeIds) > 30) {
                 throw ValidationException::withMessages(['office_ids' => 'A route may contain no more than 30 active offices.']);
@@ -1840,7 +1817,8 @@ class DocumentController extends Controller
 
                 $originalLockedPositions = $lockedSteps->mapWithKeys(fn (DocumentRouteStep $step) => [(int) $step->id => (int) $step->position]);
                 $editablePositions = $editableSteps->pluck('position')->map(fn ($position) => (int) $position)->sort()->values();
-                // Temporarily move all rows to avoid collisions on the unique position constraint.
+                // Temporarily move all rows so locked steps can be restored to their exact
+                // positions while only the unreceived part of the route is rebuilt.
                 $temporaryPosition = max(1000, ((int) $orderedSteps->max('position')) + $orderedSteps->count() + 100);
                 foreach ($orderedSteps as $index => $existingStep) {
                     $existingStep->update(['position' => $temporaryPosition + $index]);
@@ -1849,33 +1827,27 @@ class DocumentController extends Controller
                     $removedStep->delete();
                 }
 
-                $position = 1;
                 foreach ($lockedSteps as $lockedStep) {
-                    $lockedStep->update(['position' => $hasOutOfOrderApprovedStep
-                        ? $originalLockedPositions->get((int) $lockedStep->id)
-                        : $position++]);
+                    $lockedStep->update(['position' => $originalLockedPositions->get((int) $lockedStep->id)]);
                 }
 
+                $nextEditablePosition = $lockedSteps->isEmpty()
+                    ? 1
+                    : ((int) $originalLockedPositions->max()) + 1;
                 foreach ($officeIds as $editableIndex => $targetOfficeId) {
                     $existingStep = $existingEditableByOffice->get($targetOfficeId);
                     $targetPosition = $hasOutOfOrderApprovedStep
                         ? $editablePositions->get($editableIndex)
-                        : $position;
+                        : $nextEditablePosition + $editableIndex;
+                    $signatureRequired = in_array($targetOfficeId, $signatureOfficeIds, true);
                     if ($existingStep) {
-                        if (in_array($existingStep->status, ['in_progress', 'waiting_on_branch'], true)) {
-                            // Preserve the received work, active status, signature state, and child route.
-                            $existingStep->update(['position' => $targetPosition]);
-                        } else {
-                            $signatureRequired = in_array($targetOfficeId, $signatureOfficeIds, true);
-                            $existingStep->update([
-                                'position' => $targetPosition,
-                                'status' => 'waiting',
-                                'signature_required' => $signatureRequired,
-                                'signature_status' => $signatureRequired ? 'needs_signature' : 'not_required',
-                            ]);
-                        }
+                        $existingStep->update([
+                            'position' => $targetPosition,
+                            'status' => 'waiting',
+                            'signature_required' => $signatureRequired,
+                            'signature_status' => $signatureRequired ? 'needs_signature' : 'not_required',
+                        ]);
                     } else {
-                        $signatureRequired = in_array($targetOfficeId, $signatureOfficeIds, true);
                         $documentRoute->steps()->create([
                             'office_id' => $targetOfficeId,
                             'position' => $targetPosition,
@@ -1883,9 +1855,6 @@ class DocumentController extends Controller
                             'signature_required' => $signatureRequired,
                             'signature_status' => $signatureRequired ? 'needs_signature' : 'not_required',
                         ]);
-                    }
-                    if (! $hasOutOfOrderApprovedStep) {
-                        $position++;
                     }
                 }
 

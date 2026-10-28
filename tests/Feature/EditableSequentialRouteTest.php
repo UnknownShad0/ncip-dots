@@ -102,6 +102,22 @@ class EditableSequentialRouteTest extends TestCase
         ], $steps->pluck('office_id')->all());
         $this->assertSame(['approved', 'in_progress', 'waiting', 'waiting'], $steps->pluck('status')->all());
         $this->assertSame($receivedStep->id, $steps[1]->id);
+        $this->assertSame(2, $receivedStep->fresh()->position);
+        $this->assertSame($receiver->id, $receivedStep->fresh()->received_by);
+        $this->assertDatabaseMissing('document_trails', [
+            'document_id' => $scenario['document']->id,
+            'to_office_id' => $scenario['offices']['fourth']->id,
+            'status' => 'available',
+        ]);
+
+        $freshRevision = $this->revision($scenario['document']);
+        $this->put($this->updateUrl($scenario), [
+            'office_ids' => [$scenario['offices']['second']->id, $scenario['offices']['third']->id],
+            'reason' => 'Attempt to move the active office through the editable route.',
+            'revision' => $freshRevision,
+        ])->assertSessionHasErrors('office_ids');
+        $this->assertSame(2, $receivedStep->fresh()->position);
+        $this->assertSame('in_progress', $receivedStep->fresh()->status);
 
         $freshRevision = $this->revision($scenario['document']);
         $this->put($this->updateUrl($scenario), [

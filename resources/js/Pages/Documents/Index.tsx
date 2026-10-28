@@ -789,15 +789,11 @@ export default function DocumentsIndex({
         const editableRoute = document.editable_route;
         if (!editableRoute) return;
         const officeIds = editableRoute.steps
-            .filter((step) => editableRoute.mode === 'parallel'
-                ? ['available', 'waiting'].includes(step.status)
-                : step.status !== 'approved')
+            .filter((step) => ['available', 'waiting'].includes(step.status))
             .sort((left, right) => left.position - right.position)
             .map((step) => String(step.office_id));
         const signatureOfficeIds = editableRoute.steps
-            .filter((step) => (editableRoute.mode === 'parallel'
-                ? ['available', 'waiting'].includes(step.status)
-                : step.status !== 'approved') && step.signature_required)
+            .filter((step) => ['available', 'waiting'].includes(step.status) && step.signature_required)
             .map((step) => String(step.office_id));
         setRouteEditingDocument(document);
         setRouteEditForm({ officeIds, signatureOfficeIds, reason: '' });
@@ -828,16 +824,7 @@ export default function DocumentsIndex({
 
     const toggleRouteEditOffice = (officeId: string) => {
         const route = routeEditingDocument?.editable_route;
-        const lockedCount = route?.steps.filter((step) => route.mode === 'parallel'
-            ? !['available', 'waiting'].includes(step.status)
-            : step.status === 'approved').length ?? 0;
-        const existingStep = route?.steps.find((step) => String(step.office_id) === officeId);
-        if (route?.mode === 'sequential'
-            && existingStep && ['in_progress', 'waiting_on_branch'].includes(existingStep.status)
-            && routeEditForm.officeIds.includes(officeId)) {
-            setRouteEditError('In-progress offices must remain in the route. You can still move them.');
-            return;
-        }
+        const lockedCount = route?.steps.filter((step) => !['available', 'waiting'].includes(step.status)).length ?? 0;
         if (!routeEditForm.officeIds.includes(officeId) && lockedCount + routeEditForm.officeIds.length >= 30) {
             setRouteEditError('A route may contain no more than 30 active offices.');
             return;
@@ -855,8 +842,6 @@ export default function DocumentsIndex({
     };
 
     const toggleRouteEditSignature = (officeId: string) => {
-        const existingStep = routeEditingDocument?.editable_route?.steps.find((step) => String(step.office_id) === officeId);
-        if (existingStep && ['in_progress', 'waiting_on_branch'].includes(existingStep.status)) return;
         setRouteEditForm((current) => ({
             ...current,
             signatureOfficeIds: current.signatureOfficeIds.includes(officeId)
@@ -936,24 +921,18 @@ export default function DocumentsIndex({
         const removedAvailableSteps = editableRoute?.steps.filter((step) => step.status === 'available' && !routeEditForm.officeIds.includes(String(step.office_id))) ?? [];
         const sequentialAvailableOfficeId = editableRoute?.steps.find((step) => step.status === 'available')?.office_id;
         const sequentialAvailableChanged = !isParallel && sequentialAvailableOfficeId != null && routeEditForm.officeIds[0] !== String(sequentialAvailableOfficeId);
-        const movingActiveOffice = !isParallel && editableRoute?.steps.some((step) => ['in_progress', 'waiting_on_branch'].includes(step.status)
-            && routeEditOriginalOfficeIds.indexOf(String(step.office_id)) !== routeEditForm.officeIds.indexOf(String(step.office_id)));
-        if (removedAvailableSteps.length > 0 || sequentialAvailableChanged || movingActiveOffice) {
+        if (removedAvailableSteps.length > 0 || sequentialAvailableChanged) {
             setCrudAlert({
-                title: movingActiveOffice
-                    ? 'Reorder active approval route?'
-                    : removedAvailableSteps.length > 1
-                        ? 'Remove unreceived offices?'
-                        : removedAvailableSteps.length === 1
-                            ? 'Remove the unreceived office?'
-                            : 'Update approval route?',
+                title: removedAvailableSteps.length > 1
+                    ? 'Remove unreceived offices?'
+                    : removedAvailableSteps.length === 1
+                        ? 'Remove the unreceived office?'
+                        : 'Update approval route?',
                 message: isParallel
                     ? `${removedAvailableSteps.length} pending parallel ${removedAvailableSteps.length === 1 ? 'assignment' : 'assignments'} will be cancelled before receipt.`
-                    : movingActiveOffice
-                        ? 'In-progress offices will keep working and keep their child routes. The first eligible office in the revised order may become active alongside them; later offices wait until every office before them approves.'
-                        : routeEditForm.officeIds.length > 0
-                            ? 'Its pending assignment will be cancelled before receipt, and the first eligible office in the revised order will become active.'
-                            : 'Its pending assignment will be cancelled before receipt. If every approved step is complete and no offices remain, the route will complete.',
+                    : routeEditForm.officeIds.length > 0
+                        ? 'Its pending assignment will be cancelled before receipt. The first eligible office will become available only when every earlier office has approved.'
+                        : 'Its pending assignment will be cancelled before receipt. If every approved step is complete and no offices remain, the route will complete.',
                 confirmLabel: 'Update route',
                 onConfirm: () => { setCrudAlert(null); saveRouteChanges(); },
             });
@@ -1226,16 +1205,12 @@ export default function DocumentsIndex({
     const routeEditHasOutOfOrderApprovedStep = !routeEditIsParallel && routeEditOrderedSteps.some((step, index) =>
         step.status === 'approved' && routeEditOrderedSteps.slice(0, index).some((previous) => previous.status !== 'approved'));
     const routeEditLockedSteps = routeEditOrderedSteps
-        .filter((step) => routeEditIsParallel
-            ? !['available', 'waiting'].includes(step.status)
-            : step.status === 'approved');
+        .filter((step) => !['available', 'waiting'].includes(step.status));
     const routeEditEditablePositions = routeEditOrderedSteps
-        .filter((step) => routeEditIsParallel ? ['available', 'waiting'].includes(step.status) : step.status !== 'approved')
+        .filter((step) => ['available', 'waiting'].includes(step.status))
         .map((step) => step.position);
     const routeEditLockedOfficeIds = new Set(routeEditLockedSteps.map((step) => String(step.office_id)));
-    const routeEditActiveOfficeIds = new Set((routeEditingDocument?.editable_route?.steps ?? [])
-        .filter((step) => ['in_progress', 'waiting_on_branch'].includes(step.status))
-        .map((step) => String(step.office_id)));
+    const routeEditNextEditablePosition = Math.max(0, ...routeEditLockedSteps.map((step) => step.position)) + 1;
 
     return (
         <AuthenticatedLayout
@@ -1569,14 +1544,14 @@ export default function DocumentsIndex({
                                     {routeEditIsParallel
                                         ? <><strong>Parallel approval:</strong> new offices receive the document immediately. Offices can review in parallel; signed PDF uploads are claimed one at a time. Approved and received offices stay locked.</>
                                         : routeEditHasOutOfOrderApprovedStep
-                                            ? <><strong>Sequential approval:</strong> an office has already approved after an unfinished step. Approved offices stay at their current positions. You can reorder existing unfinished offices, but cannot add or remove offices.</>
-                                            : <><strong>Sequential approval:</strong> approved offices are locked. In-progress offices can move and keep working, but must stay in the route. Waiting offices can be added, removed, or reordered; the first eligible office in the new order can start while another office is still active.</>}
+                                            ? <><strong>Sequential approval:</strong> an office has already approved after an unfinished step. Approved and active offices stay locked. You can reorder existing unreceived offices, but cannot add or remove offices.</>
+                                            : <><strong>Sequential approval:</strong> approved and active offices are locked. Waiting offices can be added, removed, or reordered, but remain waiting until every earlier office has approved.</>}
                                 </div>
 
                                 <section aria-labelledby="locked-route-steps-title">
                                     <div className="mb-3">
-                                        <h3 id="locked-route-steps-title" className="font-semibold text-foreground">{routeEditIsParallel ? 'Completed and active offices' : 'Approved offices (locked)'}</h3>
-                                        <p className="mt-0.5 text-xs text-muted">{routeEditIsParallel ? 'These steps are preserved and cannot be edited.' : 'Approved offices keep their completed position and cannot be moved or removed.'}</p>
+                                        <h3 id="locked-route-steps-title" className="font-semibold text-foreground">Completed and active offices (locked)</h3>
+                                        <p className="mt-0.5 text-xs text-muted">These steps keep their positions and cannot be moved, removed, or changed.</p>
                                     </div>
                                     {routeEditLockedSteps.length > 0 ? <ol className="space-y-2">
                                         {routeEditLockedSteps.map((step, index) => <li key={step.id} className="flex items-center gap-3 rounded-xl border border-border bg-background p-3">
@@ -1594,7 +1569,7 @@ export default function DocumentsIndex({
                                     <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
                                         <div>
                                             <h3 id="remaining-route-steps-title" className="font-semibold text-foreground">{routeEditIsParallel ? 'Unreceived offices' : 'Remaining offices'}</h3>
-                                            <p className="mt-0.5 text-xs text-muted">{routeEditIsParallel ? 'Every selected office can receive and review independently.' : 'The first waiting office whose earlier offices have approved becomes available. Active offices keep working.'}</p>
+                                            <p className="mt-0.5 text-xs text-muted">{routeEditIsParallel ? 'Every selected office can receive and review independently.' : 'Only unreceived offices can be changed. They stay waiting while an earlier office is active.'}</p>
                                         </div>
                                         <span className="text-xs font-medium text-muted">{routeEditLockedSteps.length + routeEditForm.officeIds.length}/30 offices</span>
                                     </div>
@@ -1610,12 +1585,11 @@ export default function DocumentsIndex({
                                             const officeId = String(office.id);
                                             const selected = routeEditForm.officeIds.includes(officeId);
                                             const locked = routeEditLockedOfficeIds.has(officeId);
-                                            const mustStay = routeEditActiveOfficeIds.has(officeId);
-                                            const unavailable = locked || mustStay || routeEditHasOutOfOrderApprovedStep || (Boolean(office.disabled) && !selected)
+                                            const unavailable = locked || routeEditHasOutOfOrderApprovedStep || (Boolean(office.disabled) && !selected)
                                                 || (routeEditLockedSteps.length + routeEditForm.officeIds.length >= 30 && !selected);
                                             return <label key={office.id} className={`flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2 text-sm ${unavailable ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${selected ? 'border-primary bg-secondary' : 'border-border bg-surface'}`}>
                                                 <input type="checkbox" checked={selected} disabled={unavailable} onChange={() => toggleRouteEditOffice(officeId)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
-                                                <span className="text-foreground">{office.name}{locked && <span className="ml-2 text-xs text-muted">Locked</span>}{mustStay && <span className="ml-2 text-xs text-muted">Must stay</span>}{routeEditHasOutOfOrderApprovedStep && selected && <span className="ml-2 text-xs text-muted">Reorder below</span>}</span>
+                                                <span className="text-foreground">{office.name}{locked && <span className="ml-2 text-xs text-muted">Locked</span>}{routeEditHasOutOfOrderApprovedStep && selected && <span className="ml-2 text-xs text-muted">Reorder below</span>}</span>
                                             </label>;
                                         })}
                                         {filteredRouteEditOffices.length === 0 && <p className="p-2 text-sm text-muted sm:col-span-2">No offices match “{routeEditSearch.trim()}”.</p>}
@@ -1625,22 +1599,20 @@ export default function DocumentsIndex({
                                         {routeEditForm.officeIds.map((officeId, index) => {
                                             const office = offices.find((option) => String(option.id) === officeId);
                                             const existingStep = routeEditingDocument.editable_route?.steps.find((step) => String(step.office_id) === officeId);
-                                            const isActiveStep = Boolean(existingStep && ['in_progress', 'waiting_on_branch'].includes(existingStep.status));
                                             const isPreservedAvailable = existingStep?.status === 'available';
                                             return <li key={officeId} draggable={!routeEditIsParallel} onDragStart={() => !routeEditIsParallel && setDraggedRouteEditOfficeId(officeId)} onDragOver={(event) => { if (!routeEditIsParallel) event.preventDefault(); }} onDrop={() => !routeEditIsParallel && reorderRouteEditOffice(officeId)} onDragEnd={() => setDraggedRouteEditOfficeId(null)} className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3">
                                                 {!routeEditIsParallel && <GripVertical size={17} className="shrink-0 cursor-grab text-muted" aria-label="Drag to reorder" />}
-                                                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-white">{routeEditHasOutOfOrderApprovedStep ? routeEditEditablePositions[index] : routeEditLockedSteps.length + index + 1}</span>
+                                                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-white">{routeEditHasOutOfOrderApprovedStep ? routeEditEditablePositions[index] : routeEditNextEditablePosition + index}</span>
                                                 <div className="min-w-0 flex-1">
                                                     <p className="break-words text-sm font-medium text-foreground">{office?.name}</p>
-                                                    {isActiveStep && <p className="mt-0.5 text-[11px] font-medium text-primary">{existingStep?.status === 'waiting_on_branch' ? 'Child route active · office can move but keeps working' : 'In progress · office can move but keeps working'}</p>}
                                                     {isPreservedAvailable && <p className="mt-0.5 text-[11px] font-medium text-primary">Waiting to be received</p>}
                                                     {routeEditIsParallel && !isPreservedAvailable && <p className="mt-0.5 text-[11px] font-medium text-primary">Will be available immediately</p>}
                                                 </div>
-                                                <label className="flex items-center gap-2 text-xs font-medium text-foreground"><input type="checkbox" checked={routeEditForm.signatureOfficeIds.includes(officeId)} disabled={isActiveStep} onChange={() => toggleRouteEditSignature(officeId)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary disabled:opacity-50" />Requires signature</label>
+                                                <label className="flex items-center gap-2 text-xs font-medium text-foreground"><input type="checkbox" checked={routeEditForm.signatureOfficeIds.includes(officeId)} onChange={() => toggleRouteEditSignature(officeId)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />Requires signature</label>
                                                 <div className="flex shrink-0 gap-1">
                                                     {!routeEditIsParallel && <button type="button" disabled={index === 0} onClick={() => moveRouteEditOffice(officeId, -1)} aria-label={`Move ${office?.name} up`} className="rounded-md p-2 text-muted hover:bg-secondary disabled:opacity-30"><ArrowUp size={15} /></button>}
                                                     {!routeEditIsParallel && <button type="button" disabled={index === routeEditForm.officeIds.length - 1} onClick={() => moveRouteEditOffice(officeId, 1)} aria-label={`Move ${office?.name} down`} className="rounded-md p-2 text-muted hover:bg-secondary disabled:opacity-30"><ArrowDown size={15} /></button>}
-                                                    <button type="button" disabled={isActiveStep || routeEditHasOutOfOrderApprovedStep} onClick={() => toggleRouteEditOffice(officeId)} aria-label={`Remove ${office?.name}`} title={routeEditHasOutOfOrderApprovedStep ? 'Offices cannot be added or removed while approval is out of order' : isActiveStep ? 'In-progress offices must remain in the route' : undefined} className="rounded-md p-2 text-muted hover:bg-danger-soft hover:text-danger disabled:cursor-not-allowed disabled:opacity-30"><X size={15} /></button>
+                                                    <button type="button" disabled={routeEditHasOutOfOrderApprovedStep} onClick={() => toggleRouteEditOffice(officeId)} aria-label={`Remove ${office?.name}`} title={routeEditHasOutOfOrderApprovedStep ? 'Offices cannot be added or removed while approval is out of order' : undefined} className="rounded-md p-2 text-muted hover:bg-danger-soft hover:text-danger disabled:cursor-not-allowed disabled:opacity-30"><X size={15} /></button>
                                                 </div>
                                             </li>;
                                         })}
