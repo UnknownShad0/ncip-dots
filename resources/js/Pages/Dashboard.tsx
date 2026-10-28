@@ -2,6 +2,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import CrudAlertModal from '@/Components/WorkspaceAlert';
 import InfoTip from '@/Components/InfoTip';
 import DashboardCharts from '@/Components/DashboardCharts';
+import SearchableSelect, { type SearchableSelectOption } from '@/Components/SearchableSelect';
 import ProcessingPerformanceChart, { ProcessingPerformanceRow } from '@/Components/ProcessingPerformanceChart';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { ArrowDownToLine, LoaderCircle, Search, ChevronRight } from 'lucide-react';
@@ -204,15 +205,15 @@ export default function Dashboard({
                 <section aria-labelledby="analytics-title" className="space-y-4 border-t border-border pt-6" aria-busy={chartLoading || !analytics}>
                     <div className="flex flex-wrap items-end justify-between gap-4">
                         <div><div className="flex items-center gap-2"><h2 id="analytics-title" className="text-xl font-semibold">Document insights</h2><InfoTip label="About analytics scope">The office filter applies only to the charts below. Your receiving list, summary totals, and approval tasks stay unchanged.</InfoTip></div><p role="status" className="mt-1 inline-flex items-center gap-2 text-sm text-muted">{chartLoading && <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}{chartLoading ? 'Updating charts…' : !analytics ? 'Loading analytics…' : chartScope}</p></div>
-                        {canFilterCharts && <div className="w-full sm:w-72"><label htmlFor="chart-office" className="mb-1 block text-sm font-medium">Chart office</label><select id="chart-office" disabled={chartLoading} value={selectedChartOfficeId ?? ''} onChange={(event) => {
+                        {canFilterCharts && <div className="w-full sm:w-72"><label htmlFor="chart-office" className="mb-1 block text-sm font-medium">Chart office</label><SearchableSelect id="chart-office" ariaLabel="Chart office" disabled={chartLoading} value={selectedChartOfficeId ?? ''} options={chartOffices.map((office): SearchableSelectOption => ({ value: String(office.id), label: `${office.name}${office.range_name ? ` — ${office.range_name}` : ''}`, searchText: `${office.range_name ?? ''} ${office.id}` }))} onChange={(officeId) => {
                             setChartError('');
-                            router.get(route('dashboard'), event.target.value ? { chart_office_id: event.target.value } : {}, {
+                            router.get(route('dashboard'), officeId ? { chart_office_id: officeId } : {}, {
                                 preserveState: true, preserveScroll: true, replace: true,
                                 only: ['analytics', 'selectedChartOfficeId'],
                                 onStart: () => setChartLoading(true), onFinish: () => setChartLoading(false),
                                 onError: () => setChartError('Could not apply this office filter. Please try again.'),
                             });
-                        }} className="h-11 w-full rounded-lg border-border bg-surface text-sm"><option value="">All offices</option>{chartOffices.map((office) => <option key={office.id} value={office.id}>{office.name}{office.range_name ? ` — ${office.range_name}` : ''}</option>)}</select></div>}
+                        }} placeholder="All offices" emptyOptionLabel="All offices" searchPlaceholder="Search office or range" className="w-full" buttonClassName="h-11" /></div>}
                     </div>
                     {chartError && <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">{chartError}</p>}
                     {!analytics ? <div className="space-y-4" aria-hidden="true">

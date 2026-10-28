@@ -1,5 +1,6 @@
 import axios from 'axios';
 import WorkspaceAlert, { type WorkspaceAlertVariant } from '@/Components/WorkspaceAlert';
+import SearchableSelect, { type SearchableSelectOption } from '@/Components/SearchableSelect';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
@@ -163,6 +164,16 @@ export default function UserAccountsIndex({
         ? [...offices, { id: editingRow.office_id, name: `${editingRow.office_name} (Inactive)` }]
         : offices;
     const selectedOffice = hrisOfficeOptions.find((office) => office.division_code === officeDirectoryCode);
+    const hrisDivisionSelectOptions: SearchableSelectOption[] = hrisOfficeOptions.map((office) => ({
+        value: office.division_code,
+        label: `${office.parent_office_name ? `${office.parent_office_name} / ` : ''}${office.division_name} (${office.division_code}) — ${office.office_name}`,
+        searchText: `${office.parent_office_code ?? ''} ${office.office_code ?? ''} ${office.region_code ?? ''} ${office.office_name}`,
+    }));
+    const operationalOfficeSelectOptions: SearchableSelectOption[] = officeOptions.map((office) => ({
+        value: String(office.id),
+        label: office.name,
+        searchText: `${office.email ?? ''} ${office.id}`,
+    }));
 
     const closeModal = () => {
         resetLookup();
@@ -316,11 +327,19 @@ export default function UserAccountsIndex({
                             </dl>
                             <p className="text-sm text-muted">HRIS division: {lookup.employee.division || lookup.employee.division_code || 'Not provided'}. Select the current HRIS directory entry below; the saved assignment will use its mapped DOTS office ID.</p>
                             <div className="grid gap-3 sm:grid-cols-2">
-                                <Field label="HRIS directory entry" error={errors.office_directory_code}><select required aria-label="HRIS directory entry" value={officeDirectoryCode} onChange={(event) => setOfficeDirectoryCode(event.target.value)} className="w-full rounded-lg border-border bg-surface">
-                                    <option value="">Select mapped HRIS division</option>
-                                    {hrisOfficeOptions.length === 0 && <option value="" disabled>No current divisions with confirmed mappings and active ranges</option>}
-                                    {hrisOfficeOptions.map((office) => <option key={office.division_code} value={office.division_code}>{office.division_name} ({office.division_code}) — {office.office_name}</option>)}
-                                </select></Field>
+                                <Field label="HRIS directory entry" error={errors.office_directory_code}><SearchableSelect
+                                    id="hris-directory-office"
+                                    ariaLabel="HRIS directory entry"
+                                    value={officeDirectoryCode}
+                                    options={hrisDivisionSelectOptions}
+                                    onChange={setOfficeDirectoryCode}
+                                    placeholder={hrisOfficeOptions.length ? 'Select mapped HRIS division' : 'No mapped HRIS divisions available'}
+                                    emptyOptionLabel="Clear selection"
+                                    searchPlaceholder="Search division, parent, or code"
+                                    emptyMessage="No divisions match your search."
+                                    ariaInvalid={Boolean(errors.office_directory_code)}
+                                    className="w-full"
+                                /></Field>
                                 <Field label="Range"><input aria-label="Range" readOnly value={selectedOffice ? selectedOffice.range_name || 'No range assigned' : ''} className="w-full rounded-lg border-border bg-background text-muted" /></Field>
                             </div>
                             {selectedOffice && <p className="text-xs text-muted">Assigned to DOTS office {selectedOffice.office_code ? `${selectedOffice.office_code} · ` : ''}{selectedOffice.office_name} (ID {selectedOffice.office_id}).</p>}
@@ -338,7 +357,19 @@ export default function UserAccountsIndex({
                         <Field label="Username" error={errors.username}><input required maxLength={50} disabled={!!editingRow?.username} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="w-full rounded-lg border-border bg-surface disabled:bg-background" /></Field>
                         {editingRow && <Field label="Email" error={errors.email}><input required={!editingRow} type="email" maxLength={255} disabled={!!editingRow} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-lg border-border bg-surface disabled:bg-background" /></Field>}
                         {editingRow?.employee_code ? <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-lg border-border bg-surface"><option value="">Select role</option><option value="Super Admin">Super Admin</option><option value="Executive">Executive</option><option value="Admin Staff">Admin Staff</option></select></Field> : <Field label="Role" error={errors.role_id}><select required value={form.role_id} onChange={(e) => setForm({ ...form, role_id: e.target.value })} className="w-full rounded-lg border-border bg-surface"><option value="">Select role</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></Field>}
-                        <Field label="Office" error={errors.officeId}>{editingRow?.employee_code && !editingRow.office_id ? <p className="rounded-lg border border-border bg-background p-2">{editingRow.office_name}</p> : <select required value={form.officeId} onChange={(e) => { setErrors({}); setForm({ ...form, officeId: e.target.value, email: accountType === 'dots' ? offices.find((office) => String(office.id) === e.target.value)?.email ?? '' : form.email }); }} className="w-full rounded-lg border-border bg-surface"><option value="">Select office</option>{officeOptions.map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}</select>}</Field>
+                        <Field label="Office" error={errors.officeId}>{editingRow?.employee_code && !editingRow.office_id ? <p className="rounded-lg border border-border bg-background p-2">{editingRow.office_name}</p> : <SearchableSelect
+                            id="user-operational-office"
+                            ariaLabel="Office"
+                            value={form.officeId}
+                            options={operationalOfficeSelectOptions}
+                            onChange={(value) => { setErrors({}); setForm({ ...form, officeId: value, email: accountType === 'dots' ? offices.find((office) => String(office.id) === value)?.email ?? '' : form.email }); }}
+                            placeholder="Select office"
+                            emptyOptionLabel="Clear office selection"
+                            searchPlaceholder="Search office name or ID"
+                            emptyMessage="No offices match your search."
+                            ariaInvalid={Boolean(errors.officeId)}
+                            className="w-full"
+                        />}</Field>
                         {!editingRow && accountType === 'dots' && form.officeId && <p className="text-sm text-muted sm:col-span-2">{form.email ? <>Login details will be sent to <span className="font-medium text-foreground">{form.email}</span>.</> : <span className="text-danger">The selected office has no email address. Update the office email before creating an account.</span>}</p>}
                         {editingRow && <Field label="Account Status" error={errors.account_status}><select value={form.account_status} onChange={(e) => setForm({ ...form, account_status: e.target.value as FormState['account_status'] })} className="w-full rounded-lg border-border bg-surface"><option value="Active">Active</option><option value="Inactive">Inactive</option><option value="Locked">Locked</option></select></Field>}
                         {editingRow && <><Field label="New password (optional)" error={errors.password}><input type="password" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full rounded-lg border-border bg-surface" /></Field>
@@ -347,7 +378,7 @@ export default function UserAccountsIndex({
                     </div>}
                     {Object.entries(errors).filter(([key]) => !['firstname', 'lastname', 'role_id', 'officeId', 'office_directory_code', 'password', 'password_confirmation', 'account_status', 'user'].includes(key)).map(([key, message]) => <p key={key} className="text-sm text-danger">{message}</p>)}
                     {errors.user && <p className="text-sm text-danger">{errors.user}</p>}
-                    <div className="grid grid-cols-2 gap-2 border-t border-border pt-4"><button type="button" disabled={processing} onClick={closeModal} className="dots-button-secondary w-full disabled:opacity-50">Cancel</button><button disabled={processing || (!editingRow && (!accountType || (accountType === 'dots' && !form.email) || (accountType === 'employee' && (!lookup || lookupOpen || lookupBusy || !selectedOffice?.range_name || !officeDirectoryCode || !form.employee_role || !form.email))))} aria-busy={processing} className="dots-button-primary inline-flex w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50">{processing && <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}{processing ? 'Saving…' : 'Save account'}</button></div>
+                    <div className="grid grid-cols-2 gap-2 border-t border-border pt-4"><button type="button" disabled={processing} onClick={closeModal} className="dots-button-secondary w-full disabled:opacity-50">Cancel</button><button disabled={processing || (!editingRow && (!accountType || (accountType === 'dots' && (!form.email || !form.officeId)) || (accountType === 'employee' && (!lookup || lookupOpen || lookupBusy || !selectedOffice?.range_name || !officeDirectoryCode || !form.employee_role || !form.email)))) || Boolean(editingRow && !editingRow.employee_code && !form.officeId)} aria-busy={processing} className="dots-button-primary inline-flex w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50">{processing && <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}{processing ? 'Saving…' : 'Save account'}</button></div>
                 </form>
             </div>}
             {toast && <WorkspaceAlert {...toast} toast onClose={() => setToast(null)} />}

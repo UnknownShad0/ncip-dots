@@ -1,6 +1,7 @@
 import LibraryLayout from '@/Layouts/LibraryLayout';
 import WorkspaceDialog from '@/Components/WorkspaceDialog';
 import WorkspaceAlert, { type WorkspaceAlertVariant } from '@/Components/WorkspaceAlert';
+import SearchableSelect, { type SearchableSelectOption } from '@/Components/SearchableSelect';
 import { Head, router } from '@inertiajs/react';
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, Plus, Printer, Search, RefreshCw, Link2, AlertCircle, CheckCircle2, LoaderCircle } from 'lucide-react';
@@ -79,7 +80,7 @@ export default function OfficesIndex({
     const [directorySearch, setDirectorySearch] = useState('');
     const [directoryStatus, setDirectoryStatus] = useState('all');
     const [directoryPage, setDirectoryPage] = useState(1);
-    const [directoryParentSort, setDirectoryParentSort] = useState<'asc' | 'desc' | null>(null);
+    const [directorySort, setDirectorySort] = useState<{ column: 'division_code' | 'parent_office'; direction: 'asc' | 'desc' }>({ column: 'division_code', direction: 'asc' });
     const [mappingSelections, setMappingSelections] = useState<Record<string, string>>({});
     const [mappingNotes, setMappingNotes] = useState<Record<string, string>>({});
     const [mappingEditCode, setMappingEditCode] = useState<string | null>(null);
@@ -98,6 +99,11 @@ export default function OfficesIndex({
         email: '',
         range_id: '',
     });
+    const operationalOfficeSelectOptions: SearchableSelectOption[] = offices.filter((office) => office.id != null).map((office) => ({
+        value: String(office.id),
+        label: `${office.name}${office.code ? ` (${office.code})` : ''}`,
+        searchText: `${office.code ?? ''} ${office.id ?? ''}`,
+    }));
     const selectedDivision = officeListOptions.find((office) => office.code === form.division_code);
     const filteredDivisionOptions = officeListOptions.filter((office) =>
         `${office.name} ${office.division_name} ${office.code}`.toLowerCase().includes(divisionSearch.toLowerCase()),
@@ -297,14 +303,17 @@ export default function OfficesIndex({
             || (directoryStatus === 'unmapped' && status === 'unmapped');
         return matchesSearch && matchesStatus;
     });
-    const sortedDirectoryEntries = directoryParentSort
-        ? [...filteredDirectoryEntries].sort((left, right) => {
-            const parentOrder = (left.hris_office_name ?? '').localeCompare(right.hris_office_name ?? '', undefined, { sensitivity: 'base' });
-            const divisionOrder = left.division_name.localeCompare(right.division_name, undefined, { sensitivity: 'base' });
-            const comparison = parentOrder || divisionOrder;
-            return directoryParentSort === 'asc' ? comparison : -comparison;
-        })
-        : filteredDirectoryEntries;
+    const sortedDirectoryEntries = [...filteredDirectoryEntries].sort((left, right) => {
+        if (directorySort.column === 'parent_office') {
+            const parentOrder = (left.hris_office_name ?? '').localeCompare(right.hris_office_name ?? '', undefined, { sensitivity: 'base', numeric: true });
+            if (parentOrder !== 0) return directorySort.direction === 'asc' ? parentOrder : -parentOrder;
+        } else {
+            const codeOrder = left.division_code.localeCompare(right.division_code, undefined, { sensitivity: 'base', numeric: true });
+            return directorySort.direction === 'asc' ? codeOrder : -codeOrder;
+        }
+
+        return left.division_code.localeCompare(right.division_code, undefined, { sensitivity: 'base', numeric: true });
+    });
     const directoryPageSize = 10;
     const directoryPageCount = Math.max(1, Math.ceil(sortedDirectoryEntries.length / directoryPageSize));
     const visibleDirectoryEntries = sortedDirectoryEntries.slice((directoryPage - 1) * directoryPageSize, directoryPage * directoryPageSize);
@@ -326,6 +335,13 @@ export default function OfficesIndex({
             onSuccess: () => setMappingEditCode(null),
             onFinish: () => setMappingBusyCode(null),
         });
+    };
+    const sortDirectoryBy = (column: 'division_code' | 'parent_office') => {
+        setDirectorySort((current) => ({
+            column,
+            direction: current.column === column && current.direction === 'asc' ? 'desc' : 'asc',
+        }));
+        setDirectoryPage(1);
     };
     const rangeOptions = editingRow?.range_id != null && !ranges.some((range) => String(range.id) === String(editingRow.range_id))
         ? [...ranges, { id: Number(editingRow.range_id), name: `${editingRow.range_name || 'Current range'} (Inactive)`, is_active: false, source: 'New DB' }]
@@ -554,7 +570,10 @@ export default function OfficesIndex({
                         <div className="overflow-x-auto">
                             <table className="w-full min-w-[1050px] text-left text-sm">
                                 <thead className="bg-background text-xs uppercase text-muted"><tr>
-                                    <th className="px-4 py-3 font-semibold">HRIS division</th><th className="px-4 py-3 font-semibold"><button type="button" aria-label={`Sort by parent HRIS office${directoryParentSort ? ` ${directoryParentSort}` : ''}`} onClick={() => { setDirectoryParentSort((current) => current === 'asc' ? 'desc' : 'asc'); setDirectoryPage(1); }} className="inline-flex items-center gap-1.5 text-left hover:text-foreground">Parent HRIS office{directoryParentSort === 'asc' ? <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" /> : directoryParentSort === 'desc' ? <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5" />}</button></th><th className="px-4 py-3 font-semibold">Code</th><th className="px-4 py-3 font-semibold">DOTS office</th><th className="px-4 py-3 font-semibold">Mapping status</th>{canManageMappings && <th className="px-4 py-3 font-semibold">Review mapping</th>}
+                                    <th className="px-4 py-3 font-semibold">HRIS division</th>
+                                    <th className="px-4 py-3 font-semibold" aria-sort={directorySort.column === 'parent_office' ? (directorySort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}><button type="button" aria-label={`Sort by parent HRIS office ${directorySort.column === 'parent_office' ? directorySort.direction : ''}`} onClick={() => sortDirectoryBy('parent_office')} className="inline-flex items-center gap-1.5 text-left hover:text-foreground">Parent HRIS office{directorySort.column === 'parent_office' ? directorySort.direction === 'asc' ? <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5" />}</button></th>
+                                    <th className="px-4 py-3 font-semibold" aria-sort={directorySort.column === 'division_code' ? (directorySort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}><button type="button" aria-label={`Sort by division code ${directorySort.column === 'division_code' ? directorySort.direction : ''}`} onClick={() => sortDirectoryBy('division_code')} className="inline-flex items-center gap-1.5 text-left hover:text-foreground">Division code{directorySort.column === 'division_code' ? directorySort.direction === 'asc' ? <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" /> : <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5" />}</button></th>
+                                    <th className="px-4 py-3 font-semibold">DOTS office</th><th className="px-4 py-3 font-semibold">Mapping status</th>{canManageMappings && <th className="px-4 py-3 font-semibold">Review mapping</th>}
                                 </tr></thead>
                                 <tbody>
                                     {visibleDirectoryEntries.length === 0 ? <tr><td colSpan={canManageMappings ? 6 : 5} className="px-4 py-10 text-center text-muted">No HRIS directory entries match this filter.</td></tr> : visibleDirectoryEntries.map((entry) => {
@@ -583,9 +602,19 @@ export default function OfficesIndex({
                                                 </button>
                                                 {mappingEditCode === entry.division_code && <div id={`mapping-editor-${entry.id}`} className="mt-2 min-w-[280px] rounded-lg border border-border bg-background p-3">
                                                     <label className="mb-1 block text-xs font-medium text-foreground" htmlFor={`mapping-office-${entry.id}`}>DOTS office</label>
-                                                    <select id={`mapping-office-${entry.id}`} aria-label={`Map ${entry.division_name} to DOTS office`} value={selection} onChange={(event) => setMappingSelections((current) => ({ ...current, [entry.division_code]: event.target.value }))} className="h-9 w-full rounded-lg border border-border bg-surface px-2 text-xs">
-                                                        <option value="">Select operational office</option>{offices.map((office) => <option key={String(office.id)} value={office.id}>{office.name}{office.code ? ` (${office.code})` : ''}</option>)}
-                                                    </select>
+                                                    <SearchableSelect
+                                                        id={`mapping-office-${entry.id}`}
+                                                        ariaLabel={`Map ${entry.division_name} to DOTS office`}
+                                                        value={selection}
+                                                        options={operationalOfficeSelectOptions}
+                                                        onChange={(value) => setMappingSelections((current) => ({ ...current, [entry.division_code]: value }))}
+                                                        placeholder="Select operational office"
+                                                        emptyOptionLabel="Clear office selection"
+                                                        searchPlaceholder="Search office name, code, or ID"
+                                                        emptyMessage="No operational offices match your search."
+                                                        className="w-full"
+                                                        buttonClassName="min-h-9 px-2 py-1 text-xs"
+                                                    />
                                                     <label className="mb-1 mt-3 block text-xs font-medium text-foreground" htmlFor={`mapping-note-${entry.id}`}>Review note <span className="font-normal text-muted">(optional)</span></label>
                                                     <input id={`mapping-note-${entry.id}`} value={mappingNotes[entry.division_code] ?? entry.review_note ?? ''} onChange={(event) => setMappingNotes((current) => ({ ...current, [entry.division_code]: event.target.value }))} placeholder="Why this office is the correct match" className="h-9 w-full rounded-lg border border-border bg-surface px-2 text-xs" />
                                                     <button type="button" disabled={!selection || mappingBusyCode !== null} aria-busy={mappingBusyCode === entry.division_code} onClick={() => saveHrisMapping(entry)} className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50">{mappingBusyCode === entry.division_code && <LoaderCircle aria-hidden="true" className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />}{mappingBusyCode === entry.division_code ? 'Saving…' : confirmed ? 'Save mapping' : 'Confirm mapping'}</button>

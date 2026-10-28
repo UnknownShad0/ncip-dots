@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import SearchableSelect, { type SearchableSelectOption } from '@/Components/SearchableSelect';
 import { formatPhilippineDateTime } from '@/lib/dateTime';
 import { Head, Link, router } from '@inertiajs/react';
 import { LoaderCircle } from 'lucide-react';
@@ -172,10 +173,18 @@ export default function AuditTrailIndex({ trail = [], pagination, canFilterBurea
 
                 {canFilterBureaus && <div className="mb-5 max-w-xl">
                     <label htmlFor="audit-bureau" className="mb-1 block text-sm font-medium text-foreground">Bureau</label>
-                    <select id="audit-bureau" value={filters.office_id ?? ''} onChange={(event) => router.get('/audit-trail', event.target.value ? { office_id: event.target.value } : {}, { preserveState: true, preserveScroll: true, replace: true, onStart: () => setUpdating(true), onFinish: () => setUpdating(false) })} className="w-full rounded-lg border-border text-sm">
-                        <option value="">All bureaus</option>
-                        {bureaus.map((bureau) => <option key={bureau.id} value={bureau.id}>{bureau.name}</option>)}
-                    </select>
+                    <SearchableSelect
+                        id="audit-bureau"
+                        ariaLabel="Filter audit trail by bureau"
+                        value={filters.office_id ?? ''}
+                        options={bureaus.map((bureau): SearchableSelectOption => ({ value: String(bureau.id), label: bureau.name, searchText: String(bureau.id) }))}
+                        onChange={(officeId) => router.get('/audit-trail', officeId ? { office_id: officeId } : {}, { preserveState: true, preserveScroll: true, replace: true, onStart: () => setUpdating(true), onFinish: () => setUpdating(false) })}
+                        placeholder="All bureaus"
+                        emptyOptionLabel="All bureaus"
+                        searchPlaceholder="Search bureau or office"
+                        emptyMessage="No bureaus match your search."
+                        className="w-full"
+                    />
                     <p className="mt-1 text-xs text-muted">Native entries use the bureau recorded at the time. Legacy entries without a bureau snapshot are matched using the actor's current bureau assignment.</p>
                 </div>}
 

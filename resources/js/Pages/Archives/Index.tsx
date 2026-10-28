@@ -2,6 +2,7 @@ import DocumentLifecycleAction from "@/Components/DocumentLifecycleAction";
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import DocumentDispositionPrint from '@/Components/DocumentDispositionPrint';
 import WorkspaceDialog from '@/Components/WorkspaceDialog';
+import SearchableSelect, { type SearchableSelectOption } from '@/Components/SearchableSelect';
 import { formatPhilippineDateTime } from '@/lib/dateTime';
 import { DocumentRouteProgress, type RouteTree, type RouteTreeStep } from '@/Pages/Documents/Index';
 import { Head, Link, router } from '@inertiajs/react';
@@ -180,15 +181,18 @@ export default function ArchivesIndex({ source = 'tracking', documents, canFilte
                                 {source === 'tracking' && canFilterOffices && (
                                     <label>
                                         <span className="sr-only">Filter by originating bureau or office</span>
-                                        <select
-                                            aria-label="Filter by originating bureau or office"
+                                        <SearchableSelect
+                                            ariaLabel="Filter by originating bureau or office"
                                             value={filters.office_id ?? ''}
-                                            onChange={event => updateFilters(event.target.value, String(filters.year ?? ''), filters.sort)}
-                                            className="h-11 w-full rounded-lg border-border text-sm sm:w-80"
-                                        >
-                                            <option value="">All bureaus / offices</option>
-                                            {offices.map(office => <option key={office.id} value={office.id}>{office.name}</option>)}
-                                        </select>
+                                            options={offices.map((office): SearchableSelectOption => ({ value: String(office.id), label: office.name, searchText: String(office.id) }))}
+                                            onChange={officeId => updateFilters(officeId, String(filters.year ?? ''), filters.sort)}
+                                            placeholder="All bureaus / offices"
+                                            emptyOptionLabel="All bureaus / offices"
+                                            searchPlaceholder="Search office name or ID"
+                                            emptyMessage="No offices match your search."
+                                            className="w-full sm:w-80"
+                                            buttonClassName="h-11"
+                                        />
                                     </label>
                                 )}
                                 {source === 'tracking' && <>

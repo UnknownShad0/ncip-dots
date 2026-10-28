@@ -1,4 +1,5 @@
 import DocumentLifecycleAction from "@/Components/DocumentLifecycleAction";
+import SearchableSelect, { type SearchableSelectOption } from '@/Components/SearchableSelect';
 import WorkspaceDialog from "@/Components/WorkspaceDialog";
 import WorkspaceAlert from "@/Components/WorkspaceAlert";
 import InfoTip from "@/Components/InfoTip";
@@ -1061,25 +1062,21 @@ export default function Index({
                                 </div>
                                 <label htmlFor="submission-office" className="block text-sm font-medium">
                                     Approver office
-                                    <select
+                                    <SearchableSelect
                                         id="submission-office"
-                                        required
+                                        ariaLabel="Approver office"
                                         value={submissionOfficeId}
-                                        onChange={(event) => {
-                                            setSubmissionOfficeId(event.target.value);
-                                            if (editing === submissionTarget?.id) {
-                                                setApproverOfficeId(event.target.value);
-                                            }
+                                        options={approverOffices.map((office): SearchableSelectOption => ({ value: String(office.id), label: office.short_name || office.name, searchText: office.name }))}
+                                        onChange={(officeId) => {
+                                            setSubmissionOfficeId(officeId);
+                                            if (editing === submissionTarget?.id) setApproverOfficeId(officeId);
                                         }}
-                                        className="mt-1 w-full rounded-lg border-border"
-                                    >
-                                        <option value="">Select an office</option>
-                                        {approverOffices.map((office) => (
-                                            <option key={office.id} value={office.id}>
-                                                {office.short_name || office.name}
-                                            </option>
-                                        ))}
-                                    </select>
+                                        placeholder="Select an office"
+                                        emptyOptionLabel="Clear office selection"
+                                        searchPlaceholder="Search office name"
+                                        emptyMessage="No approver offices match your search."
+                                        className="mt-1 w-full"
+                                    />
                                 </label>
                                 <label className="flex items-start gap-2 text-sm text-foreground">
                                     <input
