@@ -1835,7 +1835,7 @@ export default function DocumentsIndex({
                                     <>
                                         <div className="rounded-xl border border-border bg-background p-4">
                                         <div className="mx-auto flex w-fit items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white">
-                                            <FileText size={15} /> This document
+                                            <FileText size={15} /> {releasingRow.title?.trim() || releasingRow.file_name?.trim() || 'This document'}
                                         </div>
                                         <div className="mx-auto h-4 w-0.5 bg-border" aria-hidden="true" />
 
