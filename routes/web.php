@@ -128,6 +128,9 @@ Route::middleware(['auth', 'active.user', 'verified', 'system.maintenance', 'nav
         Route::get('/offices', [OfficeController::class, 'index'])->name('offices.index');
         Route::post('/offices', [OfficeController::class, 'store'])->name('offices.store');
         Route::put('/offices/{id}', [OfficeController::class, 'update'])->name('offices.update');
+        Route::post('/offices/hris-directory/sync', [OfficeController::class, 'syncHris'])->name('offices.hris-sync');
+        Route::post('/offices/hris-directory/{divisionCode}/mapping', [OfficeController::class, 'updateHrisMapping'])
+            ->where('divisionCode', '[^/]+')->name('offices.hris-mappings.update');
 
         Route::get('/ranges', [RangeController::class, 'index'])->name('ranges.index');
         Route::post('/ranges', [RangeController::class, 'store'])->name('ranges.store');

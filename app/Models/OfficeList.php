@@ -16,6 +16,7 @@ class OfficeList extends Model
         'division_code', 'division_name', 'long_name', 'office_address',
         'region_code', 'province_code', 'municipality_code', 'short_name',
         'email', 'status', 'parent_office_id',
+        'hris_office_code', 'hris_office_name', 'last_synced_at', 'is_current',
     ];
 
     public function scopeInRegionCode(Builder $query, string $regionCode): Builder
@@ -55,5 +56,15 @@ class OfficeList extends Model
     public function children(): HasMany
     {
         return $this->hasMany(self::class, 'parent_office_id');
+    }
+
+    public function hrisMapping(): BelongsTo
+    {
+        return $this->belongsTo(HrisOfficeMapping::class, 'division_code', 'division_code');
+    }
+
+    protected function casts(): array
+    {
+        return ['is_current' => 'boolean', 'last_synced_at' => 'datetime'];
     }
 }

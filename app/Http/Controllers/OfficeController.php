@@ -4,17 +4,21 @@ namespace App\Http\Controllers;
 
 use App\Models\Office;
 use App\Models\OfficeList;
+use App\Models\HrisOfficeMapping;
+use App\Models\HrisOfficeSync;
 use App\Models\Range;
 use App\Models\User;
 use App\Services\AuditTrailWriter;
+use App\Services\HrisOfficeSynchronizer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class OfficeController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $officeListOptions = OfficeList::query()
             ->orderBy('division_name')
@@ -67,12 +71,116 @@ class OfficeController extends Controller
             ])
             ->values();
 
+        $hrisDirectoryEntries = DB::table('office_lists')
+            ->leftJoin('hris_office_mappings as mapping', 'mapping.division_code', '=', 'office_lists.division_code')
+            ->leftJoin('offices as mapped_office', 'mapped_office.id', '=', 'mapping.office_id')
+            ->whereNull('office_lists.deleted_at')
+            ->orderBy('office_lists.division_code')
+            ->get([
+                'office_lists.id', 'office_lists.division_code', 'office_lists.division_name',
+                'office_lists.hris_office_code', 'office_lists.hris_office_name', 'office_lists.region_code',
+                'office_lists.status as directory_status', 'office_lists.last_synced_at',
+                'office_lists.is_current',
+                'mapping.office_id as mapped_office_id', 'mapping.match_method',
+                'mapping.status as mapping_status', 'mapping.review_note',
+                'mapped_office.name as mapped_office_name', 'mapped_office.code as mapped_office_code',
+            ])
+            ->map(fn ($entry) => [
+                'id' => (int) $entry->id,
+                'division_code' => $entry->division_code,
+                'division_name' => $entry->division_name,
+                'hris_office_code' => $entry->hris_office_code,
+                'hris_office_name' => $entry->hris_office_name,
+                'region_code' => $entry->region_code,
+                'directory_status' => $entry->directory_status,
+                'is_current' => (bool) $entry->is_current,
+                'last_synced_at' => $entry->last_synced_at,
+                'mapped_office_id' => $entry->mapped_office_id === null ? null : (int) $entry->mapped_office_id,
+                'mapped_office_name' => $entry->mapped_office_name,
+                'mapped_office_code' => $entry->mapped_office_code,
+                'match_method' => $entry->match_method,
+                'mapping_status' => $entry->mapping_status,
+                'review_note' => $entry->review_note,
+            ])
+            ->values();
+        $latestOfficeSync = HrisOfficeSync::query()->latest('id')->first();
+        $lastSuccessfulOfficeSync = HrisOfficeSync::query()->where('status', 'succeeded')->latest('id')->first();
+
         return Inertia::render('Offices/Index', [
             'offices' => $newOffices,
             'parentOffices' => $parentOffices,
             'ranges' => $ranges,
             'officeListOptions' => $officeListOptions,
+            'hrisDirectoryEntries' => $hrisDirectoryEntries,
+            'hrisOfficeSync' => $latestOfficeSync?->only([
+                'id', 'status', 'records_received', 'records_created', 'records_updated', 'error_summary', 'started_at', 'finished_at',
+            ]),
+            'lastSuccessfulHrisOfficeSync' => $lastSuccessfulOfficeSync?->only(['records_received', 'finished_at']),
+            'hrisDirectoryCounts' => [
+                'total' => $hrisDirectoryEntries->count(),
+                'current' => $hrisDirectoryEntries->where('is_current', true)->count(),
+                'mapped' => $hrisDirectoryEntries->whereIn('mapping_status', ['auto_confirmed', 'confirmed'])->count(),
+                'pending' => $hrisDirectoryEntries->where('mapping_status', 'pending_review')->count(),
+                'unmapped' => $hrisDirectoryEntries->whereNull('mapping_status')->count(),
+            ],
+            'canManageMappings' => $request->user()?->canManageLibraries() ?? false,
+            'flash' => [
+                'success' => $request->session()->get('success'),
+                'warning' => $request->session()->get('warning'),
+            ],
         ]);
+    }
+
+    public function syncHris(Request $request, HrisOfficeSynchronizer $synchronizer)
+    {
+        abort_unless($request->user()?->canManageLibraries(), 403);
+
+        try {
+            $sync = $synchronizer->sync($request->user()->id);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return redirect()->route('offices.index')->with('warning', $exception->getMessage());
+        }
+
+        return redirect()->route('offices.index')->with(
+            'success',
+            number_format($sync->records_received)." HRIS divisions synced; {$sync->records_created} added, {$sync->records_updated} updated.",
+        );
+    }
+
+    public function updateHrisMapping(Request $request, string $divisionCode)
+    {
+        abort_unless($request->user()?->canManageLibraries(), 403);
+        $directoryEntry = OfficeList::query()->where('division_code', $divisionCode)->firstOrFail();
+        $validated = $request->validate([
+            'office_id' => ['required', 'integer', 'exists:offices,id'],
+            'review_note' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $mapping = HrisOfficeMapping::query()->updateOrCreate(
+            ['division_code' => $directoryEntry->division_code],
+            [
+                'office_id' => (int) $validated['office_id'],
+                'match_method' => 'manual',
+                'status' => 'confirmed',
+                'mapped_by' => $request->user()->id,
+                'mapped_at' => now(),
+                'reviewed_by' => $request->user()->id,
+                'reviewed_at' => now(),
+                'review_note' => $validated['review_note'] ?? null,
+            ],
+        );
+
+        $office = Office::query()->findOrFail($mapping->office_id);
+        app(AuditTrailWriter::class)->record('library.hris_office_mapping_confirmed', $office, [
+            'division_code' => $mapping->division_code,
+            'office_id' => $mapping->office_id,
+            'match_method' => $mapping->match_method,
+            'status' => $mapping->status,
+        ]);
+
+        return redirect()->route('offices.index')->with('success', 'HRIS division mapping saved and confirmed.');
     }
 
     public function store(Request $request)

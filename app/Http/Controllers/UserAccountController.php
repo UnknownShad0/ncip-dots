@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Office;
+use App\Models\OfficeList;
 use App\Models\User;
 use App\Notifications\UserAccountCreated;
 use App\Services\AuditTrailWriter;
@@ -11,6 +12,7 @@ use App\Services\HrisDirectory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
@@ -71,21 +73,6 @@ class UserAccountController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'email'])
             ->map(fn (Office $office) => ['id' => $office->id, 'name' => $office->name, 'email' => trim((string) $office->email)]);
-        $officeTableOptions = Office::query()
-            ->with('range:id,name')
-            ->orderBy('name')
-            ->get(['id', 'code', 'name', 'email', 'range_id'])
-            ->map(function (Office $office) {
-                return [
-                    'id' => 'new-'.$office->id,
-                    'code' => $office->code,
-                    'name' => $office->name,
-                    'email' => $office->email,
-                    'range_name' => $office->range?->name,
-                    'source' => 'New DB',
-                ];
-            })
-            ->values();
         $roleOptions = User::query()
             ->whereNotNull('role_id')
             ->select(['role_id', 'role'])
@@ -96,7 +83,37 @@ class UserAccountController extends Controller
             ->unique('id')
             ->values();
 
-        $localUsers = User::query()->with(['office', 'officeByCode'])
+        $hrisOfficeOptions = DB::table('office_lists')
+            ->join('hris_office_mappings as mapping', 'mapping.division_code', '=', 'office_lists.division_code')
+            ->join('offices', 'offices.id', '=', 'mapping.office_id')
+            ->leftJoin('ranges', 'ranges.id', '=', 'offices.range_id')
+            ->whereNull('office_lists.deleted_at')
+            ->where('office_lists.is_current', true)
+            ->whereIn('mapping.status', ['auto_confirmed', 'confirmed'])
+            ->where('ranges.is_active', true)
+            ->whereNotNull('offices.range_id')
+            ->orderBy('office_lists.hris_office_name')
+            ->orderBy('office_lists.division_name')
+            ->get([
+                'office_lists.division_code', 'office_lists.division_name',
+                'office_lists.hris_office_code', 'office_lists.hris_office_name',
+                'office_lists.region_code', 'offices.id as office_id', 'offices.name as office_name',
+                'offices.code as office_code', 'ranges.name as range_name',
+            ])
+            ->map(fn ($office) => [
+                'division_code' => $office->division_code,
+                'division_name' => $office->division_name,
+                'parent_office_code' => $office->hris_office_code,
+                'parent_office_name' => $office->hris_office_name,
+                'region_code' => $office->region_code,
+                'office_id' => (int) $office->office_id,
+                'office_name' => $office->office_name,
+                'office_code' => $office->office_code,
+                'range_name' => $office->range_name,
+            ])
+            ->values();
+
+        $localUsers = User::query()->with(['office', 'officeByCode', 'assignedOfficeList'])
             ->orderBy('name')
             ->get()
             ->map(function (User $user) use ($roleOptions) {
@@ -115,7 +132,8 @@ class UserAccountController extends Controller
                     'role' => $roleName,
                     'employee_code' => $user->employee_code,
                     'office_id' => $user->office_id,
-                    'office_name' => $user->office?->name ?? $user->officeByCode?->name ?? '',
+                    'office_name' => $user->assignedOfficeList?->long_name
+                        ?: ($user->assignedOfficeList?->division_name ?? $user->office?->name ?? $user->officeByCode?->name ?? ''),
                     'is_active' => (bool) $user->is_active,
                     'account_status' => $accountStatus,
                     'password_setup_pending' => $user->password === null,
@@ -129,7 +147,7 @@ class UserAccountController extends Controller
         return Inertia::render('UserAccounts/Index', [
             'users' => $localUsers->values(),
             'offices' => $offices,
-            'officeTableOptions' => $officeTableOptions,
+            'hrisOfficeOptions' => $hrisOfficeOptions,
             'roles' => $roleOptions,
             'usesRelaxedPasswordValidation' => (bool) config('app.is_testing'),
         ]);
@@ -143,7 +161,7 @@ class UserAccountController extends Controller
                 'operation' => ['required', 'in:create'],
                 'employee_code' => ['required', 'string', 'max:100', 'unique:users,employee_code'],
                 'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-                'office_table_id' => ['required', 'string'],
+                'office_directory_code' => ['required', 'string', 'max:100', 'exists:office_lists,division_code'],
                 'employee_role' => ['required', Rule::in(['Super Admin', 'Executive', 'Admin Staff'])],
             ]);
             $lookup = $request->session()->get('hris_employee_lookup');
@@ -156,18 +174,25 @@ class UserAccountController extends Controller
                 'first_name' => ['required', 'string', 'max:100'],
                 'last_name' => ['required', 'string', 'max:100'],
             ])->validate();
-            $officeId = preg_match('/^new-(\d+)$/', $validated['office_table_id'], $matches)
-                ? (int) $matches[1]
+            $directoryEntry = OfficeList::query()
+                ->where('division_code', $validated['office_directory_code'])
+                ->where('is_current', true)
+                ->first();
+            $mapping = $directoryEntry
+                ? DB::table('hris_office_mappings')
+                    ->where('division_code', $directoryEntry->division_code)
+                    ->whereIn('status', ['auto_confirmed', 'confirmed'])
+                    ->first()
                 : null;
-            $office = $officeId ? Office::query()->find($officeId) : null;
-            if (! $office) {
+            $office = $mapping ? Office::query()->with('range')->find($mapping->office_id) : null;
+            if (! $directoryEntry || ! $office) {
                 throw ValidationException::withMessages([
-                    'office_table_id' => 'Select an existing office.',
+                    'office_directory_code' => 'This HRIS division is not mapped to an operational office yet. Ask an administrator to review the mapping.',
                 ]);
             }
-            if (! $office->range) {
+            if (! $office->range || ! $office->range->is_active) {
                 throw ValidationException::withMessages([
-                    'office_table_id' => 'Assign a range to this office in the Offices module first.',
+                    'office_directory_code' => 'The mapped operational office needs an active range before creating the account.',
                 ]);
             }
             $attributes = [
@@ -177,6 +202,7 @@ class UserAccountController extends Controller
                 'username' => $employee['username'], 'email' => $validated['email'],
                 'division_code' => $employee['division_code'] ?? null,
                 'division' => $employee['division'] ?? null,
+                'assigned_office_list_code' => $directoryEntry->division_code,
                 'office_code' => $office->code,
                 'office_name' => $office->name,
                 'office_id' => $office->id,

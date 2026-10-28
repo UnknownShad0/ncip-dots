@@ -45,9 +45,11 @@ class HandleInertiaRequests extends Middleware
                 ($authUser->lastname ?? '')
             ) ?: $authUser->name;
             $office = $this->userOffice($authUser);
+            $assignedDirectoryOffice = $authUser->assignedOfficeList;
             $authUserData['office_short_name'] = $office?->short_name;
-            $authUserData['office_display_name'] = trim((string) $office?->short_name)
-                ?: ($office?->name ?: ($authUser->office_name ?: $authUser->division));
+            $authUserData['office_display_name'] = $assignedDirectoryOffice?->long_name
+                ?: ($assignedDirectoryOffice?->division_name
+                    ?: (trim((string) $office?->short_name) ?: ($office?->name ?: ($authUser->office_name ?: $authUser->division))));
             $authUserData['range'] = $this->userRange($authUser);
         }
 

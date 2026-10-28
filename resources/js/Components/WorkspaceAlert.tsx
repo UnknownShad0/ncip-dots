@@ -2,11 +2,12 @@ import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react';
 import WorkspaceDialog from './WorkspaceDialog';
 
-export type WorkspaceAlertVariant = 'success' | 'error' | 'info' | 'confirmation';
+export type WorkspaceAlertVariant = 'success' | 'error' | 'warning' | 'info' | 'confirmation';
 
 const appearances = {
     success: { icon: CheckCircle2, color: 'text-success' },
     error: { icon: AlertCircle, color: 'text-danger' },
+    warning: { icon: AlertTriangle, color: 'text-warning' },
     info: { icon: Info, color: 'text-primary' },
     confirmation: { icon: AlertTriangle, color: 'text-warning' },
 };

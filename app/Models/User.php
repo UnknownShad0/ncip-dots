@@ -41,6 +41,7 @@ class User extends Authenticatable
         'role',
         'role_id',
         'office_id',
+        'assigned_office_list_code',
         'legacy_office_id',
         'division_id',
         'is_active',
@@ -90,6 +91,11 @@ class User extends Authenticatable
     public function officeByCode(): BelongsTo
     {
         return $this->belongsTo(Office::class, 'office_code', 'code');
+    }
+
+    public function assignedOfficeList(): BelongsTo
+    {
+        return $this->belongsTo(OfficeList::class, 'assigned_office_list_code', 'division_code');
     }
 
     public function isAdministrator(): bool

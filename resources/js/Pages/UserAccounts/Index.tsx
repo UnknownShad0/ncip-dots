@@ -1,9 +1,9 @@
 import axios from 'axios';
-import WorkspaceAlert from '@/Components/WorkspaceAlert';
+import WorkspaceAlert, { type WorkspaceAlertVariant } from '@/Components/WorkspaceAlert';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
-import { FormEvent, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpDown, LoaderCircle, Search } from 'lucide-react';
 
 type UserRow = {
     id: string;
@@ -26,7 +26,7 @@ type UserRow = {
     source: string;
 };
 type OfficeOption = { id: number; name: string; email?: string };
-type OfficeTableOption = { id: string; code: string | null; name: string; email?: string | null; range_name?: string | null; source?: string };
+type HrisOfficeOption = { division_code: string; division_name: string; parent_office_code?: string | null; parent_office_name?: string | null; region_code?: string | null; office_id: number; office_name: string; office_code?: string | null; range_name?: string | null };
 type RoleOption = { id: number; name: string };
 type FormState = {
     employee_role: string;
@@ -64,8 +64,8 @@ const emptyForm: FormState = {
 };
 
 export default function UserAccountsIndex({
-    users = [], offices = [], officeTableOptions = [], roles = [], usesRelaxedPasswordValidation = false, flash = {},
-}: { users?: UserRow[]; offices?: OfficeOption[]; officeTableOptions?: OfficeTableOption[]; roles?: RoleOption[]; usesRelaxedPasswordValidation?: boolean; flash?: { success?: string; warning?: string } }) {
+    users = [], offices = [], hrisOfficeOptions = [], roles = [], usesRelaxedPasswordValidation = false, flash = {},
+}: { users?: UserRow[]; offices?: OfficeOption[]; hrisOfficeOptions?: HrisOfficeOption[]; roles?: RoleOption[]; usesRelaxedPasswordValidation?: boolean; flash?: { success?: string; warning?: string } }) {
     const [search, setSearch] = useState('');
     const [sortKey, setSortKey] = useState<SortKey>('name');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -82,22 +82,32 @@ export default function UserAccountsIndex({
     const [lookup, setLookup] = useState<EmployeeLookup | null>(null);
     const [lookupOpen, setLookupOpen] = useState(false);
     const [lookupBusy, setLookupBusy] = useState(false);
+    const [lookupLoadingKind, setLookupLoadingKind] = useState<'search' | 'employee' | null>(null);
     const [lookupError, setLookupError] = useState('');
-    const [officeTableId, setOfficeTableId] = useState('');
-    const [successAlert, setSuccessAlert] = useState<{ title: string; message: string } | null>(null);
+    const [officeDirectoryCode, setOfficeDirectoryCode] = useState('');
+    const [toast, setToast] = useState<{ title: string; message: string; variant: WorkspaceAlertVariant } | null>(null);
     const lookupVersion = useRef(0);
+
+    useEffect(() => {
+        if (flash.warning) {
+            setToast({ title: 'Account saved with a notice', message: flash.warning, variant: 'warning' });
+        } else if (flash.success) {
+            setToast({ title: 'Account saved', message: flash.success, variant: 'success' });
+        }
+    }, [flash.success, flash.warning]);
 
     const resetLookup = () => {
         lookupVersion.current++;
         setLookup(null); setLookupOpen(false); setLookupBusy(false);
-        setLookupError(''); setEmployeeCode(''); setEmployeeMatches([]); setOfficeTableId('');
+        setLookupLoadingKind(null);
+        setLookupError(''); setEmployeeCode(''); setEmployeeMatches([]); setOfficeDirectoryCode('');
     };
     const selectType = (type: 'dots' | 'employee') => {
         resetLookup(); setAccountType(type); setForm(emptyForm); setErrors({});
     };
     const searchEmployee = async () => {
         const version = ++lookupVersion.current;
-        setLookupBusy(true); setLookupError(''); setLookup(null); setEmployeeMatches([]); setForm(emptyForm); setOfficeTableId('');
+        setLookupBusy(true); setLookupLoadingKind('search'); setLookupError(''); setLookup(null); setEmployeeMatches([]); setForm(emptyForm); setOfficeDirectoryCode('');
         try {
             const response = await axios.post<{ matches: EmployeeMatch[] }>('/user-accounts/search-employees', { query: employeeCode.trim() });
             if (version !== lookupVersion.current) return;
@@ -107,7 +117,7 @@ export default function UserAccountsIndex({
             if (version !== lookupVersion.current) return;
             setLookupError(axios.isAxiosError(error) ? error.response?.data?.errors?.query?.[0] || error.response?.data?.message || 'Employee lookup failed. Please try again.' : 'Employee lookup failed. Please try again.');
         } finally {
-            if (version === lookupVersion.current) setLookupBusy(false);
+            if (version === lookupVersion.current) { setLookupBusy(false); setLookupLoadingKind(null); }
         }
     };
 
@@ -116,19 +126,23 @@ export default function UserAccountsIndex({
         setEmployeeCode(employee.employee_code);
         setEmployeeMatches([]);
         setLookupBusy(true);
+        setLookupLoadingKind('employee');
         setLookupError('');
         try {
             const response = await axios.post<EmployeeLookup>('/user-accounts/lookup-employee', { employee_code: employee.employee_code });
             if (version !== lookupVersion.current) return;
             const result = response.data;
             setLookup(result); setLookupOpen(false);
+            setOfficeDirectoryCode(hrisOfficeOptions.some((office) => office.division_code === result.employee.division_code)
+                ? result.employee.division_code ?? ''
+                : '');
             setForm({ ...emptyForm, firstname: result.employee.first_name, lastname: result.employee.last_name,
                 username: result.employee.username, email: '' });
         } catch (error) {
             if (version !== lookupVersion.current) return;
             setLookupError(axios.isAxiosError(error) ? error.response?.data?.message || 'Employee lookup failed. Please try again.' : 'Employee lookup failed. Please try again.');
         } finally {
-            if (version === lookupVersion.current) setLookupBusy(false);
+            if (version === lookupVersion.current) { setLookupBusy(false); setLookupLoadingKind(null); }
         }
     };
 
@@ -148,7 +162,7 @@ export default function UserAccountsIndex({
     const officeOptions = editingRow?.office_id && !offices.some((office) => office.id === editingRow.office_id)
         ? [...offices, { id: editingRow.office_id, name: `${editingRow.office_name} (Inactive)` }]
         : offices;
-    const selectedOffice = officeTableOptions.find((office) => office.id === officeTableId);
+    const selectedOffice = hrisOfficeOptions.find((office) => office.division_code === officeDirectoryCode);
 
     const closeModal = () => {
         resetLookup();
@@ -180,17 +194,11 @@ export default function UserAccountsIndex({
             ...form,
             account_type: accountType,
             employee_code: lookup?.employee.employee_code,
-            office_table_id: officeTableId,
+            office_directory_code: officeDirectoryCode,
             operation: editingRow ? 'update' : 'create',
         };
         const options = {
-            onSuccess: () => {
-                closeModal();
-                setSuccessAlert({
-                    title: editingRow ? 'User account updated' : 'User account created',
-                    message: editingRow ? 'User account updated successfully.' : 'User account created successfully.',
-                });
-            },
+            onSuccess: () => closeModal(),
             onError: (validationErrors: Record<string, string>) => setErrors(validationErrors),
             onFinish: () => setProcessing(false),
         };
@@ -213,7 +221,6 @@ export default function UserAccountsIndex({
         <AuthenticatedLayout header={<h1 className="text-2xl font-semibold tracking-tight text-foreground">User Accounts</h1>}>
             <Head title="User Accounts" />
             <div className="mx-auto max-w-[1440px] space-y-5 print:border-0 print:shadow-none">
-                {flash.warning && <p role="alert" className="rounded-lg bg-warning-soft p-3 text-sm text-warning">{flash.warning}</p>}
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <p className="text-sm text-muted">Manage access, office assignments, and account status.</p>
@@ -282,11 +289,11 @@ export default function UserAccountsIndex({
 
             {(isCreateOpen || editingRow) && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-foreground/40 p-4 print:hidden" role="dialog" aria-modal="true" aria-labelledby="user-account-modal-title">
                 <form onSubmit={submit} className="my-8 max-h-[calc(100vh-2rem)] w-full max-w-2xl space-y-4 overflow-y-auto rounded-xl border border-border bg-surface p-5 shadow-2xl sm:p-6">
-                    <div className="flex items-center justify-between border-b border-border pb-3"><h3 id="user-account-modal-title" className="text-lg font-semibold text-foreground">{editingRow ? 'Edit User Account' : 'New User Account'}</h3><button type="button" onClick={closeModal} className="rounded-lg px-3 py-2 text-sm text-muted hover:bg-secondary hover:text-foreground">Close</button></div>
+                    <div className="flex items-center justify-between border-b border-border pb-3"><h3 id="user-account-modal-title" className="text-lg font-semibold text-foreground">{editingRow ? 'Edit User Account' : 'New User Account'}</h3><button type="button" disabled={processing} onClick={closeModal} className="rounded-lg px-3 py-2 text-sm text-muted hover:bg-secondary hover:text-foreground disabled:opacity-50">Close</button></div>
                     {!editingRow && accountType === 'employee' && <div className="space-y-4">
                         {(!lookup || lookupOpen) && <div className="space-y-3 rounded-xl border border-border bg-background p-4">
-                            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"><div className="min-w-0"><Field label="Search employee by code or name"><input value={employeeCode} onChange={(e) => { lookupVersion.current++; setEmployeeCode(e.target.value); setEmployeeMatches([]); setLookupError(''); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (employeeCode.trim() && !lookupBusy) void searchEmployee(); } }} placeholder="Enter employee code or name" className="w-full rounded-lg border-border bg-surface" /></Field></div>
-                                <button type="button" disabled={lookupBusy || !employeeCode.trim()} onClick={() => void searchEmployee()} className="dots-button-primary w-full disabled:opacity-50 sm:w-auto">{lookupBusy ? 'Searching...' : 'Search'}</button>
+                            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"><div className="min-w-0"><Field label="Search employee by code or name"><input value={employeeCode} onChange={(e) => { lookupVersion.current++; setLookupBusy(false); setLookupLoadingKind(null); setEmployeeCode(e.target.value); setEmployeeMatches([]); setLookupError(''); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (employeeCode.trim() && !lookupBusy) void searchEmployee(); } }} placeholder="Enter employee code or name" className="w-full rounded-lg border-border bg-surface" /></Field></div>
+                                <button type="button" disabled={lookupBusy || !employeeCode.trim()} aria-busy={lookupBusy} onClick={() => void searchEmployee()} className="dots-button-primary inline-flex w-full items-center justify-center gap-2 disabled:cursor-wait disabled:opacity-50 sm:w-auto">{lookupBusy ? <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Search size={16} aria-hidden="true" />}{lookupBusy ? 'Searching…' : 'Search'}</button>
                             </div>
                             {lookupError && <p role="alert" className="text-sm text-danger">{lookupError}</p>}
                             {employeeMatches.length > 0 && <div className="max-h-64 overflow-y-auto rounded-lg border border-border bg-surface" role="listbox" aria-label="Matching HRIS employees">
@@ -296,6 +303,7 @@ export default function UserAccountsIndex({
                                 </button>)}
                             </div>}
                         </div>}
+                        {lookupLoadingKind === 'employee' && <p role="status" className="inline-flex items-center gap-2 text-sm text-muted"><LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading employee details…</p>}
                         {lookup && !lookupOpen && <>
                             <button type="button" disabled={processing || lookupBusy} onClick={() => { setLookupOpen(true); setLookupError(''); }} className="self-start rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary disabled:opacity-50">Search another employee</button>
                             <dl className="grid gap-3 rounded-xl bg-secondary p-4 text-sm sm:grid-cols-2">
@@ -306,16 +314,17 @@ export default function UserAccountsIndex({
                                     ['Username', lookup.employee.username],
                                 ].map(([label, value]) => <div key={label}><dt className="text-muted">{label}</dt><dd className="mt-1 font-medium text-foreground">{value || '—'}</dd></div>)}
                             </dl>
-                            <p className="text-sm text-muted">HRIS division: {lookup.employee.division || lookup.employee.division_code || 'Not provided'}. <br/> Select the employee’s assigned office below.</p>
+                            <p className="text-sm text-muted">HRIS division: {lookup.employee.division || lookup.employee.division_code || 'Not provided'}. Select the current HRIS directory entry below; the saved assignment will use its mapped DOTS office ID.</p>
                             <div className="grid gap-3 sm:grid-cols-2">
-                                <Field label="Assigned office"><select required aria-label="Assigned office" value={officeTableId} onChange={(event) => setOfficeTableId(event.target.value)} className="w-full rounded-lg border-border bg-surface">
-                                    <option value="">Select existing office</option>
-                                    {officeTableOptions.map((office) => <option key={office.id} value={office.id}>{office.name}{office.code ? ` (${office.code})` : ''} — {office.range_name || 'No range assigned'}</option>)}
+                                <Field label="HRIS directory entry" error={errors.office_directory_code}><select required aria-label="HRIS directory entry" value={officeDirectoryCode} onChange={(event) => setOfficeDirectoryCode(event.target.value)} className="w-full rounded-lg border-border bg-surface">
+                                    <option value="">Select mapped HRIS division</option>
+                                    {hrisOfficeOptions.length === 0 && <option value="" disabled>No current divisions with confirmed mappings and active ranges</option>}
+                                    {hrisOfficeOptions.map((office) => <option key={office.division_code} value={office.division_code}>{office.division_name} ({office.division_code}) — {office.office_name}</option>)}
                                 </select></Field>
                                 <Field label="Range"><input aria-label="Range" readOnly value={selectedOffice ? selectedOffice.range_name || 'No range assigned' : ''} className="w-full rounded-lg border-border bg-background text-muted" /></Field>
                             </div>
-                            {selectedOffice && !selectedOffice.range_name && <p role="alert" className="text-sm text-warning">Assign a range to this office in the Offices module before creating the account.</p>}
-                            {errors.office_table_id && <p className="text-xs text-danger">{errors.office_table_id}</p>}
+                            {selectedOffice && <p className="text-xs text-muted">Assigned to DOTS office {selectedOffice.office_code ? `${selectedOffice.office_code} · ` : ''}{selectedOffice.office_name} (ID {selectedOffice.office_id}).</p>}
+                            {!selectedOffice && lookup.employee.division_code && <p role="status" className="text-sm text-warning">The employee’s HRIS division has no confirmed office mapping. Select another mapped entry or ask an administrator to review it in Offices.</p>}
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <Field label="Email" error={errors.email}><input required type="email" maxLength={255} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-lg border-border bg-surface" /></Field>
                                 <Field label="Role" error={errors.employee_role}><select required value={form.employee_role} onChange={(e) => setForm({ ...form, employee_role: e.target.value })} className="w-full rounded-lg border-border bg-surface"><option value="">Select role</option><option value="Super Admin">Super Admin</option><option value="Executive">Executive</option><option value="Admin Staff">Admin Staff</option></select></Field>
@@ -336,12 +345,12 @@ export default function UserAccountsIndex({
                         <Field label="Confirm password" error={errors.password_confirmation}><input type="password" value={form.password_confirmation} onChange={(e) => setForm({ ...form, password_confirmation: e.target.value })} className="w-full rounded-lg border-border bg-surface" /></Field>
                         <p className="text-xs text-muted sm:col-span-2">{usesRelaxedPasswordValidation ? 'Use at least 8 characters.' : 'Use at least 8 characters, including uppercase and lowercase letters, a number, and a symbol.'}</p></>}
                     </div>}
-                    {Object.entries(errors).filter(([key]) => !['firstname', 'lastname', 'role_id', 'officeId', 'office_table_id', 'password', 'password_confirmation', 'account_status', 'user'].includes(key)).map(([key, message]) => <p key={key} className="text-sm text-danger">{message}</p>)}
+                    {Object.entries(errors).filter(([key]) => !['firstname', 'lastname', 'role_id', 'officeId', 'office_directory_code', 'password', 'password_confirmation', 'account_status', 'user'].includes(key)).map(([key, message]) => <p key={key} className="text-sm text-danger">{message}</p>)}
                     {errors.user && <p className="text-sm text-danger">{errors.user}</p>}
-                    <div className="grid grid-cols-2 gap-2 border-t border-border pt-4"><button type="button" onClick={closeModal} className="dots-button-secondary w-full">Cancel</button><button disabled={processing || (!editingRow && (!accountType || (accountType === 'dots' && !form.email) || (accountType === 'employee' && (!lookup || lookupOpen || lookupBusy || !selectedOffice?.range_name || !officeTableId || !form.employee_role || !form.email))))} className="dots-button-primary w-full disabled:opacity-50">{processing ? 'Saving...' : 'Save account'}</button></div>
+                    <div className="grid grid-cols-2 gap-2 border-t border-border pt-4"><button type="button" disabled={processing} onClick={closeModal} className="dots-button-secondary w-full disabled:opacity-50">Cancel</button><button disabled={processing || (!editingRow && (!accountType || (accountType === 'dots' && !form.email) || (accountType === 'employee' && (!lookup || lookupOpen || lookupBusy || !selectedOffice?.range_name || !officeDirectoryCode || !form.employee_role || !form.email))))} aria-busy={processing} className="dots-button-primary inline-flex w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50">{processing && <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}{processing ? 'Saving…' : 'Save account'}</button></div>
                 </form>
             </div>}
-            {successAlert && <WorkspaceAlert {...successAlert} onClose={() => setSuccessAlert(null)} />}
+            {toast && <WorkspaceAlert {...toast} toast onClose={() => setToast(null)} />}
         </AuthenticatedLayout>
     );
 }
