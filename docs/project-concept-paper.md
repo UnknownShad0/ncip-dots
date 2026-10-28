@@ -1,150 +1,195 @@
-# Concept Paper: Document Tracking and Routing System (DOTS)
+# Concept Paper: NCIP Document Tracking and Routing System (DOTS)
 
-**Status:** Working draft for review  
-**Prepared for:** Project sponsors and business stakeholders  
+**Status:** Updated working draft for sponsor and business-owner review
+**Prepared for:** NCIP project sponsors and business stakeholders
 **Prepared by:** [Name / unit]  
-**Date:** [Insert date]
+**Review date:** 28 October 2026
+**System reviewed:** Current project source code in this repository
 
-> This draft describes the overall DOTS project. Confirm the project name, business rules, audience, and any required agency template before formal submission.
+> This paper reflects features found in the current codebase. It does not confirm production deployment, live data, agency policy approval, or the availability of external services. Those items should be confirmed before formal submission.
 
 ## 1. Project overview
 
-The Document Tracking and Routing System (DOTS) is a web-based application intended to help offices prepare, register, route, and track official documents. It gives authorized staff a shared view of a document's tracking number, current status, responsible office, and recorded routing history.
+The National Commission on Indigenous Peoples (NCIP) Document Tracking and Routing System (DOTS) is a web application for registering official documents, routing them between offices, recording receipt and decisions, and following their progress through completion. It provides authorized staff with a shared record of document details, files, office actions, and routing history. A signed public tracking link can show selected tracking information without an internal account.
 
-DOTS supports both generated documents and uploaded files. When a document is submitted for routing, the system creates a tracking record and number. Staff can then review the item, record approval decisions and routing actions, and follow its progress. Access is controlled according to user roles and office responsibilities.
+DOTS supports two related document paths. Staff can register an existing or uploaded source document directly into the tracking workflow. They can also prepare a document in the DOTS editor, save and finalize it as ready for routing, then create a tracking record for it. Tracking records receive their tracking number when they are registered; the number can be stamped on a generated PDF. Receipt, approval, routing, optional signature handling, and completion are recorded against the tracked record.
 
-## 2. Background and problem
+The current application also includes dashboards, archives, audit history, account and reference-data administration, HRIS employee support, email notifications, QR-based document actions, and summary views for selected connected systems.
 
-Documents that move between offices need a reliable way to identify the current responsible office, record actions, and answer status inquiries. When these steps depend on separate or manual processes, staff may have difficulty finding the latest status, confirming a document's movement, and retrieving its history.
+## 2. Background and need
 
-DOTS addresses this need by keeping the tracking record, routing events, approvals, and related files together in one system. The specific workflow and records policies should be confirmed with the participating offices.
+Official documents may pass through multiple offices and decision-makers. Staff need to know which office currently holds an item, what action has been taken, what remains to be done, and which version of a file was reviewed. Separate paper, spreadsheet, or email handoffs can make that history harder to find and reconcile.
 
-## 3. Proposed solution
+DOTS addresses this need by connecting the tracking record, source-file versions, office route steps, decisions, and audit events. It provides office-based work views and a signed tracking page for approved public status information. The system is intended to support the agency's approved records and routing procedures; it does not replace those policies.
 
-Develop and operate DOTS as a central application for document preparation and routing. The system will:
-
-- provide a tracking number for each registered routing record;
-- record the offices involved, actions taken, dates, and current status;
-- support document creation or file upload as the source document;
-- provide office-scoped views and role-based access to records and actions;
-- preserve a history of routing and approval activity;
-- help staff find work through dashboards, lists, and status notifications; and
-- provide limited public tracking for eligible records, subject to approved disclosure rules.
-
-## 4. Objectives
+## 3. Objectives
 
 DOTS aims to:
 
-1. Make it easier for authorized staff to find a document's current status and routing history.
-2. Give offices a consistent way to register, route, receive, and act on documents.
-3. Keep the tracking record, source file, and recorded decisions associated with the same tracking number.
-4. Limit access to records and actions according to user roles and office responsibilities.
-5. Improve accountability through recorded actions and audit history.
-6. Reduce avoidable status inquiries by making approved status information easier to find.
+1. Give authorized staff a consistent way to register, receive, route, review, and complete official documents.
+2. Make the current holding office, routing state, and recorded history easier to locate.
+3. Keep the tracking number, source document and versions, route decisions, and related records connected.
+4. Support generated documents as well as documents supplied as files.
+5. Apply account, office, and role checks to internal records and workflow actions.
+6. Improve accountability by recording office actions, decisions, and key system events.
+7. Provide selected tracking information through signed links while protecting internal files and remarks.
+8. Support a controlled transition from the legacy directory, document, and audit data where migration is approved.
 
-## 5. Intended users and beneficiaries
+## 4. Users and beneficiaries
 
-- **Submitting staff:** prepare or upload documents and follow their submissions.
-- **Receiving and approving staff:** review documents assigned to their office, record decisions, and continue routing.
-- **Office administrators and executives:** oversee document activity within their authorized scope.
-- **System administrators:** manage accounts, reference data, access settings, and system operations.
-- **Public users:** check limited status information for records made available through public tracking.
+- **Document originators and encoders:** prepare or register documents, attach source files, and follow their records.
+- **Receiving-office staff:** verify receipt, review assigned work, and route documents onward.
+- **Approvers and office administrators:** act on the route steps assigned to their office and monitor office work within their authorization.
+- **Records, administrative, and system administrators:** maintain accounts, offices, routing ranges, reference data, templates, and system settings according to their assigned access.
+- **Executives and authorized oversight users:** review cross-office work, dashboards, archives, or audit information where their access allows.
+- **Recipients and other public users:** view limited status and routing information using a valid signed tracking link; QR action access may require email one-time-password verification.
 
-Final user groups and permissions must follow the agency's approved roles and records-access policies.
+Actual role assignments and access must follow NCIP-approved policies. The availability of a navigation item alone does not determine authorization to view or change a record.
 
-## 6. Proposed scope
+## 5. Current system capabilities and scope
 
-### Included
+The following capabilities are present in the current project source. Live availability may depend on deployment configuration, user permissions, database setup, and external service credentials.
 
-- User accounts, roles, and office-based access controls.
-- Office and document reference data needed for routing.
-- Document creation and file upload workflows.
-- Tracking-number assignment and routing records.
-- Receiving, approval, return-for-revision, rejection, and other approved routing actions.
-- Document attachments and version history where supported by the workflow.
-- Dashboards, work queues, search, and status notifications.
-- Audit history for significant user and document actions.
-- Public tracking of approved records using only information approved for disclosure.
-- Import or reference of legacy records where migration requirements are approved.
+### 5.1 Document registration and routing
 
-### Outside the initial scope or subject to separate approval
+- Register a document with its type, purpose, origin, title, action information, remarks, urgency and notification preferences.
+- Save an unfinished tracking record as a draft or finalize it to assign a tracking number and start the tracking history.
+- Attach a source file and add later file versions while retaining the record's tracking identity.
+- Search and filter document lists, review record details and trail history, and use the latest-documents view.
+- Release a record to an eligible destination office, record receipt at that office, and route it onward.
+- Define sequential or parallel office approval routes, display route progress, and support child routes from an active office step.
+- Record office approval, request changes, or rejection against the tracked record. A replaced file version can return to approval.
+- Mark a record terminal when processing is complete, archive it, and restore eligible records under the configured rules.
+- Generate disposition and routing-history views from the tracking record and recorded events.
 
-- Replacing formal records-retention, archival, or disposal policies.
-- Exposing internal remarks, drafts, or attachments through public tracking.
-- Electronic signing through iPluma until the service contract, API, and signing process are confirmed.
-- Other external integrations not yet approved or technically specified.
+### 5.2 Document creation and PDF output
 
-## 7. High-level workflow
+- Prepare documents in a rich-text editor using assigned, versioned templates and template assets.
+- Save drafts, revise content, preview a PDF, and finalize a generated file as **Ready for Routing**.
+- Create a tracking record later from the ready file. Finalizing the authored file alone does not assign the DOTS tracking number or complete routing approval.
+- Stamp the assigned tracking number on eligible generated PDFs when they are registered.
+- Reuse an approved or ready generated file as a source document or a later routed version where the workflow permits.
+- Preserve authored-document versions and related events. The separate authoring workflow includes review states, but the current operational routing approval decision is recorded on the tracked document after the receiving office receives it.
 
-1. A staff member prepares a document in DOTS or uploads a source file.
-2. The staff member submits the file to routing. DOTS creates a tracking record and assigns its tracking number.
-3. DOTS sends the record to the next office according to the selected routing.
-4. Authorized staff review the document and record the required decision or action.
-5. DOTS updates the status and preserves the routing history as the document moves between offices.
-6. Eligible records may appear in public tracking after approval, showing only approved status information.
+### 5.3 QR and public tracking
 
-The detailed workflow, decision authority, and terminal statuses should be validated with business owners before rollout.
+- Provide a signed, rate-limited public tracking link for eligible finalized records, including QR access.
+- Show selected metadata and route history while keeping internal remarks and private files behind access checks.
+- Gate newly submitted records from public tracking while approval is pending or changes are requested.
+- Support QR-accessible actions such as receipt, decision, forwarding, and wet-signed-file handling through a document-scoped session authenticated with an emailed one-time password, subject to account and route eligibility.
 
-## 8. Expected outcomes and measures
+### 5.4 Dashboard, work queues, archives, and audit
 
-Expected outcomes include improved visibility of document status, more consistent routing records, easier retrieval of document history, and clearer accountability for actions between offices.
+- Show office-scoped or privileged cross-office counts for incoming, pending, released, and archived records, together with recent work and selected charts.
+- Provide workflow lists for ready-to-route files, submissions, approval tasks, and approved documents.
+- Search and filter tracking archives, including year and permitted office filters; restore eligible terminal records.
+- Maintain a separate archive and restore path for generated-document drafts.
+- Record significant application activity with actor and office context where the event is instrumented. The audit trail supports review but should not be treated as proof that every database-level change is captured.
 
-Suggested measures for a pilot include:
+### 5.5 Administration and connected services
 
-- time required for staff to locate a document and confirm its status;
-- percentage of routed records with complete tracking and action history;
-- time spent in each routing step, where reliable timestamps are available;
-- notification delivery and failure rates; and
-- feedback from submitting, receiving, and approving staff.
+- Maintain offices, routing ranges, document types, action types, purpose types, user accounts, and template assignments through protected administration features.
+- Manage navigation visibility and system-maintenance settings through privileged controls.
+- Use HRIS employee and office lookup or synchronization features when the relevant service is configured.
+- Configure email notification automation and send queued notices for supported workflow events, subject to mail and queue configuration.
+- Display configured summary information from DRIP, PDMIS, and iPLuma when those services are available.
+- Preview and apply supported legacy directory, document/trail, and audit imports with guarded target-database checks and import reporting. Document attachment metadata can be imported; the physical legacy file binaries are not copied by that import flow.
 
-Baseline values and target improvements should be set with participating offices before the pilot.
+## 6. High-level workflow
 
-## 9. Implementation approach
+1. A staff member either registers an existing document or authors one in DOTS and finalizes it as ready for routing.
+2. To begin tracking, the staff member creates a tracking record and attaches the generated PDF or an uploaded source file. DOTS assigns a tracking number; generated PDFs can receive that number as a stamp.
+3. The record is released to one or more destination offices using the selected route. DOTS records the dispatch and route-step state.
+4. The receiving office confirms receipt. Receipt and approval are separate actions.
+5. Eligible staff review the current source-file version and approve it, request changes, or reject it. A replacement version may be submitted for another decision while retaining the tracking number.
+6. Approved work can continue through sequential, parallel, or child route steps as configured. Staff can record signature-related handling where enabled; iPluma signing remains subject to the integration boundary below.
+7. The holding office marks processing complete and archives the record when applicable. Eligible records may be viewed through a signed public tracking link.
 
-The following phased approach is proposed; dates and participating offices remain to be agreed:
+Detailed decision authority, route templates, public disclosure, file replacement, and closure rules require business-owner approval.
 
-1. **Confirm requirements:** validate workflows, roles, records policies, public information rules, and success measures.
-2. **Prepare the system:** configure reference data, access, notifications, deployment, backups, and support procedures.
-3. **Pilot:** introduce DOTS to selected offices, provide user orientation, and collect feedback against the agreed measures.
-4. **Review and expand:** resolve pilot issues, approve any workflow changes, and expand to additional offices in planned stages.
-5. **Operate and improve:** monitor availability, security, data quality, support requests, and user feedback.
+## 7. Security, access, and records handling
 
-## 10. Resources and dependencies
+The application includes account authentication, active-account and email-verification checks for operational routes, role and office-based access controls, login throttling and lockout protections, and optional reCAPTCHA. Administrative features have additional access checks. New document files use private storage and authorized view or download routes. Public tracking uses signed, rate-limited links and does not provide general document search.
 
-Implementation and operation may require:
+These controls are application features, not a substitute for deployment security or agency governance. Production readiness also depends on TLS, secrets management, queue and scheduler operation, backups, database maintenance, monitoring, staff provisioning, and incident response. Public fields, access roles, retention periods, legal holds, and authorized disposal must be approved by the appropriate NCIP business and records authorities.
 
-- a business owner and representatives from participating offices;
-- a project lead, developers, and quality assurance support;
-- hosting, database, backup, and monitoring services;
-- an email service for status notifications;
-- accurate office, user, and document reference data;
-- user training and operational support; and
-- approved API details and coordination for any future external signing integration.
+## 8. External integrations and implementation boundaries
 
-Detailed costs, staffing, hosting specifications, and schedule should be estimated after requirements and deployment arrangements are confirmed.
+- **HRIS:** employee lookup, office information, synchronization, and eligible credential checks depend on configured endpoints and credentials.
+- **Email:** workflow notices depend on the configured sender, delivery service, queue workers, and recipient data.
+- **DRIP, PDMIS, and iPLuma:** the current connected-system screens retrieve and display summary information when endpoints and credentials are configured. Repository review does not establish live service availability or full bidirectional synchronization.
+- **iPLuma signing:** the system can track a signing need/status separately from route approval in supported flows. Submission of a PDF for signing, signer setup, return of the signed file, and reliable status updates still require a confirmed API contract and implementation. The control for this action remains unavailable until that work is complete.
+- **Records management:** DOTS supports operational terminal/archive and restore actions. It is not a complete records-retention and disposition system; no approved retention schedule, legal-hold workflow, or destruction authorization is implied by the archive feature.
+- **Analytics and reporting:** dashboards and selected processing charts exist. A separate comprehensive analytics, compliance-reporting, or scheduled escalation module should be treated as future work unless separately verified.
+- **Legacy migration:** import tools support selected directory, document/trail, and audit records. Migration of physical legacy attachments and final reconciliation remain separate activities.
 
-## 11. Risks and considerations
+## 9. Expected outcomes and measures
 
-| Consideration | Proposed response |
+Expected outcomes include more visible document status, more complete routing histories, easier retrieval of office actions, and clearer responsibility for work between offices. A pilot or operational review could measure:
+
+- median time for staff to find a record and confirm its current status;
+- percentage of routed records with complete required route and decision history;
+- time between dispatch, receipt, decision, and onward routing, where timestamps are reliable;
+- number and age of items awaiting receipt or action by office;
+- email notification delivery, queue failures, and resolution time;
+- public tracking usage and issues, using privacy-approved aggregate measures; and
+- user feedback from originators, receiving staff, approvers, and administrators.
+
+Set baseline values, targets, owners, and reporting intervals with participating offices. The current dashboard should not be assumed to provide every proposed performance or compliance measure.
+
+## 10. Implementation and operational approach
+
+The source code contains a substantial implementation of the core workflow. Further rollout or expansion should proceed through controlled operational stages:
+
+1. **Confirm governance:** approve business ownership, participating offices, roles, routing and approval rules, public disclosure fields, and records policies.
+2. **Establish the release baseline:** confirm migrations, account provisioning, file storage, email and queue operation, backups, monitoring, and support procedures in the target environment.
+3. **Configure and pilot:** load verified office and reference data, onboard selected offices, train users, and exercise the end-to-end routes using approved test records.
+4. **Review and improve:** assess operational measures, access and audit findings, integration failures, and user feedback; correct issues before expanding.
+5. **Operate and govern:** maintain system configuration, access reviews, data quality, backups, change control, incident response, and support ownership.
+
+No rollout dates or production status are asserted by this paper; these should be set by the project sponsor and system owner.
+
+## 11. Resources and dependencies
+
+Ongoing implementation and operation require:
+
+- an NCIP business owner, records representative, data-protection/security representatives, and participating-office process owners;
+- application development, database, infrastructure, quality assurance, and operational support;
+- reliable hosting, database, private file storage, backups, monitoring, and deployment management;
+- maintained office, user, route, document-type, and other reference data;
+- a configured email sender and monitored queue workers;
+- HRIS, DRIP, PDMIS, and iPLuma technical contacts, credentials, and API agreements where those integrations are required;
+- user onboarding, training, help materials, and a support channel; and
+- an approved data migration and reconciliation plan for historical records.
+
+Costs, staffing, service levels, hosting requirements, and schedules need to be estimated against the approved deployment and rollout plan.
+
+## 12. Risks and proposed responses
+
+| Risk or consideration | Proposed response |
 | --- | --- |
-| Offices use different routing practices | Agree on the common workflow and document any approved office-specific rules. |
-| Legacy data is incomplete or inconsistent | Profile the source data, define migration rules, and validate imported records with data owners. |
-| Users see records outside their responsibility | Review role and office permissions and verify access rules during the pilot. |
-| Public status could reveal sensitive information | Approve the exact fields shown publicly and keep internal remarks and files private. |
-| Email or external services are unavailable | Provide visible in-system status and define support and retry procedures. |
-| Users need help adopting the workflow | Provide orientation, job aids, and a clear channel for reporting issues. |
+| Offices apply different routing and approval practices | Agree on common route rules and document approved office-specific variations before rollout. |
+| Users are assigned incorrect offices or permissions | Establish account-provisioning ownership and regularly review user, role, office, and route access. |
+| Public tracking reveals information that should remain internal | Approve public fields and eligibility rules; keep internal remarks and private files protected. |
+| Email, HRIS, or connected systems are unavailable | Make service dependencies visible, provide an in-system workflow path where possible, and define support and retry procedures. |
+| Legacy data or files are incomplete | Profile source data, record exceptions, validate imports with data owners, and plan physical-file migration separately. |
+| Users mistake archive status for records disposition | Publish records schedules and keep retention, legal hold, and disposal decisions under authorized records procedures. |
+| Required signature work is assumed to be fully automated | Keep signature status distinct from approval and do not represent iPluma PDF submission/return as complete before integration is delivered. |
+| Production operations are not configured to support the application | Confirm backups, queue workers, monitoring, access review, incident response, and release controls before operational expansion. |
 
-## 12. Decisions requested
+## 13. Decisions requested
 
 Project sponsors and business owners are asked to:
 
-1. Confirm DOTS as the project name and identify its business owner.
-2. Approve the participating offices and the initial scope for a pilot.
-3. Validate document routing, approval authority, and records policies.
-4. Decide what information, if any, may be shown through public tracking.
-5. Confirm deployment, support, data migration, and training responsibilities.
-6. Approve preparation of a detailed requirements and implementation plan.
+1. Confirm the business owner and operational owner for DOTS.
+2. Approve the offices and document processes covered by the next rollout or pilot stage.
+3. Validate role assignments, route patterns, approval authority, receipt rules, and closure conditions.
+4. Approve what information signed public tracking may display and which records are eligible.
+5. Confirm records-retention, archival, legal-hold, and disposition responsibilities.
+6. Confirm deployment, security, account provisioning, email, backup, support, and training responsibilities.
+7. Decide whether and when to complete iPLuma signing integration and physical legacy-file migration.
+8. Approve a baseline and target measures for operational review.
 
-## 13. Conclusion
+## 14. Conclusion
 
-DOTS is intended to provide a consistent way for authorized offices to register and follow official documents through routing, review, and action. With agreed workflows, access rules, and records policies, the system can improve status visibility and accountability while giving stakeholders a clearer history of document movement. Sponsor review is requested to confirm the project direction and authorize detailed planning.
+DOTS has evolved into an office-based document workflow application that combines document authoring, tracking, multi-office routing, receipt, approval, archives, audit history, and QR-enabled access. Its value depends on accurate office and role configuration, agreed routing and records rules, reliable operational services, and clear limits on public information. Sponsor review is requested to confirm ownership, governance, and rollout priorities, and to distinguish the capabilities already present in the codebase from the remaining integration and operational work.
