@@ -901,10 +901,10 @@ export default function Index({
                                         </select>
                                     </label>
                                     {/* <button type="button" onClick={loadSample} disabled={!selectedType?.sample_content || saving} className="dots-button-secondary disabled:opacity-40">Load sample content</button> */}
-                                    <p className="text-xs text-muted">
+                                    {/* <p className="text-xs text-muted">
                                         {content.template?.name || "NCIP Standard"} · Letterhead · US Letter paper · Portrait
 
-                                    </p>
+                                    </p> */}
                                 </div>
                                 {Object.keys(errors).length > 0 && (
                                     <div

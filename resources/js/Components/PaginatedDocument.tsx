@@ -220,8 +220,8 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
                 className="rounded-lg border-border bg-surface py-1.5 text-sm"
             >
                 <option value="">+ Add field</option>
-                <option value="recipient:FOR">FOR:</option>
-                <option value="recipient:TO">TO:</option>
+                <option value="recipient:FOR">FOR</option>
+                <option value="recipient:TO">TO</option>
                 {addable.map(key => <option key={key} value={key}>{key === 'for' ? 'FOR' : key.toUpperCase()}</option>)}
             </select> : <span />}
             <div className="flex flex-wrap items-center justify-end gap-1.5 text-xs text-muted">

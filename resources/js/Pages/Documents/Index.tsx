@@ -2092,7 +2092,8 @@ export default function DocumentsIndex({
                                     files.forEach((file) => { void stageDocumentFile(file, 'supporting').catch(() => undefined); });
                                     setUploadError('');
                                 }} />
-                                <p className="mt-1 text-xs text-muted">Add up to {maxSupportingFiles} PDF, JPG, PNG, DOC, or DOCX files. Each can be up to {uploadLimitKb / 1024} MB.</p>
+                                <p className="mt-1 text-xs text-muted">Add up to {maxSupportingFiles} PDF, JPG, PNG, DOC, or DOCX files.</p>
+                                {/* <p className="mt-1 text-xs text-muted">Add up to {maxSupportingFiles} PDF, JPG, PNG, DOC, or DOCX files. Each can be up to {uploadLimitKb / 1024} MB.</p> */}
                                 {form.supporting_files.length > 0 && <ul className="mt-3 space-y-2" aria-label="Selected supporting files">
                                     {form.supporting_files.map((file, index) => <li key={`${file.name}-${file.lastModified}-${index}`} className="rounded-lg border border-border bg-background px-3 py-2 text-sm">
                                         <div className="flex items-center justify-between gap-3">
