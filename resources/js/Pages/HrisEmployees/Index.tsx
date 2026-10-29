@@ -1,5 +1,6 @@
 import LibraryLayout from '@/Layouts/LibraryLayout';
 import WorkspaceAlert from '@/Components/WorkspaceAlert';
+import WorkspaceBusyOverlay from '@/Components/WorkspaceBusyOverlay';
 import { formatPhilippineDateTime } from '@/lib/dateTime';
 import { Head, router, usePage } from '@inertiajs/react';
 import { FormEvent, useState } from 'react';
@@ -60,7 +61,7 @@ export default function HrisEmployeesIndex({
 }) {
     const [search, setSearch] = useState(filters.search ?? '');
     const [syncing, setSyncing] = useState(false);
-    const [syncToast, setSyncToast] = useState<string | null>(null);
+    const [syncAlert, setSyncAlert] = useState<{ title: string; message: string; variant: 'success' | 'error' } | null>(null);
     const { props } = usePage();
     const flash = (props as any).flash as { success?: string; warning?: string } | undefined;
 
@@ -82,13 +83,14 @@ export default function HrisEmployeesIndex({
 
     const syncEmployees = () => {
         setSyncing(true);
-        setSyncToast(null);
+        setSyncAlert(null);
         router.post(route('hris-employees.sync'), {}, {
             preserveScroll: true,
             onSuccess: (page) => {
                 const message = (page.props as any).flash?.success;
-                if (typeof message === 'string') setSyncToast(message);
+                if (typeof message === 'string') setSyncAlert({ title: 'HRIS sync completed', message, variant: 'success' });
             },
+            onError: (errors) => setSyncAlert({ title: 'HRIS sync failed', message: Object.values(errors).join(' ') || 'The employee directory could not be synced. Please try again.', variant: 'error' }),
             onFinish: () => setSyncing(false),
         });
     };
@@ -184,7 +186,8 @@ export default function HrisEmployeesIndex({
                     </div>
                 </section>
             </div>
-            {syncToast && <WorkspaceAlert title="HRIS sync completed" message={syncToast} onClose={() => setSyncToast(null)} />}
+            <WorkspaceBusyOverlay open={syncing} message="Syncing the HRIS employee directory…" />
+            {syncAlert && <WorkspaceAlert {...syncAlert} busy={syncing} onClose={() => setSyncAlert(null)} />}
         </LibraryLayout>
     );
 }

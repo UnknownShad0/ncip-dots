@@ -2,8 +2,10 @@ import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
+import WorkspaceAlert, { type WorkspaceAlertVariant } from '@/Components/WorkspaceAlert';
+import WorkspaceBusyOverlay from '@/Components/WorkspaceBusyOverlay';
 import { useForm } from '@inertiajs/react';
-import { FormEventHandler, useRef } from 'react';
+import { FormEventHandler, useRef, useState } from 'react';
 
 export default function UpdatePasswordForm({
     className = '',
@@ -20,12 +22,12 @@ export default function UpdatePasswordForm({
         put,
         reset,
         processing,
-        recentlySuccessful,
     } = useForm({
         current_password: '',
         password: '',
         password_confirmation: '',
     });
+    const [feedback, setFeedback] = useState<{ title: string; message: string; variant: WorkspaceAlertVariant } | null>(null);
 
     const updatePassword: FormEventHandler = (e) => {
         e.preventDefault();
@@ -34,6 +36,7 @@ export default function UpdatePasswordForm({
             preserveScroll: true,
             onSuccess: () => {
                 reset();
+                setFeedback({ title: 'Password updated', message: 'Your password was changed successfully.', variant: 'success' });
             },
             onError: (errors) => {
                 if (errors.password) {
@@ -45,12 +48,15 @@ export default function UpdatePasswordForm({
                     reset('current_password');
                     currentPasswordInput.current?.focus();
                 }
+                setFeedback({ title: 'Password could not be updated', message: Object.values(errors).join(' ') || 'Check the form and try again.', variant: 'error' });
             },
         });
     };
 
     return (
         <section className={className}>
+            <WorkspaceBusyOverlay open={processing} message="Updating password…" />
+            {feedback && <WorkspaceAlert {...feedback} busy={processing} onClose={() => setFeedback(null)} />}
             <header>
                 <h2 className="text-lg font-semibold text-foreground">
                     Password
@@ -128,7 +134,6 @@ export default function UpdatePasswordForm({
 
                 <div className="flex items-center gap-4">
                     <PrimaryButton disabled={processing}>{processing ? 'Saving…' : 'Save changes'}</PrimaryButton>
-                    <span role="status" className="text-sm text-success">{recentlySuccessful ? 'Changes saved.' : ''}</span>
                 </div>
             </form>
         </section>

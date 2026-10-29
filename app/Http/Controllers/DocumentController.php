@@ -946,7 +946,8 @@ class DocumentController extends Controller
             ['tracking_number' => $document->tracking_number, 'title' => $document->title],
         );
 
-        return redirect()->route('documents.index')->with('success', 'Routing record created successfully.');
+        return redirect()->route($request->boolean('return_to_latest') ? 'documents.latest' : 'documents.index')
+            ->with('success', 'Routing record created successfully.');
     }
 
     public function claimSignature(Request $request, int $id)

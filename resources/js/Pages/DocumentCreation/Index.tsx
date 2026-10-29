@@ -2,6 +2,7 @@ import DocumentLifecycleAction from "@/Components/DocumentLifecycleAction";
 import SearchableSelect, { type SearchableSelectOption } from '@/Components/SearchableSelect';
 import WorkspaceDialog from "@/Components/WorkspaceDialog";
 import WorkspaceAlert from "@/Components/WorkspaceAlert";
+import WorkspaceBusyOverlay from "@/Components/WorkspaceBusyOverlay";
 import InfoTip from "@/Components/InfoTip";
 import {
     Search,
@@ -411,7 +412,7 @@ export default function Index({
     const [dirty, setDirty] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [notice, setNotice] = useState("");
-    const [successAlert, setSuccessAlert] = useState<{ title: string; message: string } | null>(null);
+    const [successAlert, setSuccessAlert] = useState<{ title: string; message: string; variant?: 'success' | 'error' } | null>(null);
     const [confirmation, setConfirmation] = useState<{
         title: string;
         message: string;
@@ -492,8 +493,11 @@ export default function Index({
         router.post(url, data, {
             preserveScroll: true,
             onFinish: () => setSaving(false),
-            onError: (errors) =>
-                setActionError(Object.values(errors).join("\n")),
+            onError: (errors) => {
+                const message = Object.values(errors).join("\n") || 'The action could not be completed. Please try again.';
+                setActionError(message);
+                setSuccessAlert({ title: 'Action could not be completed', message, variant: 'error' });
+            },
             onSuccess,
         });
     };
@@ -563,7 +567,10 @@ export default function Index({
             preserveScroll: true,
             onStart: () => setSaving(true),
             onFinish: () => setSaving(false),
-            onError: (errors: Record<string, string>) => setErrors(errors),
+            onError: (errors: Record<string, string>) => {
+                setErrors(errors);
+                setSuccessAlert({ title: 'Draft could not be saved', message: Object.values(errors).join('\n') || 'Review the draft and try again.', variant: 'error' });
+            },
             onSuccess: (page: any) => {
                 setEditing(Number(page.props.savedDraftId));
                 setDocumentTitle(String(page.props.savedDraftTitle ?? title));
@@ -629,7 +636,10 @@ export default function Index({
             preserveScroll: true,
             onStart: () => setSaving(true),
             onFinish: () => setSaving(false),
-            onError: (serverErrors) => setErrors(serverErrors),
+            onError: (serverErrors) => {
+                setErrors(serverErrors);
+                setSuccessAlert({ title: 'Document could not be finalized', message: Object.values(serverErrors).join('\n') || 'Review the document and try again.', variant: 'error' });
+            },
         });
     };
     const submitToApprovalOffice = () => {
@@ -1319,9 +1329,12 @@ export default function Index({
                     <WorkspaceAlert
                         title={successAlert.title}
                         message={successAlert.message}
+                        variant={successAlert.variant}
+                        busy={saving}
                         onClose={() => setSuccessAlert(null)}
                     />
                 )}
+                <WorkspaceBusyOverlay open={saving && !submissionTarget && !reviewing?.current_submission && !pendingDecision} message="Saving document changes…" />
             </div>
         </AuthenticatedLayout>
     );

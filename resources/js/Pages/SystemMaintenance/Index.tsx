@@ -1,6 +1,8 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import WorkspaceAlert, { type WorkspaceAlertVariant } from '@/Components/WorkspaceAlert';
+import WorkspaceBusyOverlay from '@/Components/WorkspaceBusyOverlay';
 import { Head, useForm, usePage } from '@inertiajs/react';
-import { FormEvent, useEffect } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { Save, Wrench } from 'lucide-react';
 
 type MaintenanceSettings = {
@@ -24,6 +26,7 @@ const modes = [
 
 export default function SystemMaintenanceIndex({ settings, timezone }: { settings: MaintenanceSettings; timezone: string }) {
     const { flash } = usePage().props as any;
+    const [feedback, setFeedback] = useState<{ title: string; message: string; variant: WorkspaceAlertVariant } | null>(null);
     const form = useForm({
         mode: settings.mode,
         message: settings.message,
@@ -54,8 +57,16 @@ export default function SystemMaintenanceIndex({ settings, timezone }: { setting
             'Executive and Admin Staff will be sent to the maintenance page.',
         ].join('\n'))) return;
 
-        form.put(route('system-maintenance.update'), { preserveScroll: true });
+        form.put(route('system-maintenance.update'), {
+            preserveScroll: true,
+            onError: (errors) => setFeedback({ title: 'Maintenance settings could not be saved', message: Object.values(errors).join(' ') || 'Please review the settings and try again.', variant: 'error' }),
+        });
     };
+
+    useEffect(() => {
+        if (flash?.success) setFeedback({ title: 'Maintenance settings saved', message: flash.success, variant: 'success' });
+        else if (flash?.warning) setFeedback({ title: 'Maintenance settings need attention', message: flash.warning, variant: 'warning' });
+    }, [flash?.success, flash?.warning]);
 
     const statusText = {
         off: 'Off',
@@ -70,8 +81,8 @@ export default function SystemMaintenanceIndex({ settings, timezone }: { setting
             <div className="mx-auto max-w-[1000px] space-y-5">
                 <p className="max-w-3xl text-sm text-muted">Post a maintenance notice or temporarily restrict regular system access.</p>
 
-                {flash?.success && <p role="status" className="rounded-lg bg-success-soft p-3 text-sm text-success">{flash.success}</p>}
-                {flash?.warning && <p role="alert" className="rounded-lg bg-warning-soft p-3 text-sm text-warning">{flash.warning}</p>}
+                <WorkspaceBusyOverlay open={form.processing} message="Saving maintenance settings…" />
+                {feedback && <WorkspaceAlert {...feedback} busy={form.processing} onClose={() => setFeedback(null)} />}
 
                 <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface p-4 shadow-sm">
                     <div className="flex items-center gap-3">

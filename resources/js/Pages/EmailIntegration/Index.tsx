@@ -1,4 +1,5 @@
 import WorkspaceAlert, { type WorkspaceAlertVariant } from '@/Components/WorkspaceAlert';
+import WorkspaceBusyOverlay from '@/Components/WorkspaceBusyOverlay';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, useForm } from '@inertiajs/react';
 import { Mail, Power, Send, Server, ShieldCheck } from 'lucide-react';
@@ -215,12 +216,13 @@ export default function EmailIntegrationIndex({
                     )}
                 </section>
             </div>
+            <WorkspaceBusyOverlay open={testForm.processing || automationForm.processing} message={testForm.processing ? 'Sending test email…' : 'Updating email settings…'} />
             {alert && (
                 <WorkspaceAlert
-                    toast
                     title={alert.title}
                     message={alert.message}
                     variant={alert.variant}
+                    busy={testForm.processing || automationForm.processing}
                     onClose={() => setAlert(null)}
                 />
             )}

@@ -1,5 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import CrudAlertModal from '@/Components/WorkspaceAlert';
+import WorkspaceBusyOverlay from '@/Components/WorkspaceBusyOverlay';
 import InfoTip from '@/Components/InfoTip';
 import DashboardCharts from '@/Components/DashboardCharts';
 import SearchableSelect, { type SearchableSelectOption } from '@/Components/SearchableSelect';
@@ -36,7 +37,7 @@ type IncomingDocument = {
     creator_name?: string | null;
 };
 
-type CrudAlert = { title: string; message: string; onConfirm?: () => void; confirmLabel?: string };
+type CrudAlert = { title: string; message: string; onConfirm?: () => void; confirmLabel?: string; variant?: 'success' | 'error' | 'warning' | 'info' | 'confirmation' };
 
 const formatNumber = (value?: number | string) => {
     const number = Number(value ?? 0);
@@ -98,7 +99,11 @@ export default function Dashboard({
                 setTrackingNumber('');
                 setCrudAlert({ title: 'Document received', message: 'Document received successfully.' });
             },
-            onError: (errors) => setReceiveError(errors.tracking_number ?? 'Could not receive this document. Refresh the incoming list and try again.'),
+            onError: (errors) => {
+                const message = errors.tracking_number ?? 'Could not receive this document. Refresh the incoming list and try again.';
+                setReceiveError(message);
+                setCrudAlert({ variant: 'error', title: 'Document could not be received', message });
+            },
             onFinish: () => setReceivingId(null),
         });
     };
@@ -234,7 +239,8 @@ export default function Dashboard({
                     </>}
                 </section>
             </div>
-            {crudAlert && <CrudAlertModal {...crudAlert} onClose={() => setCrudAlert(null)} />}
+            <WorkspaceBusyOverlay open={receivingId !== null} message="Recording receipt…" />
+            {crudAlert && <CrudAlertModal {...crudAlert} busy={receivingId !== null} onClose={() => setCrudAlert(null)} />}
         </AuthenticatedLayout>
     );
 }

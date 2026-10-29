@@ -1,5 +1,6 @@
 import LibraryLayout from '@/Layouts/LibraryLayout';
 import WorkspaceDialog from '@/Components/WorkspaceDialog';
+import WorkspaceBusyOverlay from '@/Components/WorkspaceBusyOverlay';
 import WorkspaceAlert, { type WorkspaceAlertVariant } from '@/Components/WorkspaceAlert';
 import SearchableSelect, { type SearchableSelectOption } from '@/Components/SearchableSelect';
 import { Head, router } from '@inertiajs/react';
@@ -69,7 +70,7 @@ export default function OfficesIndex({
     const [processing, setProcessing] = useState(false);
     const [formError, setFormError] = useState('');
     const [editingRow, setEditingRow] = useState<OfficeRow | null>(null);
-    const [toast, setToast] = useState<{ title: string; message: string; variant: WorkspaceAlertVariant } | null>(null);
+    const [feedback, setFeedback] = useState<{ title: string; message: string; variant: WorkspaceAlertVariant } | null>(null);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [sortKey, setSortKey] = useState<SortKey>('name');
@@ -111,9 +112,9 @@ export default function OfficesIndex({
 
     useEffect(() => {
         if (flash.warning) {
-            setToast({ title: 'Action needs attention', message: flash.warning, variant: 'warning' });
+            setFeedback({ title: 'Action needs attention', message: flash.warning, variant: 'warning' });
         } else if (flash.success) {
-            setToast({ title: 'Changes saved', message: flash.success, variant: 'success' });
+            setFeedback({ title: 'Changes saved', message: flash.success, variant: 'success' });
         }
     }, [flash.success, flash.warning]);
 
@@ -190,7 +191,9 @@ export default function OfficesIndex({
                 closeModal();
             },
             onError: (errors) => {
-                setFormError(Object.values(errors).join(' '));
+                const message = Object.values(errors).join(' ');
+                setFormError(message);
+                setFeedback({ title: 'Office could not be created', message: message || 'Review the form and try again.', variant: 'error' });
                 setEmailError(errors.email ?? null);
                 setShortNameError(errors.short_name ?? null);
                 setCodeError(errors.division_code ?? errors.code ?? null);
@@ -220,7 +223,9 @@ export default function OfficesIndex({
                 closeModal();
             },
             onError: (errors) => {
-                setFormError(Object.values(errors).join(' '));
+                const message = Object.values(errors).join(' ');
+                setFormError(message);
+                setFeedback({ title: 'Office could not be updated', message: message || 'Review the form and try again.', variant: 'error' });
                 setEmailError(errors.email ?? null);
                 setShortNameError(errors.short_name ?? null);
                 setCodeError(errors.division_code ?? errors.code ?? null);
@@ -315,8 +320,14 @@ export default function OfficesIndex({
     const visibleDirectoryEntries = sortedDirectoryEntries.slice((directoryPage - 1) * directoryPageSize, directoryPage * directoryPageSize);
     const handleHrisSync = () => {
         if (hrisSyncBusy) return;
+        setFeedback(null);
         setHrisSyncBusy(true);
-        router.post('/offices/hris-directory/sync', {}, { preserveState: true, preserveScroll: true, onFinish: () => setHrisSyncBusy(false) });
+        router.post('/offices/hris-directory/sync', {}, {
+            preserveState: true,
+            preserveScroll: true,
+            onError: (errors) => setFeedback({ title: 'HRIS office sync failed', message: Object.values(errors).join(' ') || 'The office directory could not be synced. Please try again.', variant: 'error' }),
+            onFinish: () => setHrisSyncBusy(false),
+        });
     };
     const saveHrisMapping = (entry: HrisDirectoryEntry) => {
         const officeId = mappingSelections[entry.division_code] ?? (entry.mapped_office_id ? String(entry.mapped_office_id) : '');
@@ -328,7 +339,11 @@ export default function OfficesIndex({
         }, {
             preserveState: true,
             preserveScroll: true,
-            onSuccess: () => setMappingEditCode(null),
+            onSuccess: () => {
+                setMappingEditCode(null);
+                setFeedback({ title: 'Office mapping saved', message: 'The HRIS office mapping was updated successfully.', variant: 'success' });
+            },
+            onError: (errors) => setFeedback({ title: 'Office mapping could not be saved', message: Object.values(errors).join(' ') || 'Review the mapping and try again.', variant: 'error' }),
             onFinish: () => setMappingBusyCode(null),
         });
     };
@@ -346,7 +361,8 @@ export default function OfficesIndex({
     return (
         <LibraryLayout>
             <Head title="Offices" />
-            {toast && <WorkspaceAlert {...toast} toast onClose={() => setToast(null)} />}
+            <WorkspaceBusyOverlay open={hrisSyncBusy || mappingBusyCode !== null} message={hrisSyncBusy ? 'Syncing HRIS offices…' : 'Saving office mapping…'} />
+            {feedback && <WorkspaceAlert {...feedback} busy={processing || hrisSyncBusy || mappingBusyCode !== null} onClose={() => setFeedback(null)} />}
 
             <style>{`
                 @media print {

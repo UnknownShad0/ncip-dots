@@ -1,6 +1,6 @@
 import LibraryLayout from '@/Layouts/LibraryLayout';
 import WorkspaceDialog from '@/Components/WorkspaceDialog';
-import CrudAlertModal from '@/Components/WorkspaceAlert';
+import CrudAlertModal, { type WorkspaceAlertVariant } from '@/Components/WorkspaceAlert';
 import { Head, router } from '@inertiajs/react';
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, Plus, Search } from 'lucide-react';
@@ -28,7 +28,7 @@ export default function DocumentTypesIndex({
     const [processing, setProcessing] = useState(false);
     const [formError, setFormError] = useState('');
     const [editingRow, setEditingRow] = useState<DocumentTypeRow | null>(null);
-    const [crudAlert, setCrudAlert] = useState<{ title: string; message: string } | null>(null);
+    const [crudAlert, setCrudAlert] = useState<{ title: string; message: string; variant?: WorkspaceAlertVariant } | null>(null);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [sortKey, setSortKey] = useState<SortKey>('name');
@@ -94,7 +94,7 @@ export default function DocumentTypesIndex({
             ...form,
             is_active: form.is_active ? 1 : 0,
         }, {
-            onError: (errors) => setFormError(Object.values(errors).join(' ')),
+            onError: (errors) => { const message = Object.values(errors).join(' '); setFormError(message); setCrudAlert({ variant: 'error', title: 'Document type could not be created', message }); },
             onFinish: () => setProcessing(false),
             onSuccess: () => {
                 closeModal();
@@ -117,7 +117,7 @@ export default function DocumentTypesIndex({
             ...form,
             is_active: form.is_active ? 1 : 0,
         }, {
-            onError: (errors) => setFormError(Object.values(errors).join(' ')),
+            onError: (errors) => { const message = Object.values(errors).join(' '); setFormError(message); setCrudAlert({ variant: 'error', title: 'Document type could not be updated', message }); },
             onFinish: () => setProcessing(false),
             onSuccess: () => {
                 closeModal();
@@ -178,7 +178,7 @@ export default function DocumentTypesIndex({
     return (
         <LibraryLayout>
             <Head title="Document Types" />
-            {crudAlert && <CrudAlertModal {...crudAlert} onClose={() => setCrudAlert(null)} />}
+            {crudAlert && <CrudAlertModal {...crudAlert} busy={processing} onClose={() => setCrudAlert(null)} />}
 
             <style>{`
                 @media print {

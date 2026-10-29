@@ -1,5 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, router, usePage } from '@inertiajs/react';
+import WorkspaceAlert, { type WorkspaceAlertVariant } from '@/Components/WorkspaceAlert';
+import WorkspaceBusyOverlay from '@/Components/WorkspaceBusyOverlay';
+import { Head, router } from '@inertiajs/react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { RotateCcw, Save } from 'lucide-react';
 
@@ -14,13 +16,13 @@ type ManagedRole = {
 type Visibility = Record<string, Record<string, boolean>>;
 
 export default function NavigationAccessIndex({ groups, roles }: { groups: NavigationGroup[]; roles: ManagedRole[] }) {
-    const { flash } = usePage().props as any;
     const savedVisibility = useMemo<Visibility>(
         () => Object.fromEntries(roles.map((role) => [String(role.id), role.visibility])),
         [roles],
     );
     const [visibility, setVisibility] = useState<Visibility>(savedVisibility);
     const [processing, setProcessing] = useState(false);
+    const [feedback, setFeedback] = useState<{ title: string; message: string; variant: WorkspaceAlertVariant } | null>(null);
 
     useEffect(() => setVisibility(savedVisibility), [savedVisibility]);
 
@@ -43,6 +45,12 @@ export default function NavigationAccessIndex({ groups, roles }: { groups: Navig
         router.put(route('navigation-access.update'), { visibility }, {
             preserveScroll: true,
             onStart: () => setProcessing(true),
+            onSuccess: (page) => {
+                const resultFlash = (page.props as any).flash ?? {};
+                if (resultFlash.success) setFeedback({ title: 'Navigation access updated', message: resultFlash.success, variant: 'success' });
+                else if (resultFlash.warning) setFeedback({ title: 'Navigation access needs attention', message: resultFlash.warning, variant: 'warning' });
+            },
+            onError: (errors) => setFeedback({ title: 'Navigation access could not be saved', message: Object.values(errors).join(' ') || 'Please try again.', variant: 'error' }),
             onFinish: () => setProcessing(false),
         });
     };
@@ -58,8 +66,8 @@ export default function NavigationAccessIndex({ groups, roles }: { groups: Navig
                     </button>
                 </div>
 
-                {flash?.success && <p role="status" className="rounded-lg bg-success-soft p-3 text-sm text-success">{flash.success}</p>}
-                {flash?.warning && <p role="alert" className="rounded-lg bg-warning-soft p-3 text-sm text-warning">{flash.warning}</p>}
+                <WorkspaceBusyOverlay open={processing} message="Saving navigation access…" />
+                {feedback && <WorkspaceAlert {...feedback} busy={processing} onClose={() => setFeedback(null)} />}
 
                 <form onSubmit={submit}>
                     <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import WorkspaceAlert, { type WorkspaceAlertVariant } from '@/Components/WorkspaceAlert';
+import WorkspaceBusyOverlay from '@/Components/WorkspaceBusyOverlay';
 import SearchableSelect, { type SearchableSelectOption } from '@/Components/SearchableSelect';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
@@ -86,14 +87,14 @@ export default function UserAccountsIndex({
     const [lookupLoadingKind, setLookupLoadingKind] = useState<'search' | 'employee' | null>(null);
     const [lookupError, setLookupError] = useState('');
     const [officeDirectoryCode, setOfficeDirectoryCode] = useState('');
-    const [toast, setToast] = useState<{ title: string; message: string; variant: WorkspaceAlertVariant } | null>(null);
+    const [feedback, setFeedback] = useState<{ title: string; message: string; variant: WorkspaceAlertVariant } | null>(null);
     const lookupVersion = useRef(0);
 
     useEffect(() => {
         if (flash.warning) {
-            setToast({ title: 'Account saved with a notice', message: flash.warning, variant: 'warning' });
+            setFeedback({ title: 'Account saved with a notice', message: flash.warning, variant: 'warning' });
         } else if (flash.success) {
-            setToast({ title: 'Account saved', message: flash.success, variant: 'success' });
+            setFeedback({ title: 'Account saved', message: flash.success, variant: 'success' });
         }
     }, [flash.success, flash.warning]);
 
@@ -220,7 +221,10 @@ export default function UserAccountsIndex({
         };
         const options = {
             onSuccess: () => closeModal(),
-            onError: (validationErrors: Record<string, string>) => setErrors(validationErrors),
+            onError: (validationErrors: Record<string, string>) => {
+                setErrors(validationErrors);
+                setFeedback({ title: editingRow ? 'Account could not be updated' : 'Account could not be created', message: Object.values(validationErrors).join(' ') || 'Review the form and try again.', variant: 'error' });
+            },
             onFinish: () => setProcessing(false),
         };
         if (editingRow) router.put(`/user-accounts/${editingRow.id}`, payload, options);
@@ -391,7 +395,8 @@ export default function UserAccountsIndex({
                     <div className="grid grid-cols-2 gap-2 border-t border-border pt-4"><button type="button" disabled={processing} onClick={closeModal} className="dots-button-secondary w-full disabled:opacity-50">Cancel</button><button disabled={processing || (!editingRow && (!accountType || (accountType === 'dots' && (!form.email || !form.officeId)) || (accountType === 'employee' && (!lookup || lookupOpen || lookupBusy || !selectedOffice?.range_name || !officeDirectoryCode || !form.employee_role || !form.email)))) || Boolean(editingRow && !editingRow.employee_code && !form.officeId)} aria-busy={processing} className="dots-button-primary inline-flex w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50">{processing && <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}{processing ? 'Saving…' : 'Save account'}</button></div>
                 </form>
             </div>}
-            {toast && <WorkspaceAlert {...toast} toast onClose={() => setToast(null)} />}
+            <WorkspaceBusyOverlay open={processing} message="Saving user account…" />
+            {feedback && <WorkspaceAlert {...feedback} busy={processing} onClose={() => setFeedback(null)} />}
         </AuthenticatedLayout>
     );
 }

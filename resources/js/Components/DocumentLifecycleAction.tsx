@@ -1,4 +1,5 @@
 import WorkspaceDialog from '@/Components/WorkspaceDialog';
+import WorkspaceAlert, { type WorkspaceAlertVariant } from '@/Components/WorkspaceAlert';
 import { router } from '@inertiajs/react';
 import { Archive, RotateCcw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
@@ -9,6 +10,7 @@ export default function DocumentLifecycleAction({ action, url, title, iconOnly =
     const [open, setOpen] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
+    const [feedback, setFeedback] = useState<{ title: string; message: string; variant: WorkspaceAlertVariant } | null>(null);
     const label = action === 'delete' ? 'Delete draft' : action === 'archive' ? 'Archive document' : 'Restore document';
     const Icon = action === 'delete' ? Trash2 : action === 'archive' ? Archive : RotateCcw;
     const confirm = () => {
@@ -16,8 +18,16 @@ export default function DocumentLifecycleAction({ action, url, title, iconOnly =
         router.visit(url, {
             method: action === 'delete' ? 'delete' : 'post', preserveScroll: true,
             onStart: () => setBusy(true), onFinish: () => setBusy(false),
-            onSuccess: () => setOpen(false),
-            onError: () => setError('The action could not be completed. Please try again.'),
+            onSuccess: () => {
+                setOpen(false);
+                const pastTense = action === 'delete' ? 'Draft deleted' : action === 'archive' ? 'Document archived' : 'Document restored';
+                setFeedback({ title: pastTense, message: `${title || 'The document'} was updated successfully.`, variant: 'success' });
+            },
+            onError: () => {
+                const message = 'The action could not be completed. Please try again.';
+                setError(message);
+                setFeedback({ title: `${label} failed`, message, variant: 'error' });
+            },
         });
     };
     return <>
@@ -36,5 +46,6 @@ export default function DocumentLifecycleAction({ action, url, title, iconOnly =
                 </div>
             </div>
         </WorkspaceDialog>
+        {feedback && <WorkspaceAlert {...feedback} busy={busy} onClose={() => setFeedback(null)} />}
     </>;
 }

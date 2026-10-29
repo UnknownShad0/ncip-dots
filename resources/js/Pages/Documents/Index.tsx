@@ -3,6 +3,7 @@ import DocumentDispositionPrint from '@/Components/DocumentDispositionPrint';
 import InfoTip from '@/Components/InfoTip';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import CrudAlertModal, { type WorkspaceAlertVariant } from '@/Components/WorkspaceAlert';
+import WorkspaceBusyOverlay from '@/Components/WorkspaceBusyOverlay';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
 import { Archive, PenLine, PenOff, ArrowDown, ArrowDownUp, ArrowUp, ChevronLeft, ChevronRight, Download, Eye, FilePlus2, FileSignature, FileText, GripVertical, Inbox, LoaderCircle, Pencil, Printer, Search, Send, Trash2, X } from 'lucide-react';
@@ -188,7 +189,7 @@ type StagedUploadEntry = {
 };
 type StagedUploadDisplay = { status: 'uploading' | 'checking' | 'uploaded' | 'failed'; percentage: number; error?: string };
 type ApprovedDocument = { id: number; title: string; document_type_id: number; document_type?: string; status?: string; disabled?: boolean };
-type CrudAlert = { variant?: WorkspaceAlertVariant; title: string; message: string; onConfirm?: () => void; confirmLabel?: string; isDestructive?: boolean };
+type CrudAlert = { variant?: WorkspaceAlertVariant; title: string; message: string; onConfirm?: () => void; confirmLabel?: string; isDestructive?: boolean; centered?: boolean };
 type RoutingForm = {
     title: string;
     document_source: string;
@@ -603,7 +604,7 @@ export default function DocumentsIndex({
         const data = new FormData();
         const { file, supporting_files, ...fields } = form;
         void supporting_files;
-        Object.entries({ ...fields, is_finalized: finalize ? '1' : '0' }).forEach(([key, value]) => {
+        Object.entries({ ...fields, is_finalized: finalize ? '1' : '0', return_to_latest: title === 'Latest Documents' ? '1' : '0' }).forEach(([key, value]) => {
             if (value !== null && value !== undefined) data.append(key, typeof value === 'boolean' ? (value ? '1' : '0') : String(value));
         });
         if (fileUploadToken) data.append('file_upload_token', fileUploadToken);
@@ -611,11 +612,21 @@ export default function DocumentsIndex({
         setProcessing(true);
         setUploadProgress(null);
         setFormError('');
+        let resultAlert: CrudAlert | null = null;
         router.post('/documents', data, {
-            onFinish: () => { setProcessing(false); setUploadProgress(null); },
-            onError: (errors) => setFormError(Object.values(errors).join(' ')),
+            onFinish: () => {
+                setProcessing(false);
+                setUploadProgress(null);
+                if (resultAlert) setCrudAlert(resultAlert);
+            },
+            onError: (errors) => {
+                const message = Object.values(errors).join(' ') || 'The routing record could not be created. Please review the form and try again.';
+                setFormError(message);
+                resultAlert = { variant: 'error', centered: true, title: 'Routing record creation failed', message };
+            },
             onSuccess: () => {
                 closeModal();
+                resultAlert = { centered: true, title: 'Routing record created', message: 'Routing record created successfully.' };
             },
         });
     };
@@ -684,7 +695,11 @@ export default function DocumentsIndex({
                     message: `${documentReference} was sent for ${releaseForm.routingMode} approval to ${selectedOffices.join(', ')}. ${releaseForm.signatureOfficeIds.length > 0 ? `${releaseForm.signatureOfficeIds.length} office${releaseForm.signatureOfficeIds.length === 1 ? '' : 's'} require signing.` : 'No office signature is required.'}`,
                 });
             },
-            onError: (errors) => setReleaseError(Object.values(errors).join(' ') || 'Could not route this document.'),
+            onError: (errors) => {
+                const message = Object.values(errors).join(' ') || 'Could not route this document.';
+                setReleaseError(message);
+                setCrudAlert({ variant: 'error', title: 'Document could not be routed', message });
+            },
         });
     };
 
@@ -884,6 +899,7 @@ export default function DocumentsIndex({
             setRouteEditError('Explain why the approval route is being changed.');
             return;
         }
+        const documentLabel = routeEditingDocument.tracking_number || routeEditingDocument.title;
         setProcessing(true);
         setRouteEditError('');
         router.put(`/documents/${routeEditingDocument.id}/routes/${editableRoute.id}/remaining-steps`, {
@@ -894,10 +910,19 @@ export default function DocumentsIndex({
         }, {
             preserveScroll: true,
             onFinish: () => setProcessing(false),
-            onError: (errors) => setRouteEditError(Object.values(errors).join(' ') || 'Could not update the approval route.'),
+            onError: (errors) => {
+                const message = Object.values(errors).join(' ') || 'Could not update the approval route.';
+                setRouteEditError(message);
+                setCrudAlert({ variant: 'error', title: 'Approval route could not be updated', message });
+            },
             onSuccess: () => {
                 dismissRouteEditor();
-                setCrudAlert({ title: 'Approval route updated', message: 'The active approval route was updated successfully.' });
+                setCrudAlert({
+                    title: 'Approval route saved',
+                    message: documentLabel
+                        ? `Changes to the remaining approval steps for ${documentLabel} are now active.`
+                        : 'Changes to the remaining approval steps are now active.',
+                });
             },
         });
     };
@@ -1004,7 +1029,11 @@ export default function DocumentsIndex({
             forceFormData: true,
             preserveScroll: true,
             onFinish: () => { setProcessing(false); setUploadProgress(null); },
-            onError: (errors) => setApprovalError(Object.values(errors).join(' ')),
+            onError: (errors) => {
+                const message = Object.values(errors).join(' ') || 'The approval decision could not be saved.';
+                setApprovalError(message);
+                setCrudAlert({ variant: 'error', title: 'Approval could not be saved', message });
+            },
             onSuccess: () => {
                 closeDocumentDetails();
                 setApprovalRemarks('');
@@ -1095,12 +1124,21 @@ export default function DocumentsIndex({
         setProcessing(true);
         setUploadProgress(null);
         setFormError('');
+        let resultAlert: CrudAlert | null = null;
         router.post(`/documents/${editingRow.id}`, data, {
-            onFinish: () => { setProcessing(false); setUploadProgress(null); },
-            onError: (errors) => setFormError(Object.values(errors).join(' ')),
+            onFinish: () => {
+                setProcessing(false);
+                setUploadProgress(null);
+                if (resultAlert) setCrudAlert(resultAlert);
+            },
+            onError: (errors) => {
+                const message = Object.values(errors).join(' ') || 'The document could not be updated. Please review the form and try again.';
+                setFormError(message);
+                resultAlert = { variant: 'error', centered: true, title: 'Document update failed', message };
+            },
             onSuccess: () => {
                 closeModal();
-                setCrudAlert({ title: 'Document updated', message: finalize ? 'Document updated and finalized successfully.' : 'Document updated successfully.' });
+                resultAlert = { centered: true, title: 'Document updated', message: finalize ? 'Document updated and finalized successfully.' : 'Document updated successfully.' };
             },
         });
     };
@@ -1906,7 +1944,7 @@ export default function DocumentsIndex({
                 )}
             </WorkspaceDialog>
 
-            <WorkspaceDialog open={Boolean(isCreateOpen || editingRow)} onClose={requestCloseForm} labelledBy="document-modal-title" busy={processing} busyMessage={!editingRow ? 'Loading…' : undefined}>
+            <WorkspaceDialog open={Boolean(isCreateOpen || editingRow)} onClose={requestCloseForm} labelledBy="document-modal-title" busy={processing} busyMessage={editingRow ? 'Saving document…' : 'Creating routing record…'}>
                 {(isCreateOpen || editingRow) && (
                     <div>
                         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
@@ -2091,7 +2129,11 @@ export default function DocumentsIndex({
                 )}
             </WorkspaceDialog>
 
-            {crudAlert && <CrudAlertModal {...crudAlert} onClose={() => setCrudAlert(null)} />}
+            <WorkspaceBusyOverlay
+                open={processing && !isCreateOpen && !editingRow && !routeEditingDocument && !releasingRow && !viewingRow}
+                message={archivingDocumentId ? 'Updating document…' : 'Saving document changes…'}
+            />
+            {crudAlert && <CrudAlertModal {...crudAlert} busy={processing} onClose={() => setCrudAlert(null)} />}
             {printDocument && <DocumentDispositionPrint document={printDocument} />}
         </AuthenticatedLayout>
     );
