@@ -3,7 +3,7 @@ import WorkspaceAlert, { type WorkspaceAlertVariant } from '@/Components/Workspa
 import SearchableSelect, { type SearchableSelectOption } from '@/Components/SearchableSelect';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, LoaderCircle, Search } from 'lucide-react';
 
 type UserRow = {
@@ -106,11 +106,13 @@ export default function UserAccountsIndex({
     const selectType = (type: 'dots' | 'employee') => {
         resetLookup(); setAccountType(type); setForm(emptyForm); setErrors({});
     };
-    const searchEmployee = async () => {
+    const searchEmployee = useCallback(async (query = employeeCode) => {
+        const normalizedQuery = query.trim();
+        if (normalizedQuery.length < 2) return;
         const version = ++lookupVersion.current;
         setLookupBusy(true); setLookupLoadingKind('search'); setLookupError(''); setLookup(null); setEmployeeMatches([]); setForm(emptyForm); setOfficeDirectoryCode('');
         try {
-            const response = await axios.post<{ matches: EmployeeMatch[] }>('/user-accounts/search-employees', { query: employeeCode.trim() });
+            const response = await axios.post<{ matches: EmployeeMatch[] }>('/user-accounts/search-employees', { query: normalizedQuery });
             if (version !== lookupVersion.current) return;
             setEmployeeMatches(response.data.matches);
             if (response.data.matches.length === 0) setLookupError('No matching employee found. Sync the HRIS directory or check the search text.');
@@ -120,7 +122,15 @@ export default function UserAccountsIndex({
         } finally {
             if (version === lookupVersion.current) { setLookupBusy(false); setLookupLoadingKind(null); }
         }
-    };
+    }, [employeeCode]);
+
+    useEffect(() => {
+        const query = employeeCode.trim();
+        if (!isCreateOpen || accountType !== 'employee' || (lookup && !lookupOpen) || lookupLoadingKind === 'employee' || query.length < 2) return;
+
+        const timeout = window.setTimeout(() => { void searchEmployee(query); }, 350);
+        return () => window.clearTimeout(timeout);
+    }, [employeeCode, accountType, isCreateOpen, lookup, lookupOpen, searchEmployee]);
 
     const selectEmployee = async (employee: EmployeeMatch) => {
         const version = ++lookupVersion.current;
@@ -236,9 +246,8 @@ export default function UserAccountsIndex({
                     <div>
                         <p className="text-sm text-muted">Manage access, office assignments, and account status.</p>
                     </div>
-                    <div className="grid w-full grid-cols-2 gap-2 print:hidden sm:w-auto">
-                        <button type="button" onClick={() => window.print()} className="dots-button-secondary w-full">Print</button>
-                        <button type="button" onClick={() => { closeModal(); setAccountType('employee'); setLookupOpen(true); setIsCreateOpen(true); }} className="dots-button-primary w-full">New user</button>
+                    <div className="w-full print:hidden sm:w-auto">
+                        <button type="button" onClick={() => { closeModal(); setAccountType('employee'); setLookupOpen(true); setIsCreateOpen(true); }} className="dots-button-primary w-full sm:w-auto">New user</button>
                     </div>
                 </div>
 
@@ -303,10 +312,9 @@ export default function UserAccountsIndex({
                     <div className="flex items-center justify-between border-b border-border pb-3"><h3 id="user-account-modal-title" className="text-lg font-semibold text-foreground">{editingRow ? 'Edit User Account' : 'New User Account'}</h3><button type="button" disabled={processing} onClick={closeModal} className="rounded-lg px-3 py-2 text-sm text-muted hover:bg-secondary hover:text-foreground disabled:opacity-50">Close</button></div>
                     {!editingRow && accountType === 'employee' && <div className="space-y-4">
                         {(!lookup || lookupOpen) && <div className="space-y-3 rounded-xl border border-border bg-background p-4">
-                            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"><div className="min-w-0"><Field label="Search employee by code or name"><input value={employeeCode} onChange={(e) => { lookupVersion.current++; setLookupBusy(false); setLookupLoadingKind(null); setEmployeeCode(e.target.value); setEmployeeMatches([]); setLookupError(''); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (employeeCode.trim() && !lookupBusy) void searchEmployee(); } }} placeholder="Enter employee code or name" className="w-full rounded-lg border-border bg-surface" /></Field></div>
-                                <button type="button" disabled={lookupBusy || !employeeCode.trim()} aria-busy={lookupBusy} onClick={() => void searchEmployee()} className="dots-button-primary inline-flex w-full items-center justify-center gap-2 disabled:cursor-wait disabled:opacity-50 sm:w-auto">{lookupBusy ? <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Search size={16} aria-hidden="true" />}{lookupBusy ? 'Searching…' : 'Search'}</button>
-                            </div>
+                            <Field label="Search employee"><input value={employeeCode} onChange={(e) => { lookupVersion.current++; setLookupBusy(false); setLookupLoadingKind(null); setEmployeeCode(e.target.value); setEmployeeMatches([]); setLookupError(''); }} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} placeholder="Search by employee code or name" className="w-full rounded-lg border-border bg-surface" /></Field>
                             {lookupError && <p role="alert" className="text-sm text-danger">{lookupError}</p>}
+                            {lookupLoadingKind === 'search' && <p role="status" className="inline-flex items-center gap-2 text-sm text-muted"><LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Searching employees…</p>}
                             {employeeMatches.length > 0 && <div className="max-h-64 overflow-y-auto rounded-lg border border-border bg-surface" role="listbox" aria-label="Matching HRIS employees">
                                 {employeeMatches.map((employee) => <button key={employee.employee_code} type="button" role="option" aria-selected="false" onClick={() => void selectEmployee(employee)} className="block w-full border-b border-border px-4 py-3 text-left last:border-b-0 hover:bg-background">
                                     <span className="block font-medium text-foreground">{[employee.first_name, employee.middle_name, employee.last_name, employee.ext_name].filter(Boolean).join(' ') || 'Unnamed employee'}</span>
@@ -316,16 +324,19 @@ export default function UserAccountsIndex({
                         </div>}
                         {lookupLoadingKind === 'employee' && <p role="status" className="inline-flex items-center gap-2 text-sm text-muted"><LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading employee details…</p>}
                         {lookup && !lookupOpen && <>
-                            <button type="button" disabled={processing || lookupBusy} onClick={() => { setLookupOpen(true); setLookupError(''); }} className="self-start rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary disabled:opacity-50">Search another employee</button>
-                            <dl className="grid gap-3 rounded-xl bg-secondary p-4 text-sm sm:grid-cols-2">
+                            <button type="button" disabled={processing || lookupBusy} onClick={() => { setLookup(null); setLookupOpen(true); setEmployeeCode(''); setEmployeeMatches([]); setLookupError(''); }} className="self-start rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary disabled:opacity-50">Search another employee</button>
+                            <div className="overflow-hidden rounded-xl border border-border bg-surface">
+                                <table className="w-full text-left text-sm">
+                                    <tbody>
                                 {[
                                     ['Employee Code', lookup.employee.employee_code],
                                     ['First Name', lookup.employee.first_name], ['Middle Name', lookup.employee.middle_name],
-                                    ['Last Name', lookup.employee.last_name], ['Extension Name', lookup.employee.ext_name],
+                                    ['Last Name', lookup.employee.last_name], ['Division Name', lookup.employee.division || lookup.employee.division_code],
                                     ['Username', lookup.employee.username],
-                                ].map(([label, value]) => <div key={label}><dt className="text-muted">{label}</dt><dd className="mt-1 font-medium text-foreground">{value || '—'}</dd></div>)}
-                            </dl>
-                            <p className="text-sm text-muted">HRIS division: {lookup.employee.division || lookup.employee.division_code || 'Not provided'}. Select the current HRIS directory entry below; the saved assignment will use its mapped DOTS office ID.</p>
+                                ].map(([label, value]) => <tr key={label} className="border-b border-border last:border-b-0"><th scope="row" className="w-1/3 bg-secondary px-4 py-2 text-left font-medium text-muted">{label}</th><td className="px-4 py-2 font-medium text-foreground">{value || '—'}</td></tr>)}
+                                    </tbody>
+                                </table>
+                            </div>
                             <div className="grid gap-3 sm:grid-cols-2">
                                 <Field label="HRIS directory entry" error={errors.office_directory_code}><SearchableSelect
                                     id="hris-directory-office"
@@ -342,7 +353,6 @@ export default function UserAccountsIndex({
                                 /></Field>
                                 <Field label="Range"><input aria-label="Range" readOnly value={selectedOffice ? selectedOffice.range_name || 'No range assigned' : ''} className="w-full rounded-lg border-border bg-background text-muted" /></Field>
                             </div>
-                            {selectedOffice && <p className="text-xs text-muted">Assigned to DOTS office {selectedOffice.office_code ? `${selectedOffice.office_code} · ` : ''}{selectedOffice.office_name} (ID {selectedOffice.office_id}).</p>}
                             {!selectedOffice && lookup.employee.division_code && <p role="status" className="text-sm text-warning">The employee’s HRIS division has no confirmed office mapping. Select another mapped entry or ask an administrator to review it in Offices.</p>}
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <Field label="Email" error={errors.email}><input required type="email" maxLength={255} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-lg border-border bg-surface" /></Field>

@@ -4,7 +4,7 @@ import WorkspaceAlert, { type WorkspaceAlertVariant } from '@/Components/Workspa
 import SearchableSelect, { type SearchableSelectOption } from '@/Components/SearchableSelect';
 import { Head, router } from '@inertiajs/react';
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, Plus, Printer, Search, RefreshCw, Link2, AlertCircle, CheckCircle2, LoaderCircle } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Plus, Search, RefreshCw, Link2, AlertCircle, CheckCircle2, LoaderCircle } from 'lucide-react';
 
 type OfficeRow = {
     id: number | string | null;
@@ -99,7 +99,7 @@ export default function OfficesIndex({
         email: '',
         range_id: '',
     });
-    const operationalOfficeSelectOptions: SearchableSelectOption[] = offices.filter((office) => office.id != null).map((office) => ({
+    const operationalOfficeSelectOptions: SearchableSelectOption[] = offices.filter((office) => office.id != null && Boolean(office.range_is_active)).map((office) => ({
         value: String(office.id),
         label: `${office.name}${office.code ? ` (${office.code})` : ''}`,
         searchText: `${office.code ?? ''} ${office.id ?? ''}`,
@@ -226,10 +226,6 @@ export default function OfficesIndex({
                 setCodeError(errors.division_code ?? errors.code ?? null);
             },
         });
-    };
-
-    const handlePrint = () => {
-        window.print();
     };
 
     const handleSort = (key: SortKey) => {
@@ -380,7 +376,7 @@ export default function OfficesIndex({
                     </div>
 
                     {activeTab === 'offices' && <>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                         <label className="relative col-span-2 block sm:col-span-1">
                             <span className="sr-only">Search offices</span>
                             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -392,15 +388,6 @@ export default function OfficesIndex({
                                 className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                             />
                         </label>
-
-                        <button
-                            type="button"
-                            onClick={handlePrint}
-                            className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border bg-surface px-2 text-xs font-semibold text-foreground transition hover:bg-secondary sm:px-4 sm:text-sm"
-                        >
-                            <Printer aria-hidden="true" className="h-4 w-4" />
-                            Print
-                        </button>
 
                         <button
                             type="button"
