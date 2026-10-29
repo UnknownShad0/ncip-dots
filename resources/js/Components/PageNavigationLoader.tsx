@@ -24,7 +24,9 @@ export default function PageNavigationLoader() {
             clearPendingNavigation();
 
             const { visit } = event.detail;
-            if (visit.method !== 'get' || visit.url.pathname === window.location.pathname) {
+            const isPageNavigation = visit.method === 'get' && visit.url.pathname !== window.location.pathname;
+            const isArchiveAction = visit.method === 'post' && /^\/documents\/[^/]+\/terminal\/?$/.test(visit.url.pathname);
+            if (!isPageNavigation && !isArchiveAction) {
                 return;
             }
 

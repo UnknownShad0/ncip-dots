@@ -52,7 +52,7 @@ export default function NavigationAccessIndex({ groups, roles }: { groups: Navig
             <Head title="Navigation Access Management" />
             <div className="mx-auto max-w-[1200px] space-y-5">
                 <div className="flex flex-wrap items-end justify-between gap-3">
-                    <p className="max-w-3xl text-sm text-muted">Choose which sections Executive and Admin Staff can access. Hiding a section also blocks its related URLs; existing route permissions still apply.</p>
+                    <p className="max-w-3xl text-sm text-muted">Choose which sections Executive and Admin Staff can access.</p>
                     <button type="button" onClick={() => setVisibility(savedVisibility)} disabled={!hasChanges || processing} className="dots-button-secondary inline-flex items-center gap-2 disabled:opacity-50">
                         <RotateCcw size={16} aria-hidden="true" />Reset changes
                     </button>

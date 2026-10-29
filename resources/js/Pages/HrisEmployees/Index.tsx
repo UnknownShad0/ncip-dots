@@ -3,7 +3,7 @@ import WorkspaceAlert from '@/Components/WorkspaceAlert';
 import { formatPhilippineDateTime } from '@/lib/dateTime';
 import { Head, router, usePage } from '@inertiajs/react';
 import { FormEvent, useState } from 'react';
-import { Printer, RefreshCw, Search } from 'lucide-react';
+import { RefreshCw, Search } from 'lucide-react';
 
 type EmployeeRow = {
     id: number;
@@ -103,11 +103,8 @@ export default function HrisEmployeesIndex({
                             <h2 className="text-xl font-semibold text-foreground">HRIS Employees</h2>
                             <p className="mt-1 text-sm text-muted">Local employee directory used for account lookup when HRIS is unavailable.</p>
                         </div>
-                        <div className="grid w-full grid-cols-2 gap-2 print:hidden lg:w-auto">
-                            <button type="button" onClick={() => window.print()} className="dots-button-secondary w-full">
-                                <Printer size={16} aria-hidden="true" /> Print
-                            </button>
-                            <button type="button" disabled={syncing} onClick={syncEmployees} className="dots-button-primary w-full disabled:cursor-not-allowed disabled:opacity-50">
+                        <div className="w-full print:hidden lg:w-auto">
+                            <button type="button" disabled={syncing} onClick={syncEmployees} className="dots-button-primary w-full disabled:cursor-not-allowed disabled:opacity-50 lg:w-auto">
                                 <RefreshCw size={16} aria-hidden="true" className={syncing ? 'animate-spin' : ''} />
                                 {syncing ? 'Syncing...' : 'Sync from HRIS'}
                             </button>

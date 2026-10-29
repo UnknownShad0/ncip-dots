@@ -3,7 +3,7 @@ import WorkspaceDialog from '@/Components/WorkspaceDialog';
 import CrudAlertModal from '@/Components/WorkspaceAlert';
 import { Head, router } from '@inertiajs/react';
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, Plus, Printer, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Plus, Search } from 'lucide-react';
 
 type PurposeTypeRow = {
     id: number | string | null;
@@ -113,10 +113,6 @@ export default function PurposeTypesIndex({
         });
     };
 
-    const handlePrint = () => {
-        window.print();
-    };
-
     const handleSort = (key: SortKey) => {
         if (sortKey === key) {
             setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
@@ -186,7 +182,7 @@ export default function PurposeTypesIndex({
                 <section className="no-print">
                     <div className="mb-5"><h2 className="text-lg font-semibold text-foreground">Purpose types</h2><p className="mt-1 text-sm text-muted">Manage the classifications assigned to documents.</p></div>
 
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                         <label className="relative col-span-2 block sm:col-span-1">
                         <span className="sr-only">Search purpose types</span>
                         <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -198,15 +194,6 @@ export default function PurposeTypesIndex({
                             className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                         />
                         </label>
-
-                        <button
-                            type="button"
-                            onClick={handlePrint}
-                            className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border bg-surface px-2 text-xs font-semibold text-foreground transition hover:bg-secondary sm:px-4 sm:text-sm"
-                        >
-                            <Printer aria-hidden="true" className="h-4 w-4" />
-                            Print
-                        </button>
 
                         <button
                             type="button"

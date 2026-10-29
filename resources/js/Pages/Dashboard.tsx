@@ -163,7 +163,7 @@ export default function Dashboard({
 
                 <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
                     <section aria-labelledby="receive-document-title" className="min-w-0 rounded-lg border border-border bg-surface">
-                        <div className="border-b border-border p-5">
+                        {/* <div className="border-b border-border p-5">
                             <div className="mb-2 flex items-center gap-2"><ArrowDownToLine size={20} className="text-primary" aria-hidden="true" /><h2 id="receive-document-title" className="text-xl font-semibold">Receive a document</h2></div><p className="mb-4 text-sm text-muted">Confirm receipt of documents addressed to your office.</p>
                             {!canReceiveDocuments && <p className="mb-4 rounded-lg bg-background p-3 text-sm text-muted">View only. Your role or office assignment does not allow receiving documents.</p>}
                             <form onSubmit={(event) => { event.preventDefault(); receiveByTrackingNumber(); }} className="flex flex-col gap-2 sm:flex-row sm:items-end">
@@ -171,12 +171,12 @@ export default function Dashboard({
                                 <button type="submit" disabled={!canReceiveDocuments || !trackingNumber.trim() || receivingId !== null} className="dots-button-primary min-h-12">Review receipt</button>
                             </form>
                             {receiveError && <p role="alert" className="mt-3 rounded-lg bg-danger-soft p-3 text-sm text-danger">{receiveError}</p>}
-                        </div>
+                        </div> */}
                         <div className="p-5">
                             <div id="incoming-documents" className="mb-4 flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold">Incoming to your office <span className="ml-1 rounded-md bg-secondary px-2 py-0.5 text-xs font-medium text-primary">{incomingDocuments.length}</span></h3>
                                 <label className="relative w-full sm:w-60"><span className="sr-only">Search incoming documents</span><Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" /><input value={incomingQuery} onChange={(event) => setIncomingQuery(event.target.value)} placeholder="Search incoming" className="h-11 w-full rounded-lg border-border pl-9 text-sm" /></label>
                             </div>
-                            <div className="max-h-[500px] divide-y divide-border overflow-y-auto" role="region" aria-label="Incoming documents" tabIndex={0}>
+                            <div className="max-h-[700px] divide-y divide-border overflow-y-auto" role="region" aria-label="Incoming documents" tabIndex={0}>
                                 {visibleIncoming.length === 0 ? <p className="py-10 text-center text-sm text-muted">{incomingQuery ? 'No incoming documents match your search.' : 'No documents are waiting to be received.'}</p> : visibleIncoming.map((document) => <div key={document.id} className="flex items-start justify-between gap-3 py-4">
                                     <div className="min-w-0"><p className="break-words font-semibold">{document.title || 'Untitled document'}</p><p className="mt-1 break-all font-mono text-xs text-muted">{document.tracking_number}</p><p className="mt-1 text-xs text-muted">{document.from_office ? `From ${document.from_office}` : 'Sending office unavailable'}</p></div>
                                     <button type="button" onClick={() => confirmReceive(document)} disabled={!canReceiveDocuments || receivingId !== null} className="dots-button-secondary shrink-0 border-primary px-3 text-primary">{receivingId === document.id ? 'Receiving…' : 'Receive'}</button>
@@ -194,7 +194,7 @@ export default function Dashboard({
                         </section>
                         <section aria-labelledby="recent-documents-title" className="rounded-lg border border-border bg-surface p-5">
                             <div className="mb-3 flex items-center justify-between"><h2 id="recent-documents-title" className="text-lg font-semibold">Recent documents</h2></div>
-                            <p className="mb-3 text-xs text-muted">Latest records by creation date · Manila time</p><label className="sr-only" htmlFor="recent-document-search">Search recent documents</label><input id="recent-document-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search recent documents" className="mb-2 h-11 w-full rounded-lg border-border text-sm" />
+                            <p className="mb-3 text-xs text-muted">Latest records</p><label className="sr-only" htmlFor="recent-document-search">Search recent documents</label><input id="recent-document-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search recent documents" className="mb-2 h-11 w-full rounded-lg border-border text-sm" />
                             {documents.length === 0 ? <p className="py-6 text-sm text-muted">{query ? 'No documents match your search.' : 'No recent documents available.'}</p> : <ul className="divide-y divide-border">{documents.map((document, index) => <li key={document.id ?? index} className="py-3">
                                 <p className="break-words text-sm font-semibold">{document.title || document.tracking_number || 'Untitled document'}</p><p className="mt-1 break-words text-xs text-muted">{[document.tracking_number, document.office?.short_name || document.office?.name, document.status].filter(Boolean).join(' · ')}</p><time dateTime={document.created_at} className="mt-1 block text-xs text-muted">{displayDate(document.created_at)}</time>
                             </li>)}</ul>}

@@ -68,7 +68,7 @@ export default function SystemMaintenanceIndex({ settings, timezone }: { setting
         <AuthenticatedLayout header={<h1 className="text-2xl font-semibold tracking-tight text-foreground">System Maintenance</h1>}>
             <Head title="System Maintenance" />
             <div className="mx-auto max-w-[1000px] space-y-5">
-                <p className="max-w-3xl text-sm text-muted">Post a maintenance notice or temporarily restrict regular system access. Super Admin can still access the system while full maintenance is active.</p>
+                <p className="max-w-3xl text-sm text-muted">Post a maintenance notice or temporarily restrict regular system access.</p>
 
                 {flash?.success && <p role="status" className="rounded-lg bg-success-soft p-3 text-sm text-success">{flash.success}</p>}
                 {flash?.warning && <p role="alert" className="rounded-lg bg-warning-soft p-3 text-sm text-warning">{flash.warning}</p>}

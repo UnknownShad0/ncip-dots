@@ -716,7 +716,7 @@ export default function Index({
             <div className="mx-auto max-w-[1440px] space-y-6">
                 <div className="flex items-center gap-2 print:hidden">
                     <p className="text-sm text-muted">
-                        Create and edit generated documents. Finalize a completed file when it is ready to attach in Routing.
+                        Create and edit generated documents. 
                     </p>
                     <InfoTip label="Document creation">
                         Save your work as a draft while editing. Finalizing

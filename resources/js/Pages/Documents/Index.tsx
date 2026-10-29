@@ -317,6 +317,7 @@ export default function DocumentsIndex({
 }) {
     const uploadLimitKb = Number(maxUploadSizeKb ?? 0);
     const [processing, setProcessing] = useState(false);
+    const [archivingDocumentId, setArchivingDocumentId] = useState<DocumentItem['id']>(null);
     const [uploadProgress, setUploadProgress] = useState<{ target: UploadTarget; percentage: number } | null>(null);
     const stagedUploadEntries = useRef(new Map<File, StagedUploadEntry>());
     const [stagedUploadDisplays, setStagedUploadDisplays] = useState<Record<string, StagedUploadDisplay>>({});
@@ -1393,7 +1394,7 @@ export default function DocumentsIndex({
                                                     {document.can_release && <button type="button" disabled={processing} aria-label="Forward document" title="Forward document" onClick={() => openRelease(document)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-primary transition hover:border-primary/40 hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Send size={17} aria-hidden="true" /></button>}
                                                     {!document.can_approve && !document.can_update && <button type="button" disabled={processing} aria-label="View document details" title="View details" onClick={() => openDocumentDetails(document)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-foreground transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Eye size={17} aria-hidden="true" /></button>}
                                                     {document.can_update && <button type="button" disabled={processing} aria-label="Update draft" title="Update draft" onClick={() => openEdit(document)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-foreground transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Pencil size={17} aria-hidden="true" /></button>}
-                                                    {document.can_terminal && <button type="button" disabled={processing} aria-label="Tag as terminal" title="Tag as terminal" onClick={() => requestDocumentAction('Tag document as terminal?', `Mark ${document.tracking_number || 'this document'} as terminal?`, 'Tag as terminal', () => { setCrudAlert(null); setProcessing(true); router.post(`/documents/${document.id}/terminal`, {}, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ variant: 'error', title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document updated', message: 'Document tagged as terminal.' }) }); })} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-muted transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"><Archive size={17} aria-hidden="true" /></button>}
+                                                    {document.can_terminal && <button type="button" disabled={processing} aria-busy={archivingDocumentId === document.id} aria-label={archivingDocumentId === document.id ? 'Archiving document' : 'Tag as terminal'} title={archivingDocumentId === document.id ? 'Archiving…' : 'Tag as terminal'} onClick={() => requestDocumentAction('Tag document as terminal?', `Mark ${document.tracking_number || 'this document'} as terminal?`, 'Tag as terminal', () => { setCrudAlert(null); setProcessing(true); setArchivingDocumentId(document.id); router.post(`/documents/${document.id}/terminal`, {}, { onFinish: () => { setProcessing(false); setArchivingDocumentId(null); }, onError: (errors) => setCrudAlert({ variant: 'error', title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Document updated', message: 'Document tagged as terminal.' }) }); })} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-muted transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50">{archivingDocumentId === document.id ? <LoaderCircle size={17} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Archive size={17} aria-hidden="true" />}</button>}
                                                     {document.can_delete && <button type="button" disabled={processing} aria-label="Delete draft" title="Delete draft" onClick={() => requestDocumentAction('Delete draft?', `Remove ${document.tracking_number || 'this draft'} from the active list?`, 'Delete draft', () => { setCrudAlert(null); setProcessing(true); router.delete(`/documents/${document.id}`, { onFinish: () => setProcessing(false), onError: (errors) => setCrudAlert({ variant: 'error', title: 'Action could not be completed', message: Object.values(errors).join(' ') }), onSuccess: () => setCrudAlert({ title: 'Draft deleted', message: 'Document draft deleted successfully.' }) }); }, true)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-danger/25 bg-danger-soft text-danger transition hover:border-danger/40 hover:bg-danger/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:cursor-not-allowed disabled:opacity-50"><Trash2 size={17} aria-hidden="true" /></button>}
                                                 </div>
                                             </td>
@@ -1532,7 +1533,7 @@ export default function DocumentsIndex({
                             <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
                                 <div>
                                     <h2 id="edit-route-title" className="text-lg font-semibold text-foreground">Edit approval route</h2>
-                                    <p className="mt-1 text-sm text-muted">{routeEditIsParallel ? 'Add offices or remove unreceived offices from this parallel approval flow.' : 'Update only the unfinished part of this sequential approval flow.'}</p>
+                                    <p className="mt-1 text-sm text-muted">{routeEditIsParallel ? 'Add offices or remove unreceived offices from this parallel approval flow.' : ' '}</p>
                                 </div>
                                 <button type="button" onClick={closeRouteEditor} aria-label="Close route editor" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
                                     <X size={19} aria-hidden="true" />
@@ -1569,9 +1570,9 @@ export default function DocumentsIndex({
                                     <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
                                         <div>
                                             <h3 id="remaining-route-steps-title" className="font-semibold text-foreground">{routeEditIsParallel ? 'Unreceived offices' : 'Remaining offices'}</h3>
-                                            <p className="mt-0.5 text-xs text-muted">{routeEditIsParallel ? 'Every selected office can receive and review independently.' : 'Only unreceived offices can be changed. They stay waiting while an earlier office is active.'}</p>
+                                            <p className="mt-0.5 text-xs text-muted">{routeEditIsParallel ? 'Every selected office can receive and review independently.' : ' '}</p>
                                         </div>
-                                        <span className="text-xs font-medium text-muted">{routeEditLockedSteps.length + routeEditForm.officeIds.length}/30 offices</span>
+                                        {/* <span className="text-xs font-medium text-muted">{routeEditLockedSteps.length + routeEditForm.officeIds.length}/30 offices</span> */}
                                     </div>
 
                                     <div className="mb-3 flex h-11 items-center gap-2 rounded-xl border border-border bg-surface px-3 text-muted focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
@@ -1689,8 +1690,8 @@ export default function DocumentsIndex({
                                     <p className="mb-2 text-sm font-medium text-foreground">Approval flow</p>
                                     <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Approval flow">
                                         {([
-                                            ['sequential', 'Sequential approval', 'Offices review in order. The next office receives the document after the current office approves.'],
-                                            ['parallel', 'Parallel approval', 'All offices review at the same time; signature-required offices take turns with the latest PDF.'],
+                                            ['sequential', 'Sequential approval', 'Offices review in order.'],
+                                            ['parallel', 'Parallel approval', 'All offices review at the same time.'],
                                         ] as const).map(([mode, label, description]) => (
                                             <button key={mode} type="button" aria-pressed={releaseForm.routingMode === mode} onClick={() => setReleaseForm({ ...releaseForm, routingMode: mode })} className={`rounded-xl border p-3 text-left ${releaseForm.routingMode === mode ? 'border-primary bg-secondary' : 'border-border bg-surface'}`}>
                                                 <span className="block text-sm font-semibold text-foreground">{label}</span>
@@ -1698,17 +1699,17 @@ export default function DocumentsIndex({
                                             </button>
                                         ))}
                                     </div>
-                                    <p className="mt-2 text-xs text-muted">Mark signature requirements per office. In parallel approval, offices review at the same time; signature-required offices claim and sign the latest PDF one at a time.</p>
+                                    <p className="mt-2 text-xs text-muted">Mark signature requirements per office.</p>
                                 </div>
                                 <div className="sm:col-span-2">
-                                    <p className="mb-2 text-sm font-medium text-foreground">Required offices <span className="text-danger">*</span><span className="ml-2 text-xs font-normal text-muted">Choose up to 30; every selected office must approve.</span></p>
+                                    <p className="mb-2 text-sm font-medium text-foreground">Required offices <span className="text-danger">*</span><span className="ml-2 text-xs font-normal text-muted"></span></p>
                                     <div className="mb-2 flex h-11 items-center gap-2 rounded-xl border border-border bg-surface px-3 text-muted focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
                                         <Search size={17} className="shrink-0" aria-hidden="true" />
                                         <label htmlFor="release-office-search" className="sr-only">Search required offices</label>
                                         <input id="release-office-search" type="search" value={releaseOfficeSearch} onChange={(event) => setReleaseOfficeSearch(event.target.value)} placeholder="Search offices…" className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-foreground placeholder:text-muted focus:ring-0" />
                                         {releaseOfficeSearch && <button type="button" onClick={() => setReleaseOfficeSearch('')} className="rounded-md p-1 text-muted hover:bg-secondary hover:text-foreground" aria-label="Clear office search"><X size={15} aria-hidden="true" /></button>}
                                     </div>
-                                    <div className="grid max-h-52 gap-2 overflow-y-auto rounded-xl border border-border bg-background p-2 sm:grid-cols-2">
+                                    <div className="grid max-h-64 gap-2 overflow-y-auto rounded-xl border border-border bg-background p-2 sm:grid-cols-2">
                                         {filteredReleaseOffices.map((office) => {
                                             const blockedByParentRoute = releasingRow.forwarding_blocked_office_ids?.includes(Number(office.id)) ?? false;
                                             const unavailable = office.disabled || blockedByParentRoute;
@@ -1721,7 +1722,7 @@ export default function DocumentsIndex({
                                         {offices.length === 0 && <p className="p-2 text-sm text-muted">No receiving offices are available{officeRangeLabel ? ` in ${officeRangeLabel}` : ' in your range'}.</p>}
                                         {offices.length > 0 && filteredReleaseOffices.length === 0 && <p className="p-2 text-sm text-muted sm:col-span-2">No offices match “{releaseOfficeSearch.trim()}”.</p>}
                                     </div>
-                                    <p className="mt-2 text-xs text-muted">{releaseForm.officeIds.length}/30 offices selected</p>
+                                    {/* <p className="mt-2 text-xs text-muted">{releaseForm.officeIds.length}/30 offices selected</p> */}
                                 </div>
                                 {releaseForm.officeIds.length > 0 && (
                                 <div className="sm:col-span-2">
@@ -1896,13 +1897,16 @@ export default function DocumentsIndex({
                         <div className="sticky bottom-0 grid grid-cols-2 gap-2 border-t border-border bg-surface px-5 py-4 sm:flex sm:justify-end sm:px-6">
                             {releasingRow.is_finalized && <button type="button" onClick={() => printDisposition(releasingRow)} className="dots-button-secondary col-span-2 w-full sm:hidden" aria-label="Print disposition form"><Printer size={16} aria-hidden="true" /> Print</button>}
                             <button type="button" onClick={closeRelease} className="dots-button-secondary w-full sm:w-auto">Cancel</button>
-                            <button type="submit" className="dots-button-primary w-full sm:w-auto">{processing ? 'Forwarding…' : 'Forward document'}</button>
+                            <button type="submit" disabled={processing} aria-busy={processing} className="dots-button-primary inline-flex w-full items-center justify-center gap-2 disabled:cursor-wait disabled:opacity-60 sm:w-auto">
+                                {processing && <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                                {processing ? 'Forwarding…' : 'Forward document'}
+                            </button>
                         </div>
                     </fieldset></form>
                 )}
             </WorkspaceDialog>
 
-            <WorkspaceDialog open={Boolean(isCreateOpen || editingRow)} onClose={requestCloseForm} labelledBy="document-modal-title" busy={processing}>
+            <WorkspaceDialog open={Boolean(isCreateOpen || editingRow)} onClose={requestCloseForm} labelledBy="document-modal-title" busy={processing} busyMessage={!editingRow ? 'Loading…' : undefined}>
                 {(isCreateOpen || editingRow) && (
                     <div>
                         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4 sm:px-6">
@@ -1910,7 +1914,7 @@ export default function DocumentsIndex({
                                 <h3 id="document-modal-title" className="text-lg font-semibold text-foreground">
                                     {editingRow ? 'Update Document' : 'Create Routing Record'}
                                 </h3>
-                                <p className="mt-1 text-sm text-muted">{editingRow ? 'Update the document information below.' : 'Attach a source document to create its routing record and DOTS tracking number.'}</p>
+                                <p className="mt-1 text-sm text-muted">{editingRow ? 'Update the document information below.' : ''}</p>
                             </div>
 
                             <button type="button" onClick={requestCloseForm} aria-label="Close document form" className="rounded-lg p-2 text-muted hover:bg-secondary hover:text-foreground">
@@ -1927,7 +1931,7 @@ export default function DocumentsIndex({
                                     <p className="rounded-lg bg-background px-3 py-2 text-sm text-foreground">{editingRow.tracking_number || 'Not assigned'}</p>
                                 </div>
                             ) : (
-                                <p className="text-sm text-muted">DOTS assigns the tracking number when this routing record is created.</p>
+                                <p className="text-sm text-muted"></p>
                             )}
 
                             <div>
@@ -2037,7 +2041,7 @@ export default function DocumentsIndex({
                                     <SelectedFile file={form.file} onRemove={() => { void discardStagedDocumentFile(form.file!); setForm((current) => ({ ...current, file: null })); }} />
                                     <StagedUploadProgress state={stagedDisplayFor(form.file)} onRetry={() => void stageDocumentFile(form.file!, 'document', editingRow?.id == null ? null : Number(editingRow.id)).catch(() => undefined)} />
                                 </>}
-                                <p className="mt-1 text-xs text-muted">PDF, JPG, PNG, DOC, or DOCX. Uploaded PDFs receive a QR code and DOTS No. when attached to the routing record; other file types remain unchanged. A source file is required to create a routing record. Maximum file size: {uploadLimitKb / 1024} MB.</p>
+                                <p className="mt-1 text-xs text-muted">Maximum file size: {uploadLimitKb / 1024} MB.</p>
                             </div>}
                             {!editingRow && <div>
                                 <label htmlFor="supporting-files" className="mb-1 block text-sm font-medium text-foreground">Supporting files <span className="font-normal text-muted">(optional)</span></label>
@@ -2050,7 +2054,7 @@ export default function DocumentsIndex({
                                     files.forEach((file) => { void stageDocumentFile(file, 'supporting').catch(() => undefined); });
                                     setUploadError('');
                                 }} />
-                                <p className="mt-1 text-xs text-muted">Add up to {maxSupportingFiles} PDF, JPG, PNG, DOC, or DOCX files. Each can be up to {uploadLimitKb / 1024} MB. Supporting PDFs receive the same QR code and DOTS No.; other file types remain unchanged. They are stored separately and are not part of the approval signature sequence.</p>
+                                <p className="mt-1 text-xs text-muted">Add up to {maxSupportingFiles} PDF, JPG, PNG, DOC, or DOCX files. Each can be up to {uploadLimitKb / 1024} MB.</p>
                                 {form.supporting_files.length > 0 && <ul className="mt-3 space-y-2" aria-label="Selected supporting files">
                                     {form.supporting_files.map((file, index) => <li key={`${file.name}-${file.lastModified}-${index}`} className="rounded-lg border border-border bg-background px-3 py-2 text-sm">
                                         <div className="flex items-center justify-between gap-3">
@@ -2076,7 +2080,10 @@ export default function DocumentsIndex({
                                     Cancel
                                 </button>
 
-                                <button type="submit" name="is_finalized" value="1" className="dots-button-primary w-full sm:w-auto">Create Routing Record</button>
+                                <button type="submit" name="is_finalized" value="1" disabled={processing} aria-busy={processing} className="dots-button-primary inline-flex w-full items-center justify-center gap-2 disabled:cursor-wait disabled:opacity-60 sm:w-auto">
+                                    {processing && <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                                    {processing ? 'Loading…' : 'Create Routing Record'}
+                                </button>
                             </div>
                             </fieldset>
                         </form>
@@ -2173,7 +2180,7 @@ export function DocumentRouteProgress({ document }: { document: DocumentRoutePro
                     <div>
                         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">Route map</p>
                         <h3 className="mt-1 text-base font-semibold text-foreground">Office approval route</h3>
-                        <p className="mt-1 text-sm text-muted">{requiredSignatureSteps.length > 0 ? 'All listed offices must approve. Offices marked as requiring a signature must sign in order. Forwarded offices branch off to the side, and the parent office still makes its own decision.' : 'Every listed office must approve. Forwarded offices branch off to the side, and the parent office still makes its own decision.'}</p>
+                        <p className="mt-1 text-sm text-muted">{requiredSignatureSteps.length > 0 ? 'All listed offices must approve. Offices marked as requiring a signature must sign in order.  ' : 'Every listed office must approve.  '}</p>
                     </div>
                     <span className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${getStatusClasses(document.status || 'pending')}`}>{statusLabel(document.status || 'pending')}</span>
                 </div>
@@ -2441,7 +2448,7 @@ function StagedUploadProgress({ state, onRetry }: { state: StagedUploadDisplay |
     const percentage = Math.max(0, Math.min(100, Math.round(state.percentage)));
     return <div className="mt-2" role="status" aria-live="polite">
         <div className="mb-1 flex items-center justify-between gap-3 text-xs">
-            <span className="font-medium text-foreground">{state.status === 'checking' ? 'Upload received. Checking file…' : 'Uploading before submit…'}</span>
+            <span className="font-medium text-foreground">{state.status === 'checking' ? 'Upload received. Checking file…' : 'Uploading…'}</span>
             <span className="tabular-nums text-muted">{percentage}%</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-secondary" role="progressbar" aria-label="Pre-upload progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percentage}>

@@ -36,7 +36,7 @@ class AuditTrailController extends Controller
         if ($officeId !== null) {
             // Keep each branch independently indexable. An OR between the
             // saved-office and legacy-assignment paths made the large history
-            // query scan/sort far more rows than the 50 rows being displayed.
+            // query scan/sort far more rows than the 15 rows being displayed.
             $officeHistoryIds = AuditTrail::query()
                 ->select('id')
                 ->where('actor_office_id', $officeId);
@@ -57,8 +57,8 @@ class AuditTrailController extends Controller
             ->orderByDesc('audit_trails.created_at')
             ->orderByDesc('audit_trails.id');
         // Office history can span hundreds of thousands of imported entries.
-        // simplePaginate avoids a full filtered COUNT(*) just to show 50 rows.
-        $trail = ($isAdminStaff ? $trailQuery->simplePaginate(50) : $trailQuery->paginate(50))
+        // simplePaginate avoids a full filtered COUNT(*) just to show 15 rows.
+        $trail = ($isAdminStaff ? $trailQuery->simplePaginate(15) : $trailQuery->paginate(15))
             ->withQueryString()
             ->through(function (AuditTrail $entry) {
                 $entry->setAttribute(

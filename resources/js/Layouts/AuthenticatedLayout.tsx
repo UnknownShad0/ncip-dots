@@ -1,11 +1,12 @@
 import { connectedSystems } from '@/Components/ConnectedSystemNavigation';
 import { libraryLinks } from '@/Components/LibraryNavigation';
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { Dialog, DialogPanel, DialogTitle, Menu as DropdownMenu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
-import { Archive, Bell, Building2, ChevronDown, ClipboardCheck, Clock3, Database, FileClock, FilePlus2, FileText, Folder, History, Inbox, LayoutGrid, LogOut, Mail, Menu, UserRound, X, BookOpen, PanelLeftClose, PanelLeftOpen, ShieldCheck, ListChecks, Wrench } from 'lucide-react';
+import { Archive, Bell, Building2, ChevronDown, ClipboardCheck, Clock3, Database, FileClock, FilePlus2, FileText, Folder, History, Inbox, LayoutGrid, LoaderCircle, LogOut, Mail, Menu, UserRound, X, BookOpen, PanelLeftClose, PanelLeftOpen, ShieldCheck, ListChecks, Wrench } from 'lucide-react';
 import { PropsWithChildren, ReactNode, useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import PrivacyNoticeModal from '@/Components/PrivacyNoticeModal';
+import WorkspaceDialog from '@/Components/WorkspaceDialog';
 
 const groups = [
     { label: '', items: [{ key: 'dashboard', name: 'Dashboard', href: 'dashboard', countKey: 'incoming', icon: LayoutGrid }] },
@@ -38,6 +39,8 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
     const [mobileOpen, setMobileOpen] = useState(false);
     const [collapsed, setCollapsed] = useState(false);
     const [privacyNoticeOpen, setPrivacyNoticeOpen] = useState(false);
+    const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+    const [loggingOut, setLoggingOut] = useState(false);
     const reduceMotion = useReducedMotion();
     useEffect(() => { try { setCollapsed(localStorage.getItem('dots.sidebar.collapsed') === 'true'); } catch {} }, []);
     useEffect(() => {
@@ -52,6 +55,18 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
         try { localStorage.setItem('dots.sidebar.collapsed', String(!value)); } catch {}
         return !value;
     });
+    const requestSignOut = () => {
+        setMobileOpen(false);
+        setLogoutConfirmOpen(true);
+    };
+    const confirmSignOut = () => {
+        if (loggingOut) return;
+        setLoggingOut(true);
+        router.post(route('logout'), {}, {
+            onSuccess: () => setLogoutConfirmOpen(false),
+            onFinish: () => setLoggingOut(false),
+        });
+    };
     const brand = (compact = false) => {
         const content = <>
             <img src="/images/logo/ncip-logo.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
@@ -76,7 +91,9 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
                     const active = href === 'libraries.index'
                         ? route().current('libraries.*') || route().current('setup.index') || libraryLinks.some((item) => route().current(item.href))
                         : href === 'connected-systems.index' ? route().current(href) || connectedSystems.some((item) => route().current(item.href)) : route().current(href);
-                    const count = countKey ? notificationCounts?.[countKey] : null;
+                    const count = countKey === 'approvals'
+                        ? (notificationCounts?.approvals ?? 0) + (notificationCounts?.approved ?? 0)
+                        : countKey ? notificationCounts?.[countKey] : null;
                     const target = route(href);
                     return <Link key={name} href={target} onClick={() => setMobileOpen(false)} aria-current={active ? 'page' : undefined} aria-label={count ? `${name}: ${count}` : name} title={compact ? `${name}${count > 0 ? `: ${count > 99 ? '99+' : count}` : ''}` : undefined}
                         className={`relative flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm transition-colors ${compact ? 'justify-center' : ''} ${active ? 'bg-primary font-semibold text-primary-foreground' : 'text-sidebar-muted hover:bg-white/10 hover:text-sidebar-foreground'}`}>
@@ -87,7 +104,7 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
         </nav>
         <div className="border-t border-sidebar-border p-3">
             <button type="button" onClick={() => { setMobileOpen(false); setPrivacyNoticeOpen(true); }} title={compact ? 'Privacy notice' : undefined} aria-label="Privacy notice" className={`mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-sidebar-muted hover:bg-white/10 hover:text-sidebar-foreground ${compact ? 'justify-center' : ''}`}><ShieldCheck size={18} />{!compact && 'Privacy notice'}</button>
-            <Link href={route('logout')} method="post" as="button" title={compact ? 'Sign out' : undefined} aria-label="Sign out" className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-sidebar-muted hover:bg-white/10 hover:text-sidebar-foreground ${compact ? 'justify-center' : ''}`}><LogOut size={18} />{!compact && 'Sign out'}</Link>
+            <button type="button" onClick={requestSignOut} title={compact ? 'Sign out' : undefined} aria-label="Sign out" className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-sidebar-muted hover:bg-white/10 hover:text-sidebar-foreground ${compact ? 'justify-center' : ''}`}><LogOut size={18} />{!compact && 'Sign out'}</button>
         </div>
     </>;
     return <div className="dots-workspace min-h-screen bg-background text-sm text-foreground">
@@ -131,8 +148,8 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
                         </MenuButton>
                         <MenuItems anchor="bottom end" className="dots-workspace z-50 mt-2 w-64 rounded-xl border border-border bg-surface p-2 shadow-lg">
                             <div className="border-b border-border px-3 py-2"><p className="truncate font-semibold">{displayName}</p><p className="truncate text-xs text-muted">{user.email}</p><p className="mt-1 text-xs text-muted">{[user.office_display_name, user.range].filter(Boolean).join(' · ')}</p></div>
-                            <MenuItem><Link href={route('profile.edit')} className="flex items-center gap-2 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><UserRound size={16} />My profile</Link></MenuItem>
-                            <MenuItem><Link href={route('logout')} method="post" as="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><LogOut size={16} />Sign out</Link></MenuItem>
+                            {/* <MenuItem><Link href={route('profile.edit')} className="flex items-center gap-2 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><UserRound size={16} />My profile</Link></MenuItem> */}
+                            <MenuItem><button type="button" onClick={requestSignOut} className="flex w-full items-center gap-2 rounded-lg px-3 py-3 text-sm data-[focus]:bg-secondary"><LogOut size={16} />Sign out</button></MenuItem>
                         </MenuItems>
                     </DropdownMenu>
                 </header>
@@ -152,5 +169,18 @@ export default function AuthenticatedLayout({ header, children }: PropsWithChild
             onClose={() => setPrivacyNoticeOpen(false)}
             onAcknowledge={() => setPrivacyNoticeOpen(false)}
         />
+        <WorkspaceDialog open={logoutConfirmOpen} onClose={() => setLogoutConfirmOpen(false)} labelledBy="logout-confirm-title" width="max-w-md" busy={loggingOut}>
+            <div className="p-6">
+                <h2 id="logout-confirm-title" className="text-lg font-semibold text-foreground">Sign out?</h2>
+                <p className="mt-2 text-sm text-muted">Are you sure you want to sign out?</p>
+                <div className="mt-6 grid grid-cols-2 gap-2">
+                    <button type="button" disabled={loggingOut} onClick={() => setLogoutConfirmOpen(false)} className="dots-button-secondary w-full disabled:opacity-50">Cancel</button>
+                    <button type="button" disabled={loggingOut} aria-busy={loggingOut} onClick={confirmSignOut} className="dots-button-primary inline-flex w-full items-center justify-center gap-2 disabled:cursor-wait disabled:opacity-60">
+                        {loggingOut && <LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                        {loggingOut ? 'Signing out…' : 'Sign out'}
+                    </button>
+                </div>
+            </div>
+        </WorkspaceDialog>
     </div>;
 }

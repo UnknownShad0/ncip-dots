@@ -167,7 +167,7 @@ export default function AuditTrailIndex({ trail = [], pagination, canFilterBurea
             <Head title="Audit trail" />
 
             <div aria-busy={updating} className="mx-auto max-w-[1440px] rounded-lg border border-border bg-surface p-4 sm:p-5">
-                <div className="mb-5"><p className="mt-1 text-sm text-muted">Review recorded actions, including imported legacy activity.</p></div>
+                <div className="mb-5"><p className="mt-1 text-sm text-muted">Review recorded actions.</p></div>
 
                 {scopeNotice && <p className="mb-4 rounded-lg bg-background p-3 text-sm text-muted">{scopeNotice}</p>}
 
@@ -185,7 +185,7 @@ export default function AuditTrailIndex({ trail = [], pagination, canFilterBurea
                         emptyMessage="No bureaus match your search."
                         className="w-full"
                     />
-                    <p className="mt-1 text-xs text-muted">Native entries use the bureau recorded at the time. Legacy entries without a bureau snapshot are matched using the actor's current bureau assignment.</p>
+                    {/* <p className="mt-1 text-xs text-muted">Native entries use the bureau recorded at the time. Legacy entries without a bureau snapshot are matched using the actor's current bureau assignment.</p> */}
                 </div>}
 
                 {updating && <p role="status" className="mb-4 inline-flex items-center gap-2 text-xs text-muted"><LoaderCircle size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />Updating activity…</p>}

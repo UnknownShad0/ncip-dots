@@ -396,8 +396,8 @@ export default function DocumentDispositionPrint({ document }: { document: Docum
             </tbody>
         </table>;
         if (block.type === 'journey-heading') return <>
-            <h2 className="disposition-section-heading">WHERE THIS DOCUMENT HAS BEEN</h2>
-            <p className="journey-legend">● Done &nbsp;&nbsp; ○ Still to do &nbsp;&nbsp; Newest at the bottom of the done list</p>
+            {/* <h2 className="disposition-section-heading">WHERE THIS DOCUMENT HAS BEEN</h2> */}
+            <p className="journey-legend">● Done &nbsp;&nbsp; ○ Still to do &nbsp;&nbsp;</p>
         </>;
         if (block.type === 'journey-empty') return <p className="journey-empty">No activity has been recorded yet.</p>;
         if (block.type === 'journey-row' && block.row) return renderJourneyRow(block.row);

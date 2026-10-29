@@ -137,7 +137,7 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
     const fieldOrder = pageTemplate === 'memo'
         ? ['for', 'thru', 'attention', 'from', 'subject', 'date', 'cc']
         : ['for', 'from', 'subject', 'date', 'cc'];
-    const addable = [...fieldOrder.filter(key => !shown[key]), 'signature'];
+    const addable = [...fieldOrder.filter(key => key !== 'for' && !shown[key]), 'signature'];
     const addField = (key: string) => {
         if (key === 'signature') return addSignature();
         if (key === 'for') {
@@ -152,6 +152,10 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
             onChange('show_cc', true);
             if (!Array.isArray(content.cc)) onChange('cc', ['']);
         } else onChange(`show_${key}`, true);
+    };
+    const setRecipientLabel = (label: 'FOR' | 'TO') => {
+        onChange('recipient_label', label);
+        if (!shown.for) addField('for');
     };
     const removeSignature = (id: string) => {
         const remaining = signatureBlocks.filter(item => item.id !== id);
@@ -208,10 +212,16 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
             {editable ? <select
                 aria-label="Add field"
                 value=""
-                onChange={event => { if (event.target.value) addField(event.target.value); }}
+                onChange={event => {
+                    const value = event.target.value;
+                    if (value === 'recipient:FOR' || value === 'recipient:TO') setRecipientLabel(value.slice('recipient:'.length) as 'FOR' | 'TO');
+                    else if (value) addField(value);
+                }}
                 className="rounded-lg border-border bg-surface py-1.5 text-sm"
             >
                 <option value="">+ Add field</option>
+                <option value="recipient:FOR">FOR:</option>
+                <option value="recipient:TO">TO:</option>
                 {addable.map(key => <option key={key} value={key}>{key === 'for' ? 'FOR' : key.toUpperCase()}</option>)}
             </select> : <span />}
             <div className="flex flex-wrap items-center justify-end gap-1.5 text-xs text-muted">

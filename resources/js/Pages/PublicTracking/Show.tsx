@@ -123,7 +123,7 @@ export default function Show({ document, workflow }: { document: TrackedDocument
                     <header className="mb-6 text-center">
                         <img src="/images/logo/ncip-logo.png" alt="NCIP logo" className="mx-auto mb-3 h-16 w-16 object-contain" />
                         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Document Tracking System</p>
-                        <h1 className="mt-2 text-2xl font-bold sm:text-3xl">Public document tracking</h1>
+                        {/* <h1 className="mt-2 text-2xl font-bold sm:text-3xl">Public document tracking</h1> */}
                         <p className="mt-2 text-sm text-slate-600">Current routing information for this tracking number.</p>
                     </header>
 
@@ -136,12 +136,21 @@ export default function Show({ document, workflow }: { document: TrackedDocument
                             <span className="rounded-full bg-secondary px-3 py-1 text-sm font-medium capitalize text-primary">{document.status || 'Status unavailable'}</span>
                         </div>
 
-                        <dl className="mt-4 grid gap-4 sm:grid-cols-2">
-                            <Detail label="Document type" value={document.document_type} />
-                            <Detail label="Purpose" value={document.purpose} />
-                            <Detail label="Originating office" value={document.office_name} />
-                            <Detail label="Date created" value={document.created_at} />
-                        </dl>
+                        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+                            <table className="w-full table-fixed text-left text-sm">
+                                <tbody className="divide-y divide-slate-200">
+                                    {[
+                                        ['Document type', document.document_type],
+                                        ['Purpose', document.purpose],
+                                        ['Originating office', document.office_name],
+                                        ['Date created', document.created_at],
+                                    ].map(([label, value]) => <tr key={label}>
+                                        <th scope="row" className="w-2/5 bg-slate-50 px-3 py-3 font-medium text-slate-600 sm:w-1/3 sm:px-4">{label}</th>
+                                        <td className="break-words px-3 py-3 text-slate-900 sm:px-4">{value || '—'}</td>
+                                    </tr>)}
+                                </tbody>
+                            </table>
+                        </div>
                     </section>
 
                     {workflow.can_start && <QrWorkflowPanel workflow={workflow} document={document} />}
@@ -344,7 +353,7 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
             <button disabled={busy} className="w-full rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60">
                 {busy ? 'Sending…' : 'Send verification code'}
             </button>
-            <p className="text-xs text-slate-500">The email must exactly match an active and eligible DOTS account for the current office route step.</p>
+            {/* <p className="text-xs text-slate-500">The email must exactly match an active and eligible DOTS account for the current office route step.</p> */}
         </form>}
 
         {workflow.state === 'otp_pending' && <form onSubmit={submitCode} className="mt-5 space-y-3">
@@ -488,7 +497,7 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
                                 <input id="qr-office-search" type="search" value={officeSearch} onChange={(event) => setOfficeSearch(event.target.value)} placeholder="Search offices…" className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-foreground placeholder:text-muted focus:ring-0" />
                                 {officeSearch && <button type="button" onClick={() => setOfficeSearch('')} className="rounded-md p-1 text-muted hover:bg-secondary"><X size={15} /></button>}
                             </div>
-                            <div className="grid max-h-52 gap-2 overflow-y-auto rounded-xl border border-border bg-background p-2 sm:grid-cols-2">
+                            <div className="grid max-h-64 gap-2 overflow-y-auto rounded-xl border border-border bg-background p-2 sm:grid-cols-2">
                                 {filteredOffices.map((office) => {
                                     const selected = officeIds.includes(String(office.id));
                                     const officeId = String(office.id);
@@ -502,7 +511,7 @@ function QrWorkflowPanel({ workflow, document }: { workflow: QrWorkflow; documen
                                 })}
                                 {filteredOffices.length === 0 && <p className="p-2 text-sm text-muted sm:col-span-2">No offices match your search.</p>}
                             </div>
-                            <p className="mt-2 text-xs text-muted">{officeIds.length}/30 offices selected</p>
+                            {/* <p className="mt-2 text-xs text-muted">{officeIds.length}/30 offices selected</p> */}
                         </div>
 
                         {routingMode === 'sequential' && officeIds.length > 0 && <div className="sm:col-span-2">
@@ -584,7 +593,7 @@ function RouteBranchMap({ document }: { document: TrackedDocument }) {
                 <div>
                     <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-blue-700">Route map</p>
                     <h2 id="office-route-title" className="mt-1 text-lg font-semibold text-slate-900">Office approval route</h2>
-                    <p className="mt-1 text-sm text-slate-600">{requiredSignatureSteps.length > 0 ? 'All listed offices must approve. Offices marked as requiring a signature must sign in order. Forwarded offices branch off to the side, and the parent office still makes its own decision.' : 'Every listed office must approve. Forwarded offices branch off to the side, and the parent office still makes its own decision.'}</p>
+                    <p className="mt-1 text-sm text-slate-600">{requiredSignatureSteps.length > 0 ? 'All listed offices must approve. Offices marked as requiring a signature must sign in order.  ' : 'Every listed office must approve.  '}</p>
                 </div>
                 <span className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${publicStatusClass(routeStatus)}`}>{routeStatus.replaceAll('_', ' ')}</span>
             </div>
@@ -749,6 +758,3 @@ function publicMarkerClass(status: string) {
     return 'border-slate-300 bg-white';
 }
 
-function Detail({ label, value }: { label: string; value?: string | null }) {
-    return <div className="min-w-0"><dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt><dd className="mt-1 break-words text-sm text-slate-800">{value || '—'}</dd></div>;
-}

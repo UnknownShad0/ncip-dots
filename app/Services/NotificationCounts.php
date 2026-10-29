@@ -83,17 +83,34 @@ class NotificationCounts
                 'pending' => $pending,
                 'approvals' => $approvals,
                 'drafts' => $drafts,
-                'total' => $incoming + $pending + $approvals + $drafts,
+                // Approvals are already part of the pending office queue. Keep
+                // this base unique before adding approved documents below.
+                'total' => $incoming + $pending + $drafts,
             ];
         });
 
         // Match the approved list and refresh on every request, including immediately
         // after archive/restore, without re-running the expensive tracking counts.
-        $counts['approved'] = Document::query()
+        $approvedQuery = Document::query()
             ->where('created_by', $user->id)
-            ->where('approval_status', 'approved')
-            ->count();
-        $counts['total'] += $counts['approved'];
+            ->where('approval_status', 'approved');
+        $counts['approved'] = (clone $approvedQuery)->count();
+
+        // A creator's approved document can also be in the office's incoming or
+        // pending queue. Add only approved documents not already represented in
+        // those queue counts so the bell total reflects unique documents.
+        $approvedAlreadyQueued = 0;
+        if ($officeId !== null) {
+            $approvedAlreadyQueued = (clone $approvedQuery)
+                ->whereHas('latestTrail', fn ($trail) => $trail
+                    ->whereIn('status', ['available', 'pending'])
+                    ->where('to_office_id', $officeId)
+                    ->where('documents.is_archived', false)
+                    ->where('documents.legacy_needs_review', false))
+                ->count();
+        }
+
+        $counts['total'] += max(0, $counts['approved'] - $approvedAlreadyQueued);
 
         return $counts;
     }
