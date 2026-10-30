@@ -1,6 +1,7 @@
 import { Extension } from '@tiptap/core';
 import type { Node as DocumentNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { TableMap } from '@tiptap/pm/tables';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { PAGE_CONTENT_HEIGHT, pagesForContent, spaceBeforePageUnit } from './documentPaginationLayout';
 import { documentFontsReady } from './documentFonts';
@@ -145,7 +146,10 @@ export const DocumentPagination = Extension.create<{ onPageCount: (pages: number
                             const bounds = element.getBoundingClientRect();
                             if (bounds.height <= PAGE_CONTENT_HEIGHT) {
                                 const gap = spaceBeforePageUnit(bounds.top - origin + offset, bounds.height);
-                                addGap(position, gap, node.childCount);
+                                const resolved = view.state.doc.resolve(position);
+                                const table = Array.from({ length: resolved.depth }, (_, index) => resolved.node(resolved.depth - index))
+                                    .find(parent => parent.type.name === 'table');
+                                addGap(position, gap, table ? TableMap.get(table).width : node.childCount);
                                 offset += gap;
                             } else {
                                 // Tall cells can span several sheets; each column flows from the same row origin.

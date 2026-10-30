@@ -232,18 +232,61 @@ class DynamicDocumentTemplatesTest extends TestCase
     public function test_unsafe_or_unsupported_rich_content_is_rejected(): void
     {
         $type = $this->type();
-        $this->actingAs(User::factory()->create());
+        $this->actingAs(User::factory()->create(['is_active' => true]));
         foreach ([
             ['type' => 'image', 'attrs' => ['src' => 'https://example.com/private']],
             ['type' => 'paragraph', 'attrs' => ['textAlign' => 'left; color:red'], 'content' => [['type' => 'text', 'text' => 'Unsafe']]],
             ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Unsafe', 'marks' => [['type' => 'link', 'attrs' => ['href' => 'javascript:alert(1)']]]]]],
-            ['type' => 'table', 'content' => [['type' => 'tableRow', 'content' => [['type' => 'tableCell', 'attrs' => ['colspan' => 2], 'content' => [['type' => 'paragraph']]]]]]],
+            ['type' => 'table', 'content' => [['type' => 'tableRow', 'content' => [['type' => 'tableCell', 'attrs' => ['rowspan' => 2], 'content' => [['type' => 'paragraph']]]]]]],
         ] as $node) {
             $payload = $this->payload($type);
             $payload['content']['body_document'] = ['type' => 'doc', 'content' => [$node]];
             $this->postJson('/document-creation', $payload)->assertUnprocessable()->assertJsonValidationErrors('content.body_document');
         }
         $this->assertSame(0, DocumentCreationDraft::count());
+    }
+
+    public function test_merged_cells_are_normalized_and_rendered_with_row_and_column_spans(): void
+    {
+        $paragraph = fn (string $text = '') => ['type' => 'paragraph', ...($text === '' ? [] : ['content' => [['type' => 'text', 'text' => $text]]])];
+        $cell = fn (string $text, int $width, int $rowspan = 1) => [
+            'type' => 'tableCell',
+            'attrs' => ['colspan' => 1, 'rowspan' => $rowspan, 'colwidth' => [$width]],
+            'content' => [$paragraph($text)],
+        ];
+        $header = fn (string $text, int $width) => [
+            'type' => 'tableHeader',
+            'attrs' => ['colspan' => 1, 'rowspan' => 1, 'colwidth' => [$width]],
+            'content' => [$paragraph($text)],
+        ];
+        $wideCell = fn (string $text) => [
+            'type' => 'tableCell',
+            'attrs' => ['colspan' => 2, 'rowspan' => 1, 'colwidth' => [230, 230]],
+            'content' => [$paragraph($text)],
+        ];
+        $document = ['type' => 'doc', 'content' => [['type' => 'table', 'content' => [
+            ['type' => 'tableRow', 'content' => [$header('ICTD Personnel', 230), $header('IRD Personnel', 230), $header('Overtime Schedule', 231)]],
+            ['type' => 'tableRow', 'content' => [$cell('Person one', 230), $cell('Person two', 230), $cell('September 12, 19, 26, 2026', 231, 2)]],
+            ['type' => 'tableRow', 'content' => [$cell('Person three', 230), $cell('Person four', 230)]],
+            ['type' => 'tableRow', 'content' => [$wideCell('Joint team'), $cell('Next schedule', 231)]],
+        ]]]];
+
+        $rich = app(RichDocumentContent::class);
+        $normalized = $rich->normalize($document);
+        $this->assertSame(2, $normalized['content'][0]['content'][1]['content'][2]['attrs']['rowspan']);
+        $this->assertCount(2, $normalized['content'][0]['content'][2]['content']);
+        $html = $rich->html($document);
+        $this->assertStringContainsString('rowspan="2"', $html);
+        $this->assertStringContainsString('colspan="2"', $html);
+        $this->assertStringContainsString('September 12, 19, 26, 2026', $html);
+
+        $payload = $this->payload($this->type());
+        $payload['content']['body_document'] = $document;
+        $this->actingAs(User::factory()->create(['is_active' => true]))
+            ->post('/document-creation', $payload)->assertSessionHasNoErrors();
+        $saved = DocumentCreationDraft::firstOrFail()->content['body_document'];
+        $this->assertSame(2, $saved['content'][0]['content'][1]['content'][2]['attrs']['rowspan']);
+        $this->assertSame(2, $saved['content'][0]['content'][3]['content'][0]['attrs']['colspan']);
     }
 
     public function test_table_text_is_escaped_and_long_cells_keep_every_character(): void

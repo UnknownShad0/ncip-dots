@@ -1,6 +1,7 @@
 import { EditorContent, useEditor, type JSONContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { TableKit, TableCell, TableHeader } from '@tiptap/extension-table';
+import { TableMap } from '@tiptap/pm/tables';
 import TextAlign from '@tiptap/extension-text-align';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -19,7 +20,11 @@ export default function RichDocumentEditor({ value, plainText, onChange, disable
 }) {
     const [rows, setRows] = useState(3);
     const [cols, setCols] = useState(3);
+    const [tableToolbarPosition, setTableToolbarPosition] = useState<{ top: number; left: number; width: number } | null>(null);
     const menu = useRef<HTMLDetailsElement>(null);
+    const editorShell = useRef<HTMLDivElement>(null);
+    const tableToolbarRef = useRef<HTMLDivElement>(null);
+    const activeTableWrapper = useRef<{ element: HTMLElement; paddingBottom: string } | null>(null);
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
     const onPageCountRef = useRef(onPageCount);
@@ -45,6 +50,91 @@ export default function RichDocumentEditor({ value, plainText, onChange, disable
         if (JSON.stringify(next) !== JSON.stringify(editor.getJSON())) editor.commands.setContent(next, { emitUpdate: false });
     }, [editor, value, plainText]);
     useEffect(() => { editor?.setEditable(!disabled, false); }, [editor, disabled]);
+    useEffect(() => {
+        if (!editor) return;
+        let frame = 0;
+        const clearActiveTable = () => {
+            const active = activeTableWrapper.current;
+            if (active) active.element.style.paddingBottom = active.paddingBottom;
+            activeTableWrapper.current = null;
+        };
+        const update = () => {
+            frame = 0;
+            const shell = editorShell.current;
+            if (!shell || !editor.view.hasFocus() || !editor.isActive('table')) {
+                clearActiveTable();
+                setTableToolbarPosition(null);
+                return;
+            }
+            const selection = editor.state.selection.$from;
+            const depth = Array.from({ length: selection.depth }, (_, index) => index + 1)
+                .find(level => selection.node(level).type.name === 'table');
+            if (!depth) {
+                clearActiveTable();
+                setTableToolbarPosition(null);
+                return;
+            }
+            const dom = editor.view.nodeDOM(selection.before(depth));
+            if (!(dom instanceof HTMLElement)) {
+                clearActiveTable();
+                setTableToolbarPosition(null);
+                return;
+            }
+            const wrapper = dom.matches('.tableWrapper') ? dom : dom.closest<HTMLElement>('.tableWrapper') ?? dom;
+            const tableElement = wrapper.matches('table') ? wrapper : wrapper.querySelector<HTMLElement>('table') ?? wrapper;
+            if (activeTableWrapper.current?.element !== wrapper) {
+                clearActiveTable();
+                activeTableWrapper.current = { element: wrapper, paddingBottom: wrapper.style.paddingBottom };
+                wrapper.style.paddingBottom = '64px';
+            }
+            const shellBounds = shell.getBoundingClientRect();
+            const tableBounds = tableElement.getBoundingClientRect();
+            const scale = shell.offsetWidth > 0 ? shellBounds.width / shell.offsetWidth : 1;
+            setTableToolbarPosition({
+                top: (tableBounds.bottom - shellBounds.top) / scale + 6,
+                left: (tableBounds.left - shellBounds.left) / scale,
+                width: tableBounds.width / scale,
+            });
+        };
+        const schedule = () => {
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(update);
+        };
+        const observer = new ResizeObserver(schedule);
+        observer.observe(editor.view.dom);
+        editor.on('selectionUpdate', schedule);
+        editor.on('transaction', schedule);
+        editor.on('focus', schedule);
+        editor.on('blur', schedule);
+        window.addEventListener('resize', schedule);
+        schedule();
+        return () => {
+            cancelAnimationFrame(frame);
+            observer.disconnect();
+            editor.off('selectionUpdate', schedule);
+            editor.off('transaction', schedule);
+            editor.off('focus', schedule);
+            editor.off('blur', schedule);
+            window.removeEventListener('resize', schedule);
+            clearActiveTable();
+        };
+    }, [editor]);
+    useEffect(() => {
+        const toolbar = tableToolbarRef.current;
+        if (!toolbar || !tableToolbarPosition) return;
+        const reserveToolbarSpace = () => {
+            const shell = editorShell.current;
+            const active = activeTableWrapper.current;
+            if (!shell || !active) return;
+            const shellBounds = shell.getBoundingClientRect();
+            const scale = shell.offsetWidth > 0 ? shellBounds.width / shell.offsetWidth : 1;
+            active.element.style.paddingBottom = `${Math.ceil(toolbar.getBoundingClientRect().height / scale + 12)}px`;
+        };
+        const observer = new ResizeObserver(reserveToolbarSpace);
+        observer.observe(toolbar);
+        reserveToolbarSpace();
+        return () => observer.disconnect();
+    }, [tableToolbarPosition]);
     if (!editor) return <p className="text-sm text-muted">Loading document editor…</p>;
     const button = (label: string, Icon: typeof Bold, action: () => void, active = false, disabled = false) => (
         <button key={label} type="button" title={label} aria-label={label} aria-pressed={active} disabled={disabled}
@@ -55,26 +145,40 @@ export default function RichDocumentEditor({ value, plainText, onChange, disable
     const selection = editor.state.selection.$from;
     const table = Array.from({ length: selection.depth }, (_, i) => selection.node(i + 1)).find(node => node.type.name === 'table');
     const tableRows = table?.childCount ?? 0;
-    const tableColumns = table?.firstChild?.childCount ?? 0;
+    const tableColumns = table ? TableMap.get(table).width : 0;
     const sizeColumns = (fit: boolean) => {
         if (!table || disabled) return;
         const depth = Array.from({ length: selection.depth }, (_, i) => i + 1).find(level => selection.node(level) === table)!;
+        const map = TableMap.get(table);
         const columns = Array.from({ length: tableColumns }, () => [] as string[]);
-        table.forEach(row => row.forEach((cell, _offset, index) => columns[index].push(cell.textBetween(0, cell.content.size, '\n'))));
+        [...new Set(map.map)].forEach(cellPosition => {
+            const cell = table.nodeAt(cellPosition);
+            if (!cell) return;
+            const bounds = map.findCell(cellPosition);
+            for (let column = bounds.left; column < bounds.right; column++) {
+                columns[column].push(cell.textBetween(0, cell.content.size, '\n'));
+            }
+        });
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
         if (context) context.font = `700 ${getComputedStyle(editor.view.dom).fontSize} "Document Arial"`;
         const widths = fit ? fitColumnWidths(columns, text => context?.measureText(text).width ?? text.length * 8) : normalizeColumnWidths(columns.map(() => 1));
         const transaction = editor.state.tr;
         const position = selection.before(depth);
-        table.forEach((row, rowOffset) => row.forEach((cell, cellOffset, index) => {
-            transaction.setNodeMarkup(position + 2 + rowOffset + cellOffset, undefined, { ...cell.attrs, colwidth: [widths[index]] });
-        }));
+        [...new Set(map.map)].forEach(cellPosition => {
+            const cell = table.nodeAt(cellPosition);
+            if (!cell) return;
+            const bounds = map.findCell(cellPosition);
+            transaction.setNodeMarkup(position + 1 + cellPosition, undefined, {
+                ...cell.attrs,
+                colwidth: widths.slice(bounds.left, bounds.right),
+            });
+        });
         editor.view.dispatch(transaction);
         editor.view.focus();
     };
-    const toolbar = <>
-<div role="toolbar" aria-label="Document formatting" className="sticky top-0 z-10 mb-4 flex flex-wrap items-center justify-center gap-3 rounded-lg border border-border bg-surface p-2 shadow-sm print:hidden">            {button('Bold (Ctrl/Cmd+B)', Bold, () => editor.chain().focus().toggleBold().run(), editor.isActive('bold'))}
+    const formattingToolbar = <div role="toolbar" aria-label="Document formatting" className="flex flex-wrap items-center justify-center gap-3 rounded-lg border border-border bg-surface p-2 shadow-sm print:hidden">
+            {button('Bold (Ctrl/Cmd+B)', Bold, () => editor.chain().focus().toggleBold().run(), editor.isActive('bold'))}
             {button('Italic (Ctrl/Cmd+I)', Italic, () => editor.chain().focus().toggleItalic().run(), editor.isActive('italic'))}
             {button('Underline (Ctrl/Cmd+U)', Underline, () => editor.chain().focus().toggleUnderline().run(), editor.isActive('underline'))}
             <select disabled={inTable} aria-label="Paragraph style" className="rounded border-border py-1 text-xs" value={editor.isActive('heading', { level: 2 }) ? '2' : editor.isActive('heading', { level: 3 }) ? '3' : 'paragraph'} onChange={event => {
@@ -97,26 +201,49 @@ export default function RichDocumentEditor({ value, plainText, onChange, disable
                     }}>Insert table</button>
                 </div>
             </details>
-        </div>
-        {inTable && <div role="toolbar" aria-label="Table editing" className="mb-3 flex flex-wrap gap-2 text-xs print:hidden">
-            <button type="button" disabled={disabled} className="rounded border border-border bg-surface px-2 py-1 hover:bg-secondary" onMouseDown={event => event.preventDefault()} onClick={() => sizeColumns(true)}>Fit to content</button>
-            <button type="button" disabled={disabled} className="rounded border border-border bg-surface px-2 py-1 hover:bg-secondary" onMouseDown={event => event.preventDefault()} onClick={() => sizeColumns(false)}>Equal widths</button>
+        </div>;
+    const tableButtonClass = 'whitespace-nowrap rounded border border-border bg-surface px-2 py-1 text-foreground hover:bg-background disabled:opacity-30';
+    const tableToolbar = inTable && tableToolbarPosition && !hideToolbar && <div
+        ref={tableToolbarRef}
+        role="toolbar"
+        aria-label="Table editing"
+        className="document-table-toolbar absolute z-20 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2 text-xs shadow-sm print:hidden"
+        style={tableToolbarPosition}
+    >
+        {/* <span className="px-1 font-semibold text-foreground">Table</span> */}
+        <span className="flex shrink-0 items-center gap-1 rounded-md bg-secondary p-1" aria-label="Table sizing">
+            <button type="button" disabled={disabled} className={tableButtonClass} onMouseDown={event => event.preventDefault()} onClick={() => sizeColumns(true)}>Fit content</button>
+            <button type="button" disabled={disabled} className={tableButtonClass} onMouseDown={event => event.preventDefault()} onClick={() => sizeColumns(false)}>Equal widths</button>
+        </span>
+        <span className="flex shrink-0 items-center gap-1 rounded-md bg-secondary p-1" aria-label="Table cells">
+            <button type="button" disabled={disabled || !editor.can().mergeCells()} className={tableButtonClass} onMouseDown={event => event.preventDefault()} onClick={() => editor.chain().focus().mergeCells().run()}>Merge</button>
+            <button type="button" disabled={disabled || !editor.can().splitCell()} className={tableButtonClass} onMouseDown={event => event.preventDefault()} onClick={() => editor.chain().focus().splitCell().run()}>Split cell</button>
+        </span>
+        <span className="flex shrink-0 items-center gap-1 rounded-md bg-secondary p-1" aria-label="Table rows">
+            <span className="px-1 text-muted">Rows</span>
             {[
-                ['Add row above', () => editor.chain().focus().addRowBefore().run()],
-                ['Add row below', () => editor.chain().focus().addRowAfter().run()],
-                ['Add column before', () => editor.chain().focus().addColumnBefore().run()],
-                ['Add column after', () => editor.chain().focus().addColumnAfter().run()],
-                ['Delete row', () => editor.chain().focus().deleteRow().run()],
-                ['Delete column', () => editor.chain().focus().deleteColumn().run()],
-                ['Header row', () => editor.chain().focus().toggleHeaderRow().run()],
-                ['Delete table', () => editor.chain().focus().deleteTable().run()],
-            ].map(([label, action]) => <button key={String(label)} type="button" disabled={(String(label).startsWith('Add row') && tableRows >= 200) || (String(label).startsWith('Add column') && tableColumns >= 6)} className="disabled:opacity-30 rounded border border-border bg-surface px-2 py-1 text-foreground hover:bg-secondary" onMouseDown={event => event.preventDefault()} onClick={action as () => void}>{String(label)}</button>)}
-        </div>}
-    </>;
-    return <div className="rich-editor">
-        {!hideToolbar && (toolbarTarget ? createPortal(toolbar, toolbarTarget) : toolbar)}
+                ['Add row above', '+ ↑', () => editor.chain().focus().addRowBefore().run(), tableRows >= 200],
+                ['Add row below', '+ ↓', () => editor.chain().focus().addRowAfter().run(), tableRows >= 200],
+                ['Delete row', '−', () => editor.chain().focus().deleteRow().run(), false],
+            ].map(([label, shortLabel, action, limitReached]) => <button key={String(label)} type="button" title={String(label)} aria-label={String(label)} disabled={disabled || Boolean(limitReached)} className={tableButtonClass} onMouseDown={event => event.preventDefault()} onClick={action as () => void}>{String(shortLabel)}</button>)}
+        </span>
+        <span className="flex shrink-0 items-center gap-1 rounded-md bg-secondary p-1" aria-label="Table columns">
+            <span className="px-1 text-muted">Columns</span>
+            {[
+                ['Add column before', '+ ←', () => editor.chain().focus().addColumnBefore().run(), tableColumns >= 6],
+                ['Add column after', '+ →', () => editor.chain().focus().addColumnAfter().run(), tableColumns >= 6],
+                ['Delete column', '−', () => editor.chain().focus().deleteColumn().run(), false],
+            ].map(([label, shortLabel, action, limitReached]) => <button key={String(label)} type="button" title={String(label)} aria-label={String(label)} disabled={disabled || Boolean(limitReached)} className={tableButtonClass} onMouseDown={event => event.preventDefault()} onClick={action as () => void}>{String(shortLabel)}</button>)}
+        </span>
+        <button type="button" disabled={disabled} className={tableButtonClass} onMouseDown={event => event.preventDefault()} onClick={() => editor.chain().focus().toggleHeaderRow().run()}>Header row</button>
+        <button type="button" disabled={disabled} className="whitespace-nowrap rounded border border-danger/30 bg-surface px-2 py-1 text-danger hover:bg-danger-soft disabled:opacity-30" onMouseDown={event => event.preventDefault()} onClick={() => editor.chain().focus().deleteTable().run()}>Delete table</button>
+    </div>;
+    return <div ref={editorShell} className="rich-editor">
+        {!hideToolbar && (toolbarTarget ? createPortal(formattingToolbar, toolbarTarget) : formattingToolbar)}
         <EditorContent editor={editor} className="document-body-editor" data-placeholder={placeholder} data-empty={editor.isEmpty && !disabled} />
+        {tableToolbar}
         <style>{`
+            .rich-editor { position:relative; }
             .document-body-editor { position:relative; }
             .document-body-editor[data-empty="true"]::before { content:attr(data-placeholder); position:absolute; top:0; left:0; color:#94a3b8; font:11pt/1.55 'Document Arial',sans-serif; pointer-events:none; }
             @media print { .document-body-editor::before { display:none; } }
@@ -127,8 +254,8 @@ export default function RichDocumentEditor({ value, plainText, onChange, disable
             .document-rich-text ul { list-style:disc; padding-left:28px; margin:0 0 12px; }
             .document-rich-text ol { list-style:decimal; padding-left:28px; margin:0 0 12px; }
             .document-rich-text li p { margin-bottom:5px; }
-            .document-rich-text table { width:100%; table-layout:fixed; border-collapse:collapse; margin:14px 0; }
-            .document-rich-text .tableWrapper { overflow-x:auto; }
+            .document-rich-text table { width:100%; max-width:100%; table-layout:fixed; border-collapse:collapse; margin:14px 0; }
+            .document-rich-text .tableWrapper { width:100%; max-width:100%; overflow-x:visible; }
             .document-rich-text .column-resize-handle { position:absolute; top:0; right:-2px; bottom:-2px; width:4px; background:#3b82f6; pointer-events:none; }
             .document-rich-text.resize-cursor { cursor:col-resize; }
             .document-rich-text td,.document-rich-text th { min-width:40px; border:1px solid #aeb7c2; padding:7px; vertical-align:top; position:relative; }

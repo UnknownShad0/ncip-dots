@@ -233,7 +233,7 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
                 <button type="button" onClick={() => setDocumentZoom(1)} aria-pressed={documentZoom === 1} className="hidden min-h-9 items-center justify-center rounded-lg border border-border bg-surface px-2.5 font-semibold text-foreground aria-pressed:bg-secondary aria-pressed:text-primary sm:inline-flex">100%</button>
             </div>
         </div>
-        <div ref={sheetHostRef} className="document-sheet-host w-full overflow-x-auto" tabIndex={0} role="region" aria-label="Document writing surface; use the zoom controls or scroll horizontally">
+        <div ref={sheetHostRef} className="document-sheet-host w-full overflow-x-auto max-w-full" tabIndex={0} role="region" aria-label="Document writing surface; use the zoom controls or scroll horizontally">
         <div className="document-sheet-scale" style={{ zoom: displayScale }}>
         <article className="document-editor-sheet" data-page-count={pages} aria-label="Document writing surface" style={{ height: pages * PAGE_STEP - PAGE_GAP }}>
         <style>{`
@@ -264,7 +264,7 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
             .document-editor-sheet .logo-header { display:grid; width:100%; grid-template-columns:75px minmax(0,1fr) 75px; gap:12px; align-items:center; text-align:center; font-size:10pt; }
             .document-editor-sheet .logo-header img { max-width:70px; max-height:70px; object-fit:contain; }
             .document-editor-sheet .logo-header p:nth-child(2) { font-weight:700; }
-            .document-editor-sheet .sheet-input { display:block; width:100%; margin:0; resize:none; overflow:hidden; min-height:30px; padding:4px 6px; border:0; border-radius:3px; background:transparent; color:inherit; font:inherit; line-height:inherit; box-shadow:none; white-space:pre-wrap; overflow-wrap:break-word; }
+            .document-editor-sheet .sheet-input { display:block; width:100%; margin:0; resize:none; overflow:hidden; min-height:25px; padding:4px 6px; border:0; border-radius:3px; background:transparent; color:inherit; font:inherit; line-height:inherit; box-shadow:none; white-space:pre-wrap; overflow-wrap:break-word; }
             .document-editor-sheet .sheet-input:hover { background:#f7f9fb; }
             .document-editor-sheet .sheet-input:focus { background:#f4f8ff; outline:2px solid #ebedee; }
             .document-editor-sheet .sheet-input::placeholder { color:#94a3b8; }
@@ -297,9 +297,9 @@ export default function PaginatedDocument({ content, onChange, disabled = false,
             .document-editor-sheet .sheet-signature-tools button { display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 4px; border:0; border-radius:4px; background:#f1f5f9; color:#475569; font:8pt/1.2 'Document Arial',sans-serif; cursor:pointer; }
             .document-editor-sheet .sheet-signature-tools button:hover { background:#e2e8f0; }
             .document-editor-sheet .sheet-signature-tools button[aria-pressed="true"] { background:#cbd5e1; color:#0f172a; }
-            .document-editor-sheet .sheet-signature-space { min-height:56px; }
+            .document-editor-sheet .sheet-signature-space { min-height:24px; }
             .document-editor-sheet .sheet-signature-name { max-width:100%; font-weight:700; }
-            .document-editor-sheet .sheet-signature-position { max-width:100%; }
+            .document-editor-sheet .sheet-signature-position { max-width:100%; margin-top: -10px;}
             .document-editor-sheet .sheet-footer { border-top:1px solid #b9b9b9; padding-top:12px; display:flex; gap:12px; align-items:center; font:8px/1.4 'Document Arial',sans-serif; }
             .document-editor-sheet .sheet-footer strong { font-size:10px; }
             .document-editor-sheet .sheet-seal { width:55px; height:55px; object-fit:contain; }
